@@ -5,13 +5,16 @@
 #   ./packaging/build.sh deb        Debian 12+/Ubuntu 22.04+ package (system Python, bundled PySide6)
 #   ./packaging/build.sh arch       Arch package (.pkg.tar.zst) built with makepkg
 #   ./packaging/build.sh aur        PKGBUILD + .SRCINFO for the AUR (needs AUR_SOURCE_URL)
-#   ./packaging/build.sh all        appimage, deb and arch
+#   ./packaging/build.sh extension  browser extension zips; signed Firefox .xpi when AMO keys are set
+#   ./packaging/build.sh all        appimage, deb, arch and extension
 #
 # Settings (environment):
 #   MAINTAINER       "Name <email>" written into the packages
 #   PKG_LICENSE      SPDX licence id for the package metadata
 #   PROJECT_URL      project home page
 #   AUR_SOURCE_URL   where dist/lider-<version>.tar.gz will be downloadable from (aur target)
+#   AMO_JWT_ISSUER   addons.mozilla.org API key: sign the Firefox add-on (extension target)
+#   AMO_JWT_SECRET   addons.mozilla.org API secret
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -30,6 +33,7 @@ SUMMARY="Linux Internet Downloader (LID): fast multi-connection downloads"
 APPIMAGE_PYTHON="3.12"
 APPIMAGE_PYSIDE="PySide6-Essentials==6.11.1"
 APPIMAGE_YTDLP="yt-dlp==2026.8.19"
+WEB_EXT="web-ext@10.7.0"
 APPIMAGETOOL_URL="https://github.com/AppImage/appimagetool/releases/download/1.9.0/appimagetool-x86_64.AppImage"
 
 log() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
@@ -193,6 +197,29 @@ build_aur() {
     log "AUR files in $dir (upload $tarball to $AUR_SOURCE_URL first)"
 }
 
+# ---------------------------------------------------------------- browser extension
+build_extension() {
+    local work="$WORK/extension"
+    log "Building the browser extension (Chromium, Chrome Web Store, Firefox)"
+    rm -rf "$work"
+    mkdir -p "$work"
+    rm -f "$DIST"/lid-extension-* "$DIST/firefox-updates.json"
+    PYTHONPATH="$ROOT" python3 -c 'import sys; from lider.browser import build_extensions; build_extensions(*sys.argv[1:])' \
+        "$DIST" "$work"
+    log "Checking the Firefox add-on with web-ext lint"
+    npx --yes "$WEB_EXT" lint --source-dir "$work/firefox" --self-hosted --output text 2>&1 | tail -15
+    if [ -n "${AMO_JWT_ISSUER:-}" ] && [ -n "${AMO_JWT_SECRET:-}" ]; then
+        log "Signing the Firefox add-on on addons.mozilla.org (unlisted, self-distributed)"
+        npx --yes "$WEB_EXT" sign --source-dir "$work/firefox-unlisted" --artifacts-dir "$work/signed" \
+            --channel unlisted --api-key "$AMO_JWT_ISSUER" --api-secret "$AMO_JWT_SECRET"
+        cp "$(ls "$work"/signed/*.xpi | head -1)" "$DIST/lid-extension-firefox.xpi"
+    else
+        log "AMO_JWT_ISSUER/AMO_JWT_SECRET not set: no signed .xpi"
+        rm -f "$DIST/firefox-updates.json"  # only useful next to a signed .xpi
+    fi
+    log "Done: $(cd "$DIST" && ls lid-extension-* firefox-updates.json 2>/dev/null | tr '\n' ' ')"
+}
+
 # ---------------------------------------------------------------- AppImage
 build_appimage() {
     local appdir="$WORK/appimage/Lider.AppDir" out="$DIST/Lider-$VERSION-x86_64.AppImage"
@@ -254,7 +281,8 @@ case "${1:-}" in
     deb) build_deb ;;
     arch) build_arch ;;
     aur) build_aur ;;
+    extension) build_extension ;;
     sdist) sdist ;;
-    all) build_appimage; build_deb; build_arch ;;
+    all) build_appimage; build_deb; build_arch; build_extension ;;
     *) sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac

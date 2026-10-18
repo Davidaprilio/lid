@@ -7,7 +7,8 @@ One script builds every format into `dist/`:
 ./packaging/build.sh deb        # dist/lider_<ver>-1_amd64.deb
 ./packaging/build.sh arch       # dist/lider-<ver>-1-any.pkg.tar.zst
 ./packaging/build.sh aur        # dist/aur/PKGBUILD + .SRCINFO
-./packaging/build.sh all        # appimage + deb + arch
+./packaging/build.sh extension  # dist/lid-extension-*.zip (+ signed .xpi with AMO keys)
+./packaging/build.sh all        # appimage + deb + arch + extension
 ```
 
 You can set these in the environment:
@@ -18,6 +19,7 @@ You can set these in the environment:
 | `PKG_LICENSE` | `MIT` | licence field (must match `LICENSE`) |
 | `PROJECT_URL` | `https://github.com/Davidaprilio/lid` | deb `Homepage`, PKGBUILD `url` |
 | `AUR_SOURCE_URL` | — | public address of `dist/lider-<ver>.tar.gz` (aur target only) |
+| `AMO_JWT_ISSUER`, `AMO_JWT_SECRET` | — | addons.mozilla.org API key; signs the Firefox `.xpi` (extension target only) |
 
 ## The three formats
 
@@ -65,6 +67,7 @@ sudo pacman -U lider-1.0-1-any.pkg.tar.zst
    * the AppImage and the `.deb` on Ubuntu
    * the Arch package on an Arch container
    * the AUR files (`lider-<ver>-aur.tar.gz`, holding `PKGBUILD` and `.SRCINFO`)
+   * the browser extension files (see below)
 3. It publishes a GitHub release with every file and a `SHA256SUMS` file. The AUR files already
    point at that release's `lider-<ver>.tar.gz`.
 
@@ -89,6 +92,59 @@ To build the packages without publishing anything, use "Run workflow" on the Act
    cd aur-lider && git add PKGBUILD .SRCINFO && git commit -m "lider 1.0-1" && git push
    ```
    Users then install with `yay -S lider` or `paru -S lider`.
+
+## Browser extension
+
+`./packaging/build.sh extension` needs Python and Node.js (it runs `npx web-ext@10.7.0`). The
+extension's version is always `__version__`.
+
+| File | What it is | Where it goes |
+|---|---|---|
+| `lid-extension-chromium.zip` | full extension with the manifest `key`, so its id is always `hljibhdjbmpphbjhbfgiejnijpeobbne` | GitHub release; users unzip it and *Load unpacked* |
+| `lid-extension-chromium-store.zip` | no `key`, no YouTube button (the Chrome Web Store does not accept YouTube downloaders) | upload to the Chrome Web Store / Edge Add-ons |
+| `lid-extension-firefox.zip` | full Firefox extension, unsigned | upload to addons.mozilla.org as a listed add-on, or *Load Temporary Add-on* |
+| `lid-extension-firefox.xpi` | the same, with `update_url`, signed by Mozilla (unlisted channel) | GitHub release; Firefox installs it with one click |
+| `firefox-updates.json` | update manifest the signed `.xpi` checks | GitHub release (`releases/latest/download/firefox-updates.json`) |
+
+The build lints both Firefox variants with `web-ext lint`. The `.xpi` and `firefox-updates.json`
+are only produced when `AMO_JWT_ISSUER` and `AMO_JWT_SECRET` are set, because Firefox refuses
+unsigned add-ons outside about:debugging.
+
+### Firefox: signed .xpi on every release
+
+1. Sign in at <https://addons.mozilla.org/developers/> and create an API key under
+   *Tools → Manage API Keys*. Accept the developer agreement.
+2. Store the key as repository secrets:
+   ```sh
+   gh secret set AMO_JWT_ISSUER   # "JWT issuer", like user:12345:678
+   gh secret set AMO_JWT_SECRET   # "JWT secret"
+   ```
+3. Push a `v*` tag. The `extension` job signs the add-on (unlisted, so it is not reviewed or listed
+   on AMO) and the release gets `lid-extension-firefox.xpi` and `firefox-updates.json`. Installed
+   copies update themselves from `firefox-updates.json`.
+
+The secrets are only passed to tag builds; "Run workflow" builds stay unsigned. Mozilla never signs
+the same version twice, so bump `__version__` before tagging again.
+
+To list LID on addons.mozilla.org as well, upload `lid-extension-firefox.zip` there as a listed
+add-on. The code is not minified or bundled, so AMO needs no separate source upload. Then set
+`FIREFOX_ADDONS_URL` in `lider/browser.py` so the *Browser integration* dialog links to it.
+
+### Chrome Web Store / Edge Add-ons
+
+1. Register at <https://chrome.google.com/webstore/devconsole> (one-time fee) or
+   <https://partner.microsoft.com/dashboard/microsoftedge/> (free).
+2. Upload `lid-extension-chromium-store.zip`. Under *Privacy*, explain the permissions:
+   `nativeMessaging` (talks to the LID app), `downloads` (hands downloads to LID), `cookies`
+   (downloads behind a login), `contextMenus`, `scripting` (*Download all links*), `storage`;
+   no data leaves the computer.
+3. The store gives the extension its own id. Either:
+   * keep the current id: on the **first** Chrome Web Store upload, put the private key in the zip
+     root as `key.pem` (`zip -j lid-extension-chromium-store.zip /path/to/key.pem`). Never commit
+     that key.
+   * or add the store id to `CHROMIUM_EXTENSION_IDS` in `lider/browser.py`, so the LID helper
+     accepts it.
+4. After the listing is public, set `CHROME_WEB_STORE_URL` in `lider/browser.py`.
 
 ## How each build works
 

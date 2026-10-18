@@ -13,16 +13,36 @@ import os
 import shlex
 import shutil
 import sys
+import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
+from . import __version__
 from .core.settings import data_dir
 
 HOST_NAME = "io.github.davidaprilio.lid"
+# The id fixed by the "key" in manifest.chromium.json (unpacked installs and the GitHub zip).
 CHROMIUM_EXTENSION_ID = "hljibhdjbmpphbjhbfgiejnijpeobbne"
+# Every Chromium extension id the helper accepts. Add the Chrome Web Store / Edge Add-ons ids here
+# once the listings exist, unless the store kept the id above.
+CHROMIUM_EXTENSION_IDS = (CHROMIUM_EXTENSION_ID,)
 FIREFOX_EXTENSION_ID = "lid@davidaprilio.github.io"
 EXTENSION_SOURCE = Path(__file__).parent / "browser_extension"
 DESCRIPTION = "LID (Linux Internet Downloader) browser integration"
+
+RELEASES_URL = "https://github.com/Davidaprilio/lid/releases/latest"
+# Store pages; empty until the listings are published.
+CHROME_WEB_STORE_URL = ""
+FIREFOX_ADDONS_URL = ""
+# Stable "latest release" links to the files built by ./packaging/build.sh extension.
+FIREFOX_XPI_URL = RELEASES_URL + "/download/lid-extension-firefox.xpi"
+FIREFOX_UPDATES_URL = RELEASES_URL + "/download/firefox-updates.json"
+CHROMIUM_ZIP_URL = RELEASES_URL + "/download/lid-extension-chromium.zip"
+
+# Chrome Web Store does not accept extensions that download from YouTube, and "key" is not
+# allowed in uploads: the "store" variant leaves both out. YouTube stays available in the app.
+STORE_DESCRIPTION = "Send downloads and links from the browser to LID (Linux Internet Downloader)."
+YOUTUBE_FILES = ("youtube.js", "youtube.css")
 
 
 @dataclass(frozen=True)
@@ -68,7 +88,7 @@ def host_manifest(family: str, host_path: str) -> dict:
     if family == "firefox":
         manifest["allowed_extensions"] = [FIREFOX_EXTENSION_ID]
     else:
-        manifest["allowed_origins"] = [f"chrome-extension://{CHROMIUM_EXTENSION_ID}/"]
+        manifest["allowed_origins"] = [f"chrome-extension://{i}/" for i in CHROMIUM_EXTENSION_IDS]
     return manifest
 
 
@@ -120,13 +140,61 @@ def uninstall(browsers: list[Browser], home: Path | None = None) -> None:
         (_base(b, home) / b.hosts_dir / f"{HOST_NAME}.json").unlink(missing_ok=True)
 
 
-def export_extension(family: str, dest: Path) -> Path:
-    """Copy the extension for one browser family into ``dest`` with its manifest.json."""
+def export_extension(family: str, dest: Path, variant: str = "full", update_url: str = "") -> Path:
+    """Copy the extension for one browser family into ``dest`` with its manifest.json.
+
+    variant "store" drops the YouTube button and the manifest key (Chrome Web Store rules).
+    update_url (Firefox, self-distributed .xpi) lets Firefox find newer signed versions.
+    """
     if dest.exists():
         shutil.rmtree(dest)
-    shutil.copytree(EXTENSION_SOURCE, dest, ignore=shutil.ignore_patterns("manifest.*.json", "__pycache__", "*.py"))
-    shutil.copy(EXTENSION_SOURCE / f"manifest.{family}.json", dest / "manifest.json")
+    skip = ["manifest.*.json", "__pycache__", "*.py"] + (list(YOUTUBE_FILES) if variant == "store" else [])
+    shutil.copytree(EXTENSION_SOURCE, dest, ignore=shutil.ignore_patterns(*skip))
+    manifest = json.loads((EXTENSION_SOURCE / f"manifest.{family}.json").read_text())
+    manifest["version"] = __version__
+    if variant == "store":
+        manifest.pop("key", None)
+        manifest.pop("content_scripts", None)
+        manifest["description"] = STORE_DESCRIPTION
+    if update_url and family == "firefox":
+        manifest["browser_specific_settings"]["gecko"]["update_url"] = update_url
+    (dest / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     return dest
+
+
+def zip_folder(folder: Path, out: Path) -> Path:
+    """Reproducible zip: sorted entries, fixed timestamps and permissions."""
+    out.parent.mkdir(parents=True, exist_ok=True)
+    with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
+        for path in sorted(p for p in folder.rglob("*") if p.is_file()):
+            info = zipfile.ZipInfo(path.relative_to(folder).as_posix(), date_time=(1980, 1, 1, 0, 0, 0))
+            info.external_attr = 0o644 << 16
+            info.compress_type = zipfile.ZIP_DEFLATED
+            z.writestr(info, path.read_bytes())
+    return out
+
+
+def firefox_updates_json(version: str, xpi_url: str) -> dict:
+    """The update manifest Firefox reads from gecko.update_url."""
+    return {"addons": {FIREFOX_EXTENSION_ID: {"updates": [{"version": version, "update_link": xpi_url}]}}}
+
+
+def build_extensions(dist: str, work: str) -> None:
+    """Release files for ./packaging/build.sh extension.
+
+    dist/lid-extension-chromium.zip        unpacked install, fixed id (has the key)
+    dist/lid-extension-chromium-store.zip  Chrome Web Store / Edge Add-ons upload
+    dist/lid-extension-firefox.zip         addons.mozilla.org listed upload / temporary loading
+    work/firefox-unlisted/                 source for "web-ext sign --channel unlisted"
+    dist/firefox-updates.json              update manifest for the self-distributed .xpi
+    """
+    d, w = Path(dist), Path(work)
+    zip_folder(export_extension("chromium", w / "chromium"), d / "lid-extension-chromium.zip")
+    zip_folder(export_extension("chromium", w / "chromium-store", "store"), d / "lid-extension-chromium-store.zip")
+    zip_folder(export_extension("firefox", w / "firefox"), d / "lid-extension-firefox.zip")
+    export_extension("firefox", w / "firefox-unlisted", update_url=FIREFOX_UPDATES_URL)
+    xpi = f"https://github.com/Davidaprilio/lid/releases/download/v{__version__}/lid-extension-firefox.xpi"
+    (d / "firefox-updates.json").write_text(json.dumps(firefox_updates_json(__version__, xpi), indent=2) + "\n")
 
 
 def extension_folder(family: str) -> Path:

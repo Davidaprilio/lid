@@ -60,12 +60,18 @@ LID talks to its browser extension through native messaging, so no network port 
 1. In LID open **Options → General → Set up browsers…** and click **Install for checked browsers**.
    This registers the LID helper with each browser found. From a terminal you can run
    `lider --install-browser-integration` instead. The .deb and Arch packages register it system-wide.
-2. Add the extension to the browser from the folder that dialog shows. The packages also put it in
-   `/usr/share/lider/browser-extension/`.
-   * **Chrome, Chromium, Brave, Edge, Vivaldi, Opera:** open `chrome://extensions`, turn on
-     *Developer mode*, then *Load unpacked*.
-   * **Firefox:** open `about:debugging#/runtime/this-firefox` and choose *Load Temporary Add-on*
-     (until the add-on is published on addons.mozilla.org).
+2. Add the extension to the browser. The dialog's *Get the extension* buttons lead to the downloads.
+   * **Firefox:** open `lid-extension-firefox.xpi` from the
+     [latest release](https://github.com/Davidaprilio/lid/releases/latest). It is signed by Mozilla
+     and updates itself.
+   * **Chrome, Chromium, Brave, Edge, Vivaldi, Opera:** unzip `lid-extension-chromium.zip` from the
+     latest release, or use the folder the dialog shows (the packages also put it in
+     `/usr/share/lider/browser-extension/`). Open `chrome://extensions`, turn on *Developer mode*,
+     then *Load unpacked*.
+
+   The full extension adds a "Download with LID" button on YouTube watch pages. Store listings, once
+   published, leave that button out because of store rules; pasting a YouTube link into LID always
+   works.
 
 The toolbar button shows whether LID is reachable and turns capturing on or off. Downloads LID
 cannot take (blob: links, LID not available) stay in the browser.

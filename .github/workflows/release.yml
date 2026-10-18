@@ -2,6 +2,7 @@ name: Build packages
 
 # Push a tag like v1.0 (matching lider/__init__.py) to build every package and publish a release.
 # "Run workflow" on the Actions tab builds the packages without publishing anything.
+# Optional repository secrets AMO_JWT_ISSUER / AMO_JWT_SECRET sign the Firefox add-on on tag pushes.
 on:
   push:
     tags: ["v*"]
@@ -98,8 +99,33 @@ jobs:
             dist/lider-*.tar.gz
           if-no-files-found: error
 
+  extension:
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Build (and sign the Firefox add-on on tag pushes)
+        env:
+          # AMO signs each version only once, so manual runs never sign.
+          AMO_JWT_ISSUER: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.AMO_JWT_ISSUER || '' }}
+          AMO_JWT_SECRET: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.AMO_JWT_SECRET || '' }}
+        run: ./packaging/build.sh extension
+      - uses: actions/upload-artifact@v4
+        with:
+          name: extension
+          path: |
+            dist/lid-extension-*
+            dist/firefox-updates.json
+          if-no-files-found: error
+
   release:
-    needs: [appimage, deb, arch]
+    needs: [appimage, deb, arch, extension]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-24.04
     steps:

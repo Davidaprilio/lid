@@ -6,6 +6,8 @@ if (typeof importScripts === "function" && !globalThis.LIDCapture) importScripts
 const HOST = "io.github.davidaprilio.lid";
 const CONFIG_TTL = 30000;
 const YOUTUBE_PAGES = ["*://*.youtube.com/watch*", "*://*.youtube.com/shorts/*"];
+// The Chrome Web Store build has no YouTube content script; then the YouTube items are left out too.
+const HAS_YOUTUBE = (chrome.runtime.getManifest().content_scripts || []).length > 0;
 let config = null;
 let configTime = 0;
 let lastError = "";
@@ -106,9 +108,11 @@ async function captureDownload(item) {
   }
 }
 
-if (chrome.downloads.onDeterminingFilename) {
-  // Chrome: by now the server's file name (Content-Disposition) is known.
-  chrome.downloads.onDeterminingFilename.addListener((item, suggest) => {
+// Chrome has onDeterminingFilename, where the server's file name (Content-Disposition) is already
+// known. Firefox does not; there, onCreated gives the full target path.
+const determining = chrome.downloads["onDeterminingFilename"];
+if (determining) {
+  determining.addListener((item, suggest) => {
     suggest();
     captureDownload(item);
   });
@@ -123,12 +127,14 @@ function createMenus() {
     chrome.contextMenus.create({ id: "lid-link", title: "Download with LID", contexts: ["link", "image", "video", "audio"] });
     chrome.contextMenus.create({ id: "lid-selection", title: "Download selected links with LID", contexts: ["selection"] });
     chrome.contextMenus.create({ id: "lid-all", title: "Download all links with LID", contexts: ["page", "frame"] });
-    chrome.contextMenus.create({
-      id: "lid-video-page",
-      title: "Download this video with LID",
-      contexts: ["page", "video"],
-      documentUrlPatterns: YOUTUBE_PAGES,
-    });
+    if (HAS_YOUTUBE) {
+      chrome.contextMenus.create({
+        id: "lid-video-page",
+        title: "Download this video with LID",
+        contexts: ["page", "video"],
+        documentUrlPatterns: YOUTUBE_PAGES,
+      });
+    }
   });
 }
 
@@ -192,7 +198,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 // ---------------------------------------------------------------- popup and YouTube button
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || typeof msg !== "object") return false;
-  if (msg.type === "video" && typeof msg.url === "string") {
+  if (HAS_YOUTUBE && msg.type === "video" && typeof msg.url === "string") {
     send({ type: "download", url: msg.url, page_url: msg.url }).then(sendResponse);
     return true;
   }

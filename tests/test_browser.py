@@ -5,9 +5,10 @@ import os
 import stat
 import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 
-from lider import browser
+from lider import __version__, browser
 
 EXT = browser.EXTENSION_SOURCE
 
@@ -36,6 +37,62 @@ class ManifestTests(unittest.TestCase):
 
     def test_background_uses_the_same_host_name(self):
         self.assertIn(f'"{browser.HOST_NAME}"', (EXT / "background.js").read_text())
+
+
+class DistributionTests(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.dir = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def manifest(self, folder):
+        return json.loads((folder / "manifest.json").read_text())
+
+    def test_store_variant_has_no_youtube_and_no_key(self):
+        full = self.manifest(browser.export_extension("chromium", self.dir / "full"))
+        store_dir = browser.export_extension("chromium", self.dir / "store", "store")
+        store = self.manifest(store_dir)
+        self.assertIn("key", full)
+        self.assertIn("content_scripts", full)
+        self.assertNotIn("key", store)
+        self.assertNotIn("content_scripts", store)
+        self.assertFalse((store_dir / "youtube.js").exists())
+        self.assertEqual(store["version"], __version__)
+        self.assertNotIn("YouTube", store["description"])
+
+    def test_update_url_only_for_the_self_distributed_firefox_build(self):
+        listed = self.manifest(browser.export_extension("firefox", self.dir / "listed"))
+        unlisted = self.manifest(browser.export_extension("firefox", self.dir / "unlisted",
+                                                          update_url=browser.FIREFOX_UPDATES_URL))
+        self.assertNotIn("update_url", listed["browser_specific_settings"]["gecko"])
+        self.assertEqual(unlisted["browser_specific_settings"]["gecko"]["update_url"], browser.FIREFOX_UPDATES_URL)
+
+    def test_release_files_are_reproducible(self):
+        browser.build_extensions(str(self.dir / "a"), str(self.dir / "wa"))
+        browser.build_extensions(str(self.dir / "b"), str(self.dir / "wb"))
+        names = sorted(p.name for p in (self.dir / "a").iterdir())
+        self.assertEqual(names, ["firefox-updates.json", "lid-extension-chromium-store.zip",
+                                 "lid-extension-chromium.zip", "lid-extension-firefox.zip"])
+        for name in names:
+            self.assertEqual((self.dir / "a" / name).read_bytes(), (self.dir / "b" / name).read_bytes(), name)
+        with zipfile.ZipFile(self.dir / "a" / "lid-extension-chromium-store.zip") as z:
+            self.assertIn("manifest.json", z.namelist())
+            self.assertNotIn("youtube.js", z.namelist())
+        updates = json.loads((self.dir / "a" / "firefox-updates.json").read_text())
+        entry = updates["addons"][browser.FIREFOX_EXTENSION_ID]["updates"][0]
+        self.assertEqual(entry["version"], __version__)
+        self.assertTrue(entry["update_link"].endswith(f"/v{__version__}/lid-extension-firefox.xpi"))
+
+    def test_host_accepts_every_known_chromium_id(self):
+        old = browser.CHROMIUM_EXTENSION_IDS
+        browser.CHROMIUM_EXTENSION_IDS = (old[0], "abcdefghijklmnopabcdefghijklmnop")
+        try:
+            origins = browser.host_manifest("chromium", "/x")["allowed_origins"]
+        finally:
+            browser.CHROMIUM_EXTENSION_IDS = old
+        self.assertEqual(origins, [f"chrome-extension://{old[0]}/", "chrome-extension://abcdefghijklmnopabcdefghijklmnop/"])
 
 
 class InstallTests(unittest.TestCase):

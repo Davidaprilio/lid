@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QUrl
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
@@ -73,6 +74,23 @@ class BrowserIntegrationDialog(QDialog):
             frow.addWidget(show)
             lay.addLayout(frow)
             self.folders[family] = edit
+
+        lay.addWidget(separator())
+        get = QHBoxLayout()
+        get.addWidget(QLabel("Get the extension:"))
+        links = []
+        if browser.CHROME_WEB_STORE_URL:
+            links.append(("Chrome Web Store", browser.CHROME_WEB_STORE_URL))
+        links.append(("Firefox Add-ons", browser.FIREFOX_ADDONS_URL) if browser.FIREFOX_ADDONS_URL
+                     else ("Firefox (.xpi)", browser.FIREFOX_XPI_URL))
+        links.append(("All downloads", browser.RELEASES_URL))
+        for text, url in links:
+            b = QPushButton(text)
+            b.setToolTip(url)
+            b.clicked.connect(lambda _=False, u=url: QDesktopServices.openUrl(QUrl(u)))
+            get.addWidget(b)
+        get.addStretch(1)
+        lay.addLayout(get)
 
         bb = QDialogButtonBox(QDialogButtonBox.Close)
         bb.rejected.connect(self.reject)
