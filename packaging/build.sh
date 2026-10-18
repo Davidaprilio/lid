@@ -34,6 +34,8 @@ APPIMAGETOOL_URL="https://github.com/AppImage/appimagetool/releases/download/1.9
 
 log() { printf '\033[1;34m==>\033[0m %s\n' "$*"; }
 
+mkdir -p "$DIST" "$WORK"
+
 # ---------------------------------------------------------------- source tarball
 sdist() {
     local name="lider-$VERSION" out="$DIST/lider-$VERSION.tar.gz"
