@@ -101,6 +101,7 @@ class Settings:
     # Options -> General
     launch_on_startup: bool = False
     monitor_clipboard: bool = True
+    browser_capture: bool = True  # take over browser downloads through the LID extension
     # Options -> File types
     auto_capture_types: str = DEFAULT_FILE_TYPES
     no_auto_sites: str = ""

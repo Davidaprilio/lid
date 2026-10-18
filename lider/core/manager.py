@@ -89,8 +89,9 @@ class DownloadManager:
     def client(self) -> HttpClient:
         return HttpClient(self.settings.user_agent, self.settings.proxy, self.settings.timeout)
 
-    def probe(self, url: str, referer: str = "", username: str = "", password: str = "") -> ProbeResult:
-        tmp = Download(0, url, "", "", referer=referer, username=username, password=password)
+    def probe(self, url: str, referer: str = "", username: str = "", password: str = "",
+              headers: dict | None = None) -> ProbeResult:
+        tmp = Download(0, url, "", "", referer=referer, username=username, password=password, headers=headers or {})
         return self.client().probe(url, request_headers(tmp))
 
     def find_duplicate(self, url: str) -> Download | None:
@@ -115,6 +116,7 @@ class DownloadManager:
         queue_name: str = "",
         start: bool = False,
         media: dict | None = None,
+        headers: dict | None = None,
     ) -> Download:
         cat = self.settings.category(category) if category else categories.classify(self.settings, filename, url)
         d = Download(
@@ -131,6 +133,7 @@ class DownloadManager:
             size=size,
             resumable=resumable,
             media=media,
+            headers=headers or {},
         )
         self._next_id += 1
         self.downloads[d.id] = d

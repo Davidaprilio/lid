@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-import os
+import json
 import socket
 import sys
 from typing import Callable
@@ -12,33 +12,26 @@ from PySide6.QtCore import QSocketNotifier, QTimer
 from PySide6.QtWidgets import QApplication
 
 from . import APP_LONG_NAME, APP_NAME
+from .ipc import SOCKET_NAME, send_lines
 from .core import settings as settings_mod
 from .core.manager import DownloadManager
 from .core.store import Store
 
-# Abstract-namespace Unix socket: no file is left behind if LID crashes. Plain sockets
-# keep QtNetwork (and its Kerberos dependency) out of the process.
-SOCKET_NAME = f"\0lider-{os.getuid()}"
-
-
-def send_to_running(lines: list[str], name: str = SOCKET_NAME) -> bool:
-    """Hand the URLs to an already running LID. False when none is running."""
-    with socket.socket(socket.AF_UNIX, socket.SOCK_STREAM) as s:
-        try:
-            s.connect(name)
-            s.sendall(("\n".join(lines) if lines else "--show").encode() + b"\n")
-        except OSError:
-            return False
-    return True
+# Plain sockets (see ipc.py) keep QtNetwork and its Kerberos dependency out of the process.
+send_to_running = send_lines
 
 
 class InstanceServer:
-    """Receives the lines sent by ``send_to_running`` on the Qt event loop."""
+    """Receives the lines sent through ipc.py on the Qt event loop."""
 
     def __init__(self, on_line: Callable[[str], None], name: str = SOCKET_NAME):
         self.on_line = on_line
         self.sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
-        self.sock.bind(name)
+        try:
+            self.sock.bind(name)
+        except OSError:
+            self.sock.close()
+            raise
         self.sock.listen(8)
         self.sock.setblocking(False)
         self.notifier = QSocketNotifier(self.sock.fileno(), QSocketNotifier.Read)
@@ -67,10 +60,19 @@ class InstanceServer:
 
 
 def main(argv: list[str] | None = None) -> int:
+    raw = argv if argv is not None else sys.argv[1:]
+    if "--native-host" in raw:
+        from .native_host import main as native_main
+
+        return native_main()
+    if "--install-browser-integration" in raw or "--uninstall-browser-integration" in raw:
+        from .browser import main as browser_main
+
+        return browser_main(raw)
     parser = argparse.ArgumentParser(prog="lider", description=f"{APP_NAME}: {APP_LONG_NAME}")
     parser.add_argument("urls", nargs="*", help="addresses to download")
     parser.add_argument("--minimized", action="store_true", help="start hidden in the system tray")
-    args, qt_args = parser.parse_known_args(argv if argv is not None else sys.argv[1:])
+    args, qt_args = parser.parse_known_args(raw)
 
     if send_to_running(args.urls):
         return 0
@@ -93,6 +95,14 @@ def main(argv: list[str] | None = None) -> int:
     win = MainWindow(manager)
 
     def on_line(line: str) -> None:
+        if line.startswith("{"):
+            try:
+                request = json.loads(line)
+            except ValueError:
+                return
+            if isinstance(request, dict):
+                win.handle_browser_request(request)
+            return
         win.show_normal()
         if line != "--show":
             win.add_url(line, ask_address=False)

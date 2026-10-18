@@ -119,6 +119,8 @@ EOF
     python3 -m pip install --quiet --no-cache-dir --disable-pip-version-check --no-compile --no-deps \
         --target "$root$lib/ytdlp" "$APPIMAGE_YTDLP"
     rm -rf "$root$lib"/{vendor,ytdlp}/bin
+    PYTHONPATH="$ROOT" python3 -c 'import sys; from lider.browser import write_system_files; write_system_files(*sys.argv[1:])' \
+        "$root" "$lib/lider-native-host" /usr/bin/python3 "$lib"
     trim_pyside "$root$lib/vendor"
     copy_licenses "$root/usr/share/doc/lider/third-party" "$root$lib/vendor" "$root$lib/ytdlp"
     install -Dm644 -t "$root/usr/share/doc/lider/third-party/PySide6" "$PKG/licenses/"*
@@ -139,13 +141,15 @@ EOF
     [ -n "$PROJECT_URL" ] || sed -i '/^Homepage:/d' "$root/DEBIAN/control"
     install -m755 "$PKG/deb/postinst" "$PKG/deb/prerm" "$root/DEBIAN/"
     (cd "$root" && find usr -type f -print0 | sort -z | xargs -0 md5sum > DEBIAN/md5sums)
+    # Files under /etc (browser host manifests) are conffiles: dpkg keeps local edits on upgrade.
+    (cd "$root" && find etc -type f | sort | sed 's|^|/|' > DEBIAN/conffiles)
 
     local tmp="$WORK/deb/ar"
     mkdir -p "$tmp"
     echo "2.0" > "$tmp/debian-binary"
     local tarflags=(--sort=name --mtime="@0" --owner=0 --group=0 --numeric-owner)
     tar "${tarflags[@]}" -cJf "$tmp/control.tar.xz" -C "$root/DEBIAN" .
-    tar "${tarflags[@]}" -cJf "$tmp/data.tar.xz" -C "$root" ./usr
+    tar "${tarflags[@]}" -cJf "$tmp/data.tar.xz" -C "$root" ./usr ./etc
     rm -f "$out"
     (cd "$tmp" && ar rcD "$out" debian-binary control.tar.xz data.tar.xz)
     log "Done: $out ($(du -h "$out" | cut -f1))"

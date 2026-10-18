@@ -21,4 +21,4 @@ lider = "lider.app:main"
 include = ["lider*"]
 
 [tool.setuptools.package-data]
-lider = ["ui/assets/icons/*.svg"]
+lider = ["ui/assets/icons/*.svg", "browser_extension/*", "browser_extension/icons/*"]

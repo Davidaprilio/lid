@@ -29,6 +29,12 @@ Package and command name: **`lider`**.
     than one connection in testing), and ffmpeg joins them.
   * You need `pip install yt-dlp` (or `pip install -e .[youtube]`), ffmpeg, and a JavaScript runtime
     (deno, node or bun) for YouTube's stream protection.
+* **Browser integration** (Chrome, Chromium, Brave, Edge, Vivaldi, Opera, Firefox) with the LID extension:
+  * downloads of your file types are handed to LID with their cookies, referrer and user agent,
+    so downloads behind a login keep working;
+  * "Download with LID", "Download all links with LID" and "Download selected links with LID" in the
+    right-click menu;
+  * a "Download with LID" button on YouTube video pages.
 * **Speed limiter**, global and per file.
 * **Adding downloads:** batch download with `*` wildcards, a one-page Grabber, and "batch from clipboard".
 * **Clipboard monitoring** for the auto-capture file types, plus drag-and-drop.
@@ -46,6 +52,23 @@ sudo pacman -U lider-1.0-1-any.pkg.tar.zst      # Arch, CachyOS, Manjaro, Endeav
 sudo apt install ./lider_1.0-1_amd64.deb         # Debian 12+, Ubuntu 22.04+
 chmod +x Lider-1.0-x86_64.AppImage && ./Lider-1.0-x86_64.AppImage   # any distro
 ```
+
+## Browser integration
+
+LID talks to its browser extension through native messaging, so no network port is opened.
+
+1. In LID open **Options → General → Set up browsers…** and click **Install for checked browsers**.
+   This registers the LID helper with each browser found. From a terminal you can run
+   `lider --install-browser-integration` instead. The .deb and Arch packages register it system-wide.
+2. Add the extension to the browser from the folder that dialog shows. The packages also put it in
+   `/usr/share/lider/browser-extension/`.
+   * **Chrome, Chromium, Brave, Edge, Vivaldi, Opera:** open `chrome://extensions`, turn on
+     *Developer mode*, then *Load unpacked*.
+   * **Firefox:** open `about:debugging#/runtime/this-firefox` and choose *Load Temporary Add-on*
+     (until the add-on is published on addons.mozilla.org).
+
+The toolbar button shows whether LID is reachable and turns capturing on or off. Downloads LID
+cannot take (blob: links, LID not available) stay in the browser.
 
 ## Run from source
 

@@ -600,7 +600,8 @@ class MainWindow(QMainWindow):
 
     # ------------------------------------------------------------------ add downloads
     def add_url(self, url: str | None = None, referer: str = "", description: str = "",
-                parent_page: str = "", ask_address: bool = True):
+                parent_page: str = "", ask_address: bool = True, headers: dict | None = None,
+                filename: str = ""):
         username = password = ""
         if url is None or (ask_address and not url):
             dlg = AddUrlDialog(self, url or "")
@@ -637,7 +638,7 @@ class MainWindow(QMainWindow):
         QApplication.setOverrideCursor(Qt.BusyCursor)
 
         def probe():
-            return self.manager.probe(url, referer, username, password)
+            return self.manager.probe(url, referer, username, password, headers)
 
         def done(result, error):
             QApplication.restoreOverrideCursor()
@@ -646,11 +647,13 @@ class MainWindow(QMainWindow):
                     self, "LID", f"Cannot get information about the file:\n{error}\n\nAdd it anyway?")
                 if ans != QMessageBox.Yes:
                     return
-                name, size, resumable = safe_filename(filename_from_url(url)), -1, None
+                name, size, resumable = safe_filename(filename or filename_from_url(url)), -1, None
             else:
                 name, size, resumable = result.filename, result.size, result.resumable
+                if filename and "." in filename and "." not in name:
+                    name = safe_filename(filename)  # the browser already knew a better name
             self._confirm_and_add(url, name, size, resumable, referer, description, parent_page,
-                                  username, password, dup if overwrite else None)
+                                  username, password, dup if overwrite else None, headers)
 
         run_async(probe, done)
 
@@ -709,7 +712,7 @@ class MainWindow(QMainWindow):
         return candidate
 
     def _confirm_and_add(self, url, name, size, resumable, referer, description, parent_page,
-                         username, password, replace: Download | None):
+                         username, password, replace: Download | None, headers: dict | None = None):
         start, queue_name = not self.settings.only_add_to_queue, ""
         cat = categories.classify(self.settings, name, url)
         save_dir, category = cat.save_dir, cat.name
@@ -732,7 +735,7 @@ class MainWindow(QMainWindow):
                 os.remove(replace.path)
             self.manager.remove([replace.id])
         d = self.manager.add(url, name, save_dir, category, description, referer, parent_page, username, password,
-                             size, resumable, queue_name, start)
+                             size, resumable, queue_name, start, headers=headers)
         self.refresh_rows()
         if start:
             self.show_progress(d.id)
@@ -786,14 +789,42 @@ class MainWindow(QMainWindow):
 
         run_async(fetch, done)
 
-    def _add_choices(self, choices, referer, parent_page):
+    def _add_choices(self, choices, referer, parent_page, headers: dict | None = None):
         for c in choices:
             name = self._unique_name(c.save_dir, c.filename)
             self.manager.add(c.url, name, c.save_dir, c.category, c.description, referer, parent_page,
-                             queue_name=MAIN_QUEUE)
+                             queue_name=MAIN_QUEUE, headers=headers)
         if choices:
             self.handle_events(self.manager.start_queue(MAIN_QUEUE))
         self.refresh_rows()
+
+    # ------------------------------------------------------------------ browser extension
+    def handle_browser_request(self, req: dict):
+        """A request from the LID browser extension, relayed by the native messaging host."""
+        action = req.get("action")
+        if action == "show":
+            self.show_normal()
+            return
+        headers = {}
+        if req.get("cookies"):
+            headers["Cookie"] = req["cookies"]
+        if req.get("user_agent"):
+            headers["User-Agent"] = req["user_agent"]
+        page = req.get("page_url") or ""
+        referer = req.get("referer") or page
+        if action == "download":
+            url = req.get("url") or ""
+            if URL_RE.match(url):
+                self.add_url(url, referer=referer, parent_page=page, ask_address=False,
+                             headers=headers, filename=req.get("filename") or "")
+        elif action == "links":
+            links = [(i["url"], i.get("text", ""), i.get("kind", "a")) for i in req.get("items", [])
+                     if isinstance(i, dict) and URL_RE.match(i.get("url", ""))]
+            if links:
+                dlg = LinksDialog(self.settings, links, self)
+                dlg.raise_()
+                if dlg.exec():
+                    self._add_choices(dlg.choices(), referer, page, headers)
 
     def _add_many(self, items, username="", password=""):
         for url, referer, desc in items:

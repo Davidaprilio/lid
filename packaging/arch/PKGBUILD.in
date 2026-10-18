@@ -22,6 +22,9 @@ package() {
     cp -r lider "$pkgdir$site/"
     find "$pkgdir$site/lider" -type d -exec chmod 755 {} + -o -type f -exec chmod 644 {} +
     /usr/bin/python -m compileall -q -s "$pkgdir" "$pkgdir$site/lider"
+    # Browser integration: native messaging host, system-wide host manifests, extension folders.
+    PYTHONPATH="$pkgdir$site" /usr/bin/python -c 'import sys; from lider.browser import write_system_files; write_system_files(*sys.argv[1:])' \
+        "$pkgdir" /usr/lib/lider/lider-native-host /usr/bin/python
 
     install -d "$pkgdir/usr/bin"
     printf '#!/usr/bin/python\nimport sys\nfrom lider.app import main\nsys.exit(main())\n' > "$pkgdir/usr/bin/lider"

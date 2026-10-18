@@ -119,6 +119,36 @@ class MainWindowTests(unittest.TestCase):
         finally:
             srv.close()
 
+    def test_browser_download_request_reaches_add_url(self):
+        calls = []
+        self.w.add_url = lambda url, **kw: calls.append((url, kw))
+        self.w.handle_browser_request({"action": "download", "url": "https://x.org/a.zip", "cookies": "s=1",
+                                       "user_agent": "UA", "page_url": "https://x.org/p", "filename": "a.zip"})
+        self.w.handle_browser_request({"action": "download", "url": "javascript:alert(1)"})
+        self.assertEqual(calls, [("https://x.org/a.zip", {
+            "referer": "https://x.org/p", "parent_page": "https://x.org/p", "ask_address": False,
+            "headers": {"Cookie": "s=1", "User-Agent": "UA"}, "filename": "a.zip"})])
+
+    def test_browser_links_request_adds_to_queue_with_cookies(self):
+        from lider.ui.dialogs import add as add_dialogs
+
+        orig = add_dialogs.LinksDialog.exec
+        add_dialogs.LinksDialog.exec = lambda self_: 1
+        import lider.ui.main_window as mw
+        mw.LinksDialog.exec = lambda self_: 1
+        started = []
+        self.m.start_queue = lambda name: started.append(name) or []
+        try:
+            self.w.handle_browser_request({"action": "links", "page_url": "https://x.org/p", "cookies": "s=1",
+                                           "items": [{"url": "https://x.org/a.zip", "text": "A", "kind": "a"}]})
+        finally:
+            add_dialogs.LinksDialog.exec = orig
+            mw.LinksDialog.exec = orig
+        d = next(iter(self.m.downloads.values()))
+        self.assertEqual((d.url, d.headers, d.referer, d.queue), ("https://x.org/a.zip", {"Cookie": "s=1"},
+                                                                  "https://x.org/p", MAIN_QUEUE))
+        self.assertEqual(started, [MAIN_QUEUE])
+
     def test_remove_selected_asks_and_removes(self):
         d = self.m.add("https://example.com/a.zip", "a.zip")
         self.w.refresh_rows()

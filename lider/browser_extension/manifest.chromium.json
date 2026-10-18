@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "LID Integration",
+  "short_name": "LID",
+  "description": "Send downloads, links and videos from the browser to LID (Linux Internet Downloader).",
+  "version": "1.1.0",
+  "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAyqw6f+AFC/W8V3//jRAZrnH+nijyQsspKPlsj89UhPKxhXGgSPtG0df80zwbihEEPfib5aNNIs4tQUQp2veUgvqqMLwpFBgJ/pHAb8vx1xZH9uHxyO3gqxdfbsOqHL9RLdAG6z/a/NUK/uQQbdb1j8bTRzPogPTLb774Phau9NMJZWYSLv06AS/pVv51nPrJ7EzwU3IwtV6McbhFeR9wvwie3QG/ERH+gfpQReD79/vpECe/UTahTKlxYG4VDrYQDLXR7D1GZnWlRS8/kMhOrKrbWk6i4ws5cmrV5CGavSkb9r3RJAnrq7nkaeVXLCrOI/KQ4aClMoczdUZYcpcBeQIDAQAB",
+  "minimum_chrome_version": "109",
+  "icons": { "16": "icons/16.png", "32": "icons/32.png", "48": "icons/48.png", "128": "icons/128.png" },
+  "action": {
+    "default_title": "LID",
+    "default_popup": "popup.html",
+    "default_icon": { "16": "icons/16.png", "32": "icons/32.png" }
+  },
+  "background": { "service_worker": "background.js" },
+  "permissions": ["downloads", "contextMenus", "cookies", "nativeMessaging", "storage", "scripting"],
+  "host_permissions": ["<all_urls>"],
+  "content_scripts": [
+    {
+      "matches": ["https://www.youtube.com/*", "https://m.youtube.com/*"],
+      "js": ["youtube.js"],
+      "css": ["youtube.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

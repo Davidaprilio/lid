@@ -294,13 +294,30 @@ class OptionsDialog(QDialog):
         self.clipboard.setChecked(s.monitor_clipboard)
         lay.addWidget(self.launch)
         lay.addWidget(self.clipboard)
-        note = QLabel("Links can also be dropped on the main window, or passed on the command line:\n"
-                      "    python3 -m lider https://example.com/file.zip")
+        box = QGroupBox("Browser integration")
+        b = QVBoxLayout(box)
+        self.browser_capture = QCheckBox("Capture downloads from browsers (needs the LID extension)")
+        self.browser_capture.setChecked(s.browser_capture)
+        b.addWidget(self.browser_capture)
+        note = QLabel("The extension takes over downloads of the file types on the File types tab, and adds "
+                      "\"Download with LID\", \"Download all links with LID\" and a YouTube button.")
         note.setWordWrap(True)
-        lay.addSpacing(12)
-        lay.addWidget(note)
+        b.addWidget(note)
+        row = QHBoxLayout()
+        setup = QPushButton("Set up browsers...")
+        setup.clicked.connect(self._browsers)
+        row.addWidget(setup)
+        row.addStretch(1)
+        b.addLayout(row)
+        lay.addSpacing(8)
+        lay.addWidget(box)
         lay.addStretch(1)
         return w
+
+    def _browsers(self):
+        from .browsers import BrowserIntegrationDialog
+
+        BrowserIntegrationDialog(self).exec()
 
     def _file_types(self):
         w, lay = self._page("filetypes", "Downloaded file types")
@@ -536,6 +553,7 @@ class OptionsDialog(QDialog):
         s.launch_on_startup = self.launch.isChecked()
         set_autostart(s.launch_on_startup)
         s.monitor_clipboard = self.clipboard.isChecked()
+        s.browser_capture = self.browser_capture.isChecked()
         s.auto_capture_types = " ".join(self.types.toPlainText().split())
         s.no_auto_sites = " ".join(self.no_sites.toPlainText().split())
         s.categories = self.categories
