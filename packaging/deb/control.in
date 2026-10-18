@@ -1,0 +1,16 @@
+Package: lider
+Version: @VERSION@-1
+Section: net
+Priority: optional
+Architecture: amd64
+Maintainer: @MAINTAINER@
+Installed-Size: @SIZE@
+Depends: @DEPENDS@
+Recommends: ffmpeg, nodejs | deno
+Homepage: @URL@
+Description: @SUMMARY@
+ LID downloads files over several connections at once with dynamic
+ segmentation, and resumes them later. It sorts downloads into categories,
+ runs queues on a schedule and limits speed. Paste a YouTube link to choose
+ a resolution or audio only; ffmpeg and a JavaScript runtime are used for
+ that. PySide6 and yt-dlp are bundled in /usr/lib/lider.

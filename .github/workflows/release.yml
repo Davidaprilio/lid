@@ -1,0 +1,113 @@
+name: Build packages
+
+# Push a tag like v1.0 (matching lider/__init__.py) to build every package and publish a release.
+# "Run workflow" on the Actions tab builds the packages without publishing anything.
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  test:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Libraries for Qt (offscreen) and ffmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3 ffmpeg
+      - run: python -m pip install "PySide6-Essentials==6.11.1" "yt-dlp==2026.8.19"
+      - name: Tag must match the version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version="$(sed -n 's/^__version__ = "\(.*\)"/\1/p' lider/__init__.py)"
+          if [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match __version__ $version in lider/__init__.py"
+            exit 1
+          fi
+      - name: Tests
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: python -m unittest discover -s tests -t . -v
+
+  appimage:
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m pip install "uv==0.12.17"
+      - run: ./packaging/build.sh appimage
+      - uses: actions/upload-artifact@v4
+        with:
+          name: appimage
+          path: dist/*.AppImage
+          if-no-files-found: error
+
+  deb:
+    needs: test
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: ./packaging/build.sh deb
+      - uses: actions/upload-artifact@v4
+        with:
+          name: deb
+          path: dist/*.deb
+          if-no-files-found: error
+
+  arch:
+    needs: test
+    runs-on: ubuntu-24.04
+    container: archlinux:latest
+    steps:
+      - name: Build tools
+        run: pacman -Syu --noconfirm --needed base-devel git python sudo
+      - uses: actions/checkout@v4
+      - name: Arch package and AUR files
+        run: |
+          useradd -m builder
+          chown -R builder "$GITHUB_WORKSPACE"
+          version="$(sed -n 's/^__version__ = "\(.*\)"/\1/p' lider/__init__.py)"
+          sudo -u builder ./packaging/build.sh arch
+          sudo -u builder env AUR_SOURCE_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/v$version/lider-$version.tar.gz" \
+            ./packaging/build.sh aur
+          tar -czf "dist/lider-$version-aur.tar.gz" -C dist/aur PKGBUILD .SRCINFO
+      - uses: actions/upload-artifact@v4
+        with:
+          name: arch
+          path: |
+            dist/*.pkg.tar.zst
+            dist/lider-*.tar.gz
+          if-no-files-found: error
+
+  release:
+    needs: [appimage, deb, arch]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Checksums
+        run: cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --title "LID ${GITHUB_REF_NAME#v}" \
+            --generate-notes

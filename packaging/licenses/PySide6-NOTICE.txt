@@ -1,0 +1,11 @@
+This package bundles PySide6-Essentials 6.11.1 and shiboken6 6.11.1 (Qt for Python),
+which include the Qt 6 libraries. Copyright (C) The Qt Company Ltd. and other contributors.
+
+They are used under the GNU Lesser General Public License version 3 (LGPL-3.0-only);
+the full texts of the LGPL-3.0 and of the GPL-3.0 it builds on are in this folder.
+The Qt libraries are kept as separate shared libraries, so you can replace them with
+your own build. LID does not modify them.
+
+Source code:
+  Qt for Python: https://code.qt.io/cgit/pyside/pyside-setup.git/ (tag v6.11.1)
+  Qt:            https://download.qt.io/official_releases/qt/

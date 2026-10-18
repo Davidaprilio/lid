@@ -1,0 +1,33 @@
+# Maintainer: @MAINTAINER@
+pkgname=lider
+pkgver=@VERSION@
+pkgrel=1
+pkgdesc="@SUMMARY@"
+arch=('any')
+url="@URL@"
+license=('@LICENSE@')
+depends=('python' 'pyside6' 'qt6-svg')
+optdepends=('yt-dlp: download YouTube videos'
+            'ffmpeg: join YouTube video and audio, convert to MP3'
+            'nodejs: unlock YouTube streams (or deno or bun)'
+            'deno: unlock YouTube streams')
+source=("@SOURCE@")
+sha256sums=('@SHA256@')
+
+package() {
+    cd "$pkgname-$pkgver"
+    local site
+    site="$(/usr/bin/python -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"
+    install -d "$pkgdir$site"
+    cp -r lider "$pkgdir$site/"
+    find "$pkgdir$site/lider" -type d -exec chmod 755 {} + -o -type f -exec chmod 644 {} +
+    /usr/bin/python -m compileall -q -s "$pkgdir" "$pkgdir$site/lider"
+
+    install -d "$pkgdir/usr/bin"
+    printf '#!/usr/bin/python\nimport sys\nfrom lider.app import main\nsys.exit(main())\n' > "$pkgdir/usr/bin/lider"
+    chmod 755 "$pkgdir/usr/bin/lider"
+    install -Dm644 lider.desktop "$pkgdir/usr/share/applications/lider.desktop"
+    install -Dm644 lider/ui/assets/icons/app.svg "$pkgdir/usr/share/icons/hicolor/scalable/apps/lider.svg"
+    install -Dm644 README.md "$pkgdir/usr/share/doc/$pkgname/README.md"
+    install -Dm644 LICENSE "$pkgdir/usr/share/licenses/$pkgname/LICENSE"
+}

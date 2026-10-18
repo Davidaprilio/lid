@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=LID
+GenericName=Download Manager
+Comment=Linux Internet Downloader: accelerated multi-connection downloads
+X-GNOME-FullName=Linux Internet Downloader
+Exec=lider %U
+Icon=lider
+Terminal=false
+Categories=Network;FileTransfer;Qt;
+MimeType=x-scheme-handler/http;x-scheme-handler/https;x-scheme-handler/ftp;

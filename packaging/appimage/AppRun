@@ -1,0 +1,6 @@
+#!/bin/sh
+# Start LID with the Python bundled in the AppImage.
+HERE="$(dirname "$(readlink -f "$0")")"
+export PYTHONNOUSERSITE=1
+unset PYTHONHOME PYTHONPATH
+exec "$HERE/usr/python/bin/python3" -m lider "$@"

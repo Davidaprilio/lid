@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lider"
+version = "1.0"
+description = "LID, Linux Internet Downloader: multi-connection download manager for Linux"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.10"
+dependencies = ["PySide6>=6.5"]
+
+[project.optional-dependencies]
+youtube = ["yt-dlp>=2026.8.19"]
+
+[project.scripts]
+lider = "lider.app:main"
+
+[tool.setuptools.packages.find]
+include = ["lider*"]
+
+[tool.setuptools.package-data]
+lider = ["ui/assets/icons/*.svg"]
