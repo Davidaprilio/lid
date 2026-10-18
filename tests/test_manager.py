@@ -134,6 +134,7 @@ class CategoryAndFormatTests(unittest.TestCase):
                 with open(f"{tmp}/c/lindm/settings.json", "w") as f:
                     f.write('{"temp_dir": "%s/k/lindm/parts", "max_connections": 16}' % tmp)
                 open(f"{tmp}/d/lindm/downloads.db", "w").close()
+                os.makedirs(f"{tmp}/d/lider/native-host")  # set up before the first start: must merge
                 settings_mod.migrate_legacy_dirs()
                 self.assertFalse(os.path.exists(f"{tmp}/c/lindm"))
                 self.assertTrue(os.path.exists(f"{tmp}/d/lider/downloads.db"))

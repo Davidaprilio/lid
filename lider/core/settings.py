@@ -62,8 +62,19 @@ def migrate_legacy_dirs() -> None:
     for new in (config_dir(), data_dir(), cache_dir()):
         for name in LEGACY_NAMES:
             old = new.with_name(name)
-            if old.is_dir() and not new.exists():
+            if not old.is_dir():
+                continue
+            if not new.exists():
                 old.rename(new)
+                continue
+            # The new folder may already exist (e.g. the browser helper was set up first): merge.
+            for item in old.iterdir():
+                if not (new / item.name).exists():
+                    item.rename(new / item.name)
+            try:
+                old.rmdir()
+            except OSError:
+                pass  # something with the same name already existed in the new folder; leave it
     cfg = config_dir() / "settings.json"
     try:
         text = cfg.read_text(encoding="utf-8")
