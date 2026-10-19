@@ -34,7 +34,8 @@ Package and command name: **`lider`**.
     so downloads behind a login keep working;
   * "Download with LID", "Download all links with LID" and "Download selected links with LID" in the
     right-click menu;
-  * a "Download with LID" button on YouTube video pages.
+  * a "LID" button in YouTube's own action bar (next to Share), cloned from YouTube's buttons so it
+    matches their current style and theme.
 * **Speed limiter**, global and per file.
 * **Adding downloads:** batch download with `*` wildcards, a one-page Grabber, and "batch from clipboard".
 * **Clipboard monitoring** for the auto-capture file types, plus drag-and-drop.
@@ -69,8 +70,8 @@ LID talks to its browser extension through native messaging, so no network port 
      `/usr/share/lider/browser-extension/`). Open `chrome://extensions`, turn on *Developer mode*,
      then *Load unpacked*.
 
-   The full extension adds a "Download with LID" button on YouTube watch pages. Store listings, once
-   published, leave that button out because of store rules; pasting a YouTube link into LID always
+   The full extension adds a "LID" button to the action bar of YouTube watch pages. Store listings,
+   once published, leave that button out because of store rules; pasting a YouTube link into LID always
    works.
 
 The toolbar button shows whether LID is reachable and turns capturing on or off. Downloads LID

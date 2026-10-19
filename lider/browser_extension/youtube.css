@@ -1,4 +1,6 @@
-#lid-download-button {
+/* Fallback floating button (Shorts, m.youtube.com). On the watch page the button is a clone of
+   one of YouTube's own buttons and needs no styles here. */
+#lid-download.lid-floating {
   position: fixed;
   right: 24px;
   bottom: 24px;
@@ -16,9 +18,9 @@
   box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
   cursor: pointer;
 }
-#lid-download-button:hover { background: #1e40af; }
-#lid-download-button:focus-visible { outline: 3px solid #93c5fd; outline-offset: 2px; }
-#lid-download-button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 2.2; stroke-linecap: round; stroke-linejoin: round; }
-#lid-download-button[data-state="busy"] { background: #475569; cursor: progress; }
-#lid-download-button[data-state="ok"] { background: #0f766e; }
-#lid-download-button[data-state="error"] { background: #b91c1c; }
+#lid-download.lid-floating:hover { background: #1e40af; }
+#lid-download.lid-floating:focus-visible { outline: 3px solid #93c5fd; outline-offset: 2px; }
+#lid-download.lid-floating svg { width: 20px !important; height: 20px !important; }
+#lid-download.lid-floating[data-state="busy"] { background: #475569; cursor: progress; }
+#lid-download.lid-floating[data-state="ok"] { background: #0f766e; }
+#lid-download.lid-floating[data-state="error"] { background: #b91c1c; }
