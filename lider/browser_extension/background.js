@@ -211,10 +211,20 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 });
 
 // ---------------------------------------------------------------- popup and YouTube button
+// A video already on its way to LID is not sent again (several clicks or tabs while LID starts).
+const videosInFlight = new Map();
+
+function sendVideo(url) {
+  if (!videosInFlight.has(url)) {
+    videosInFlight.set(url, send({ type: "download", url, page_url: url }).finally(() => videosInFlight.delete(url)));
+  }
+  return videosInFlight.get(url);
+}
+
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   if (!msg || typeof msg !== "object") return false;
   if (HAS_YOUTUBE && msg.type === "video" && typeof msg.url === "string") {
-    send({ type: "download", url: msg.url, page_url: msg.url }).then(sendResponse);
+    sendVideo(msg.url).then(sendResponse);
     return true;
   }
   if (msg.type === "status") {

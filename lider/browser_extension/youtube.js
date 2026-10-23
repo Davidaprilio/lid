@@ -67,8 +67,9 @@
       }
     };
     show("idle", idleText);
+    // One click sends once: further clicks are ignored while sending and while the result shows.
     button.addEventListener("click", () => {
-      if (root.dataset.state === "busy") return;
+      if (root.dataset.state !== "idle") return;
       show("busy", "Sending…");
       chrome.runtime.sendMessage({ type: "video", url: location.href }, (reply) => {
         void chrome.runtime.lastError;
