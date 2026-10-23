@@ -34,8 +34,12 @@ RELEASES_URL = "https://github.com/Davidaprilio/lid/releases/latest"
 # Store pages; empty until the listings are published.
 CHROME_WEB_STORE_URL = ""
 FIREFOX_ADDONS_URL = ""
+# Releases carry the signed lid-extension-firefox.xpi only when the CI has the AMO keys. Set this to
+# True once they do; until then the dialog links the unsigned zip (temporary add-on).
+FIREFOX_SIGNED_XPI = False
 # Stable "latest release" links to the files built by ./packaging/build.sh extension.
 FIREFOX_XPI_URL = RELEASES_URL + "/download/lid-extension-firefox.xpi"
+FIREFOX_ZIP_URL = RELEASES_URL + "/download/lid-extension-firefox.zip"
 FIREFOX_UPDATES_URL = RELEASES_URL + "/download/firefox-updates.json"
 CHROMIUM_ZIP_URL = RELEASES_URL + "/download/lid-extension-chromium.zip"
 

@@ -81,8 +81,12 @@ class BrowserIntegrationDialog(QDialog):
         links = []
         if browser.CHROME_WEB_STORE_URL:
             links.append(("Chrome Web Store", browser.CHROME_WEB_STORE_URL))
-        links.append(("Firefox Add-ons", browser.FIREFOX_ADDONS_URL) if browser.FIREFOX_ADDONS_URL
-                     else ("Firefox (.xpi)", browser.FIREFOX_XPI_URL))
+        if browser.FIREFOX_ADDONS_URL:
+            links.append(("Firefox Add-ons", browser.FIREFOX_ADDONS_URL))
+        elif browser.FIREFOX_SIGNED_XPI:
+            links.append(("Firefox (.xpi)", browser.FIREFOX_XPI_URL))
+        else:
+            links.append(("Firefox (.zip)", browser.FIREFOX_ZIP_URL))
         links.append(("All downloads", browser.RELEASES_URL))
         for text, url in links:
             b = QPushButton(text)

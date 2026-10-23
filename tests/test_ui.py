@@ -162,5 +162,30 @@ class MainWindowTests(unittest.TestCase):
         self.assertNotIn(d.id, self.m.downloads)
 
 
+class BrowserDialogTests(unittest.TestCase):
+    def test_get_the_extension_links_point_at_release_files(self):
+        import pathlib
+
+        from PySide6.QtWidgets import QPushButton
+
+        from lider import browser
+        from lider.ui.dialogs.browsers import BrowserIntegrationDialog
+
+        with tempfile.TemporaryDirectory() as tmp:
+            browser.build_extensions(os.path.join(tmp, "dist"), os.path.join(tmp, "work"))
+            built = {p.name for p in pathlib.Path(tmp, "dist").iterdir()}
+        if browser.FIREFOX_SIGNED_XPI:
+            built.add("lid-extension-firefox.xpi")  # made by web-ext sign in the CI
+        dialog = BrowserIntegrationDialog()
+        try:
+            urls = [b.toolTip() for b in dialog.findChildren(QPushButton) if b.toolTip().startswith("https://")]
+        finally:
+            dialog.deleteLater()
+        self.assertIn(browser.RELEASES_URL, urls)
+        for url in urls:
+            if "/download/" in url:
+                self.assertIn(url.rsplit("/", 1)[1], built, url)
+
+
 if __name__ == "__main__":
     unittest.main()

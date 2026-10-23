@@ -130,6 +130,8 @@ unsigned add-ons outside about:debugging.
 3. Push a `v*` tag. The `extension` job signs the add-on (unlisted, so it is not reviewed or listed
    on AMO) and the release gets `lid-extension-firefox.xpi` and `firefox-updates.json`. Installed
    copies update themselves from `firefox-updates.json`.
+4. Set `FIREFOX_SIGNED_XPI = True` in `lider/browser.py`, so the *Browser integration* dialog links
+   the `.xpi` instead of the unsigned zip.
 
 The secrets are only passed to tag builds; "Run workflow" builds stay unsigned. Mozilla never signs
 the same version twice, so bump `__version__` before tagging again.
