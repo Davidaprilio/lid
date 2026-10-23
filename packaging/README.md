@@ -79,6 +79,9 @@ git tag v1.1.1 && git push origin v1.1.1
 gh release create v1.1.1 --draft --verify-tag --title "LID 1.1.1" --generate-notes
 ```
 
+If a tag has to move to a newer commit, its release is kept and only its files are replaced:
+`git tag -f -a v1.1.1 -m "LID 1.1.1" && git push -f origin v1.1.1`.
+
 To build the packages without publishing anything, use "Run workflow" on the Actions tab, or
 `gh workflow run release.yml`.
 
