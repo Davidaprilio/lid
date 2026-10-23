@@ -84,13 +84,14 @@ async function handOver(info) {
 }
 
 // ---------------------------------------------------------------- taking over downloads
+// Resolves true when LID took the download and the browser's copy was dropped.
 async function captureDownload(item) {
-  if (handled.has(item.id) || item.state !== "in_progress") return;
-  if (item.byExtensionId && item.byExtensionId === chrome.runtime.id) return;
-  if (!(await isEnabled())) return;
+  if (handled.has(item.id) || item.state !== "in_progress") return false;
+  if (item.byExtensionId && item.byExtensionId === chrome.runtime.id) return false;
+  if (!(await isEnabled())) return false;
   const url = item.finalUrl || item.url;
   const name = String(item.filename || "").split(/[\\/]/).pop();
-  if (!LIDCapture.shouldCapture(await getConfig(), url, name)) return;
+  if (!LIDCapture.shouldCapture(await getConfig(), url, name)) return false;
   handled.add(item.id);
   await call(chrome.downloads, "pause", item.id);
   const reply = await handOver({
@@ -100,21 +101,35 @@ async function captureDownload(item) {
     size: item.totalBytes > 0 ? item.totalBytes : undefined,
     mime: item.mime || "",
   });
-  if (reply.ok) {
-    await call(chrome.downloads, "cancel", item.id);
-    await call(chrome.downloads, "erase", { id: item.id });
-  } else {
+  if (!reply.ok) {
     await call(chrome.downloads, "resume", item.id);
+    return false;
   }
+  await dropBrowserCopy(item.id);
+  return true;
+}
+
+// Cancel the browser's download. If it already finished (Firefox gives no way to hold it), delete
+// the file it saved, so the user does not end up with two copies.
+async function dropBrowserCopy(id) {
+  await call(chrome.downloads, "cancel", id);
+  const found = (await call(chrome.downloads, "search", { id })) || [];
+  if (found[0] && found[0].state === "complete" && found[0].exists !== false) {
+    await call(chrome.downloads, "removeFile", id);
+  }
+  await call(chrome.downloads, "erase", { id });
 }
 
 // Chrome has onDeterminingFilename, where the server's file name (Content-Disposition) is already
-// known. Firefox does not; there, onCreated gives the full target path.
+// known. A download cannot finish before its name is decided, so suggest() is held until LID has
+// answered: a download LID takes is cancelled before the browser saves anything, even when
+// starting LID takes a few seconds. Firefox has no such event; there, onCreated gives the full
+// target path.
 const determining = chrome.downloads["onDeterminingFilename"];
 if (determining) {
   determining.addListener((item, suggest) => {
-    suggest();
-    captureDownload(item);
+    captureDownload(item).catch(() => false).then(() => suggest());
+    return true; // suggest() is called asynchronously
   });
 } else {
   chrome.downloads.onCreated.addListener(captureDownload);
