@@ -71,6 +71,14 @@ sudo pacman -U lider-1.0-1-any.pkg.tar.zst
 3. It publishes a GitHub release with every file and a `SHA256SUMS` file. The AUR files already
    point at that release's `lider-<ver>.tar.gz`.
 
+To check a release before it is public, create it as a draft first. The workflow then only adds the
+files to that draft:
+
+```sh
+git tag v1.1.1 && git push origin v1.1.1
+gh release create v1.1.1 --draft --verify-tag --title "LID 1.1.1" --generate-notes
+```
+
 To build the packages without publishing anything, use "Run workflow" on the Actions tab, or
 `gh workflow run release.yml`.
 
