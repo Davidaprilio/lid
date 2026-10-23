@@ -52,10 +52,19 @@
     return svg;
   }
 
+  // Feedback colours for a button without a text label (YouTube's icon-only style).
+  const STATE_COLORS = { busy: "", ok: "#2ba640", error: "#e5484d" };
+
   function wire(root, button, label, idleText) {
     const show = (state, text) => {
       root.dataset.state = state;
-      label.textContent = text;
+      if (label) {
+        label.textContent = text;
+      } else {
+        button.title = state === "idle" ? TITLE : text;
+        button.style.color = STATE_COLORS[state] || "";
+        button.style.opacity = state === "busy" ? "0.6" : "";
+      }
     };
     show("idle", idleText);
     button.addEventListener("click", () => {
@@ -88,11 +97,13 @@
     return false;
   }
 
-  // A visible button with an icon and a text label (Share, Save…), not the like/dislike pair.
+  // A visible button from the bar's button rows (Share, Download, Save…), not the like/dislike pair
+  // nor the "More actions" menu. YouTube shows them with a text label or as round icon-only buttons;
+  // one with a label is preferred so the clone gets one too.
   function template(menu) {
-    return Array.from(menu.querySelectorAll("button")).find((b) =>
-      !b.closest("#" + ID) && b.getClientRects().length && iconPart(b) && textPart(b) &&
-      !insideLikeButtons(b, menu));
+    const buttons = Array.from(menu.querySelectorAll(":scope > div button")).filter((b) =>
+      !b.closest("#" + ID) && b.getClientRects().length && iconPart(b) && !insideLikeButtons(b, menu));
+    return buttons.find(textPart) || buttons[0];
   }
 
   // The template's ancestor that is a direct item of a button row, for its spacing.
