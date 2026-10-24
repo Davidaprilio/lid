@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Callable
 
 from PySide6.QtCore import QEvent, QPoint, QRect, QRectF, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QFontDatabase, QFontMetrics, QPainter, QPainterPath, QPen
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QFontMetrics, QPainter, QPainterPath, QPen, QPixmap
 from PySide6.QtWidgets import (
     QBoxLayout,
     QFrame,
@@ -391,6 +391,50 @@ def pill(p: QPainter, rect: QRect, text: str, fg: QColor, bg: QColor, font: QFon
     p.setPen(fg)
     p.drawText(r.adjusted(10, 0, -6, 0), Qt.AlignVCenter | Qt.AlignLeft, text)
     p.restore()
+
+
+# ---------------------------------------------------------------- toolbar chip
+def check_box_pixmap(state: Qt.CheckState, size: int, ratio: float = 1.0) -> QPixmap:
+    pm = QPixmap(round(size * ratio), round(size * ratio))
+    pm.fill(Qt.transparent)
+    pm.setDevicePixelRatio(ratio)
+    p = QPainter(pm)
+    _box(p, QRectF(0.5, 0.5, size - 1, size - 1), state)
+    p.end()
+    return pm
+
+
+class CheckChip(QFrame):
+    """'3 checked ✕' in the toolbar: how many rows the toolbar acts on; ✕ clears the checks."""
+
+    cleared = Signal()
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setObjectName("chip")
+        self.setFixedHeight(30)
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(9, 0, 5, 0)
+        lay.setSpacing(7)
+        self.box = QLabel()
+        self.label = QLabel()
+        self.close = QToolButton()
+        self.close.setObjectName("chipClose")
+        self.close.setFixedSize(20, 20)
+        self.close.setIconSize(QSize(10, 10))
+        self.close.setToolTip("Clear the checks")
+        self.close.setCursor(Qt.PointingHandCursor)
+        self.close.clicked.connect(self.cleared.emit)
+        lay.addWidget(self.box)
+        lay.addWidget(self.label)
+        lay.addWidget(self.close)
+
+    def setText(self, text: str) -> None:
+        self.label.setText(text)
+        self.box.setPixmap(check_box_pixmap(Qt.PartiallyChecked, 14, self.devicePixelRatioF()))
+
+    def text(self) -> str:
+        return self.label.text()
 
 
 # ---------------------------------------------------------------- download list

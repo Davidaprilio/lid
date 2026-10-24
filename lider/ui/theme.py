@@ -126,18 +126,22 @@ QToolBar#toolbar {{ background: {c['win']}; border: none; border-bottom: 1px sol
 QToolBar::separator {{ background: {c['line2']}; width: 1px; margin: 6px 6px; }}
 QToolButton {{ border-radius: 9px; padding: 6px 10px; background: transparent; }}
 QToolButton:hover {{ background: {c['acsel']}; }}
-QToolButton#pill {{ background: {c['pane']}; border: 1px solid {c['line2']}; border-radius: 17px; padding: 6px 13px; font-weight: 600; }}
-QToolButton#pill:hover {{ border-color: {c['ac']}; }}
-QToolButton#pill:disabled {{ background: {c['win']}; color: {c['fa']}; }}
-QToolButton#danger {{ background: {c['pane']}; border: 1px solid {c['line2']}; border-radius: 17px; padding: 6px 13px; font-weight: 600; color: {c['bad']}; }}
-QToolButton#danger:hover {{ border-color: {c['bad']}; }}
-QToolButton#danger:disabled {{ background: {c['win']}; color: {c['fa']}; }}
-QToolButton#danger::menu-button {{ border: none; width: 18px; }}
-QToolButton#danger::menu-arrow {{ image: url({a}/down.svg); width: 11px; height: 11px; }}
-QToolButton#primary {{ background: {c['ac']}; color: #FFFFFF; border-radius: 19px; padding: 8px 16px; font-weight: 700; }}
+QToolButton#pill, QToolButton#danger {{ background: {c['pane']}; border: 1px solid {c['line2']}; border-radius: 17px;
+    padding: 0 12px 0 10px; font-weight: 600; }}
+QToolButton#pill:hover {{ border-color: {c['ac']}; background: {c['pane']}; }}
+QToolButton#pill:disabled, QToolButton#danger:disabled {{ background: {c['win']}; color: {c['fa']}; border-color: {c['line']}; }}
+QToolButton#danger {{ color: {c['bad']}; padding-right: 26px; }}
+QToolButton#danger:hover {{ border-color: {c['bad']}; background: {c['pane']}; }}
+QToolButton#danger::menu-button {{ subcontrol-origin: padding; subcontrol-position: right center; border: none; width: 22px;
+    border-top-right-radius: 17px; border-bottom-right-radius: 17px; }}
+QToolButton#danger::menu-arrow {{ image: url({a}/down.svg); width: 10px; height: 10px; }}
+QToolButton#primary {{ background: {c['ac']}; color: #FFFFFF; border-radius: 19px; padding: 0 16px 0 14px; font-weight: 700; }}
 QToolButton#primary:hover {{ background: {c['actx']}; }}
-QToolButton#ghost {{ font-weight: 600; }}
-QToolButton#chip {{ background: {c['acsel']}; color: {c['actx']}; border-radius: 15px; padding: 4px 10px; font-weight: 700; }}
+QToolButton#ghost {{ font-weight: 600; padding: 0 10px; border-radius: 9px; }}
+QFrame#chip {{ background: {c['acsel']}; border-radius: 15px; }}
+QFrame#chip QLabel {{ color: {c['actx']}; font-weight: 700; background: transparent; }}
+QToolButton#chipClose {{ border-radius: 10px; padding: 0; background: transparent; }}
+QToolButton#chipClose:hover {{ background: {c['ac']}; }}
 QToolButton#close {{ padding: 3px; border-radius: 6px; }}
 QFrame#segmented {{ background: {c['track']}; border-radius: 15px; }}
 QToolButton#seg {{ border-radius: 12px; padding: 4px 13px; color: {c['mu']}; font-weight: 600; }}

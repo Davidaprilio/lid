@@ -61,7 +61,7 @@ from .download_model import CHECK, ID_ROLE, SORT_KEYS, DownloadModel
 from . import theme
 from .icons import bind, category_icon, icon
 from .util import open_folder, open_path, run_async
-from .widgets import COUNT_ROLE, CheckHeader, ListDelegate, TreeDelegate, mono_font
+from .widgets import COUNT_ROLE, CheckChip, CheckHeader, ListDelegate, TreeDelegate, mono_font
 
 ARRANGE = [
     ("By &Order Of Addition", "date_added"),
@@ -286,7 +286,8 @@ class MainWindow(QMainWindow):
         if icon_name:
             bind(b, icon_name)
         b.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-        b.setIconSize(QSize(18, 18))
+        b.setIconSize(QSize(17, 17) if name == "primary" else QSize(15, 15) if name != "ghost" else QSize(19, 19))
+        b.setFixedHeight({"primary": 38, "ghost": 36}.get(name, 34))
         b.setCursor(Qt.PointingHandCursor)
         return b
 
@@ -311,14 +312,9 @@ class MainWindow(QMainWindow):
         menu.addAction(icon("delete-completed"), "Delete all completed", self.delete_completed)
         delete.setMenu(menu)
         delete.setPopupMode(QToolButton.MenuButtonPopup)
-        self.check_chip = QToolButton()
-        self.check_chip.setObjectName("chip")
-        self.check_chip.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-        self.check_chip.setLayoutDirection(Qt.RightToLeft)
-        bind(self.check_chip, "close")
-        self.check_chip.setIconSize(QSize(11, 11))
-        self.check_chip.setToolTip("Clear the checks")
-        self.check_chip.clicked.connect(lambda: self.model.set_all_checked(False))
+        self.check_chip = CheckChip()
+        bind(self.check_chip.close, "close")
+        self.check_chip.cleared.connect(lambda: self.model.set_all_checked(False))
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         options = self._tool(self.a_options, "Options", "ghost")
