@@ -45,8 +45,10 @@ Package and command name: **`lider`**.
   unless you pick one in View → Theme or Options → Appearance.
 * **Download list:** check boxes with a check-all header. Start, Stop and Delete act on the checked
   downloads (or the selected ones), and the status column shows progress pills.
-* **Details pane** (F9) under the list: progress, the connections bar and a per-download speed limit.
-* **View:** tray icon, list density, toolbar labels, a font picker and column customisation.
+* **Details pane** (F9) under the list: progress, the connections bar and a per-download speed limit
+  of the highlighted download, with a button to open it in its own window.
+* **View:** tray icon, list density, toolbar labels, a font picker and column customisation;
+  View → Appearance... opens the Appearance options. The sidebar can be resized and keeps its width.
 
 ## Install
 

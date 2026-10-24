@@ -202,6 +202,18 @@ class MainWindowTests(unittest.TestCase):
         self.assertEqual([a.text() for a in self.w.inline_menubar.actions()],
                          [a.text() for a in self.w.menuBar().actions()])
 
+    def test_view_menu_ends_with_appearance(self):
+        from unittest import mock
+
+        view = next(a.menu() for a in self.w.menuBar().actions() if a.text() == "&View")
+        self.assertIs(view.actions()[-1], self.w.a_appearance)
+        seen = []
+        with mock.patch("lider.ui.main_window.OptionsDialog.exec",
+                        lambda dlg: seen.append(dlg.tabs.tabText(dlg.tabs.currentIndex())) or 0):
+            self.w.a_appearance.trigger()
+            self.w.a_options.trigger()
+        self.assertEqual(seen, ["Appearance", "General"])
+
     def test_details_pane_follows_the_highlighted_row(self):
         from PySide6.QtCore import QItemSelectionModel
 

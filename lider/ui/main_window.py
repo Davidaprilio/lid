@@ -205,6 +205,7 @@ class MainWindow(QMainWindow):
         self._sync_theme_actions()
         self.a_font = A("Choose Font...", self.choose_font)
         self.a_font_reset = A("Reset to default Font", self.reset_font)
+        self.a_appearance = A("A&ppearance...", self.open_appearance)
         self.a_about = A("&About LID", self.about)
 
         self.arrange_group = QActionGroup(self)
@@ -266,6 +267,8 @@ class MainWindow(QMainWindow):
         themes.addActions([self.theme_actions[k] for k in theme.THEMES])
         font = view.addMenu("Font")
         font.addActions([self.a_font, self.a_font_reset])
+        view.addSeparator()
+        view.addAction(self.a_appearance)
 
         help_menu = mb.addMenu("&Help")
         help_menu.addAction(self.a_about)
@@ -1128,12 +1131,19 @@ class MainWindow(QMainWindow):
         self.view.scrollTo(idx)
 
     # ------------------------------------------------------------------ settings & view
-    def open_options(self):
-        if OptionsDialog(self.settings, self).exec():
+    def open_options(self, tab: str = ""):
+        dlg = OptionsDialog(self.settings, self)
+        for i in range(dlg.tabs.count()):
+            if dlg.tabs.tabText(i) == tab:
+                dlg.tabs.setCurrentIndex(i)
+        if dlg.exec():
             self.apply_appearance()
             self.save_settings()
             self.rebuild_tree()
             self.refresh_rows()
+
+    def open_appearance(self):
+        self.open_options("Appearance")
 
     def apply_appearance(self):
         """Apply what Options → Appearance may have changed."""
