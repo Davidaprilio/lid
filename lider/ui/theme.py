@@ -78,6 +78,11 @@ def resolve(settings) -> str:
     return settings.theme if settings.theme in THEMES else "ember"
 
 
+def _rgba(hex_color: str, alpha: float) -> str:
+    r, g, b = (int(hex_color[i:i + 2], 16) for i in (1, 3, 5))
+    return f"rgba({r}, {g}, {b}, {alpha})"
+
+
 def _write_assets(c: dict[str, str]) -> Path:
     """Glyphs the style sheet points at (QSS cannot take inline SVG)."""
     global _assets
@@ -122,32 +127,35 @@ QMenu::icon {{ padding-left: 8px; }}
 QMenu::indicator {{ width: 14px; height: 14px; left: 6px; }}
 QMenu::indicator:checked {{ image: url({a}/check.svg); background: {c['ac']}; border-radius: 4px; }}
 
-QToolBar#toolbar {{ background: {c['win']}; border: none; border-bottom: 1px solid {c['line']}; padding: 8px 10px; spacing: 6px; }}
-QToolBar::separator {{ background: {c['line2']}; width: 1px; margin: 6px 6px; }}
+QToolBar#toolbar {{ background: {c['win']}; border: none; border-bottom: 1px solid {c['line']}; padding: 8px 12px; spacing: 8px; }}
+QToolBar::separator {{ background: {c['line2']}; width: 1px; margin: 6px 4px; }}
 QToolButton {{ border-radius: 9px; padding: 6px 10px; background: transparent; }}
 QToolButton:hover {{ background: {c['acsel']}; }}
 QToolButton#pill, QToolButton#danger {{ background: {c['pane']}; border: 1px solid {c['line2']}; border-radius: 17px;
-    padding: 0 12px 0 10px; font-weight: 600; }}
+    padding: 0; font-weight: 600; }}
 QToolButton#pill:hover {{ border-color: {c['ac']}; background: {c['pane']}; }}
 QToolButton#pill:disabled, QToolButton#danger:disabled {{ background: {c['win']}; color: {c['fa']}; border-color: {c['line']}; }}
-QToolButton#danger {{ color: {c['bad']}; padding-right: 26px; }}
+QToolButton#danger {{ color: {c['bad']}; }}
 QToolButton#danger:hover {{ border-color: {c['bad']}; background: {c['pane']}; }}
-QToolButton#danger::menu-button {{ subcontrol-origin: padding; subcontrol-position: right center; border: none; width: 22px;
+QToolButton#danger::menu-button {{ subcontrol-origin: padding; subcontrol-position: right center; border: none; width: 31px;
     border-top-right-radius: 17px; border-bottom-right-radius: 17px; }}
-QToolButton#danger::menu-arrow {{ image: url({a}/down.svg); width: 10px; height: 10px; }}
-QToolButton#primary {{ background: {c['ac']}; color: #FFFFFF; border-radius: 19px; padding: 0 16px 0 14px; font-weight: 700; }}
+QToolButton#danger::menu-arrow {{ image: none; }}
+QToolButton#primary {{ background: {c['ac']}; color: #FFFFFF; border-radius: 19px; padding: 0; font-weight: 700; }}
 QToolButton#primary:hover {{ background: {c['actx']}; }}
-QToolButton#ghost {{ font-weight: 600; padding: 0 10px; border-radius: 9px; }}
+QToolButton#ghost {{ font-weight: 600; padding: 0; border-radius: 9px; }}
 QFrame#chip {{ background: {c['acsel']}; border-radius: 15px; }}
 QFrame#chip QLabel {{ color: {c['actx']}; font-weight: 700; background: transparent; }}
 QToolButton#chipClose {{ border-radius: 10px; padding: 0; background: transparent; }}
 QToolButton#chipClose:hover {{ background: {c['ac']}; }}
 QToolButton#close {{ padding: 3px; border-radius: 6px; }}
+QToolButton#compact {{ background: {c['btn']}; border: 1px solid {c['line2']}; border-radius: 7px; padding: 0; font-weight: 600; }}
+QToolButton#compact:hover {{ border-color: {c['ac']}; background: {c['btn']}; }}
+QToolButton#compact:disabled {{ color: {c['fa']}; background: {c['win']}; border-color: {c['line']}; }}
 QFrame#segmented {{ background: {c['track']}; border-radius: 15px; }}
 QToolButton#seg {{ border-radius: 12px; padding: 4px 13px; color: {c['mu']}; font-weight: 600; }}
 QToolButton#seg:checked {{ background: {c['pane']}; color: {c['tx']}; }}
 
-QPushButton {{ background: {c['btn']}; border: 1px solid {c['line2']}; border-radius: 15px; padding: 6px 15px; min-height: 18px; font-weight: 600; }}
+QPushButton {{ background: {c['btn']}; border: 1px solid {c['line2']}; border-radius: 16px; padding: 6px 14px; min-height: 18px; font-weight: 600; }}
 QPushButton:hover {{ border-color: {c['ac']}; }}
 QPushButton[primary="true"] {{ background: {c['ac']}; border-color: {c['ac']}; color: #FFFFFF; }}
 QPushButton[primary="true"]:hover {{ background: {c['actx']}; }}
@@ -225,23 +233,37 @@ QProgressBar::chunk {{ background: {c['ac']}; border-radius: 6px; }}
 QSplitter::handle {{ background: {c['line']}; }}
 QSplitter::handle:horizontal {{ width: 1px; }}
 QSplitter::handle:vertical {{ height: 1px; }}
+QSplitter#sidebar::handle {{ width: 6px; background: {c['win']}; border-right: 1px solid {c['line']}; }}
+QSplitter#sidebar::handle:hover {{ border-right: 2px solid {c['ac']}; }}
+QSplitter#detailsSplit::handle {{ height: 6px; background: {c['pane']}; border-bottom: 1px solid {c['line2']}; }}
+QSplitter#detailsSplit::handle:hover {{ border-bottom: 2px solid {c['ac']}; }}
 QStatusBar {{ background: {c['win']}; border-top: 1px solid {c['line']}; color: {c['mu']}; }}
 QStatusBar::item {{ border: none; }}
 QStatusBar QLabel {{ color: {c['mu']}; padding: 0 8px; }}
 
+QFrame#footer {{ background: {c['win']}; border-top: 1px solid {c['line']}; }}
+QLabel#formLabel {{ color: {c['mu']}; }}
+QLabel#noteBox {{ background: {c['track']}; color: {c['mu']}; border-radius: 9px; padding: 9px 12px; }}
+QLabel#pillOk, QLabel#pillBad, QLabel#pillAccent, QLabel#pillMuted {{ border-radius: 10px; padding: 2px 10px; font-weight: 600; }}
+QLabel#pillOk {{ background: {_rgba(c['ok'], 0.14)}; color: {c['ok']}; }}
+QLabel#pillBad {{ background: {_rgba(c['bad'], 0.12)}; color: {c['bad']}; }}
+QLabel#pillAccent {{ background: {c['acsel']}; color: {c['actx']}; }}
+QLabel#pillMuted {{ background: {c['track']}; color: {c['mu']}; }}
+QPushButton#ghostBtn {{ background: transparent; border: none; color: {c['mu']}; }}
+QPushButton#ghostBtn:hover {{ color: {c['tx']}; }}
 QLabel#sectionTitle {{ color: {c['fa']}; font-weight: 700; letter-spacing: 1px; }}
-QSplitter#sidebar::handle {{ width: 6px; background: {c['win']}; border-right: 1px solid {c['line']}; }}
-QSplitter#sidebar::handle:hover {{ border-right: 2px solid {c['ac']}; }}
-QSplitter#detailsSplit::handle {{ height: 6px; background: {c['pane']}; border-top: 1px solid {c['line']}; }}
-QSplitter#detailsSplit::handle:hover {{ border-top: 2px solid {c['ac']}; }}
 QLabel#muted {{ color: {c['mu']}; }}
 QLabel#faint {{ color: {c['fa']}; }}
 QLabel#dialogTitle {{ font-weight: 700; }}
 QLabel#bigNumber {{ font-weight: 700; }}
 QLabel#link {{ color: {c['actx']}; }}
 QFrame#panel {{ background: {c['pane']}; border: 1px solid {c['line']}; border-radius: 10px; }}
-QFrame#tile {{ background: {c['pane']}; border: 1px solid {c['line']}; border-radius: 12px; }}
+QFrame#tile {{ background: {c['win']}; border: 1px solid {c['line']}; border-radius: 12px; }}
 QFrame#details {{ background: {c['pane']}; }}
+QFrame#detailsTabs {{ background: {c['hdr']}; border: none; border-bottom: 1px solid {c['line']}; }}
+QFrame#detailsTabs QTabBar::tab {{ padding: 6px 12px 5px 12px; margin: 0; border-bottom: 2px solid transparent; }}
+QFrame#detailsTabs QTabBar::tab:selected {{ border-bottom-color: {c['ac']}; }}
+QLabel#okText {{ color: {c['ok']}; }}
 QFrame#tagInput {{ background: {c['input']}; border: 1px solid {c['line2']}; border-radius: 9px; }}
 QFrame#tagInput[focused="true"] {{ border: 1px solid {c['ac']}; }}
 QFrame#tagInput QLineEdit {{ border: none; background: transparent; padding: 2px; }}

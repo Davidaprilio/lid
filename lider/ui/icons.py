@@ -52,6 +52,7 @@ def set_colors(ink: str, accent: str) -> None:
 def bind(obj, name: str):
     """Set ``obj``'s icon and keep it in sync with dark mode. Returns ``obj``."""
     obj.setIcon(icon(name))
+    _bound[:] = [(ref, n) for ref, n in _bound if ref() is not obj]  # re-binding replaces the name
     _bound.append((weakref.ref(obj), name))
     return obj
 

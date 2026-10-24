@@ -61,7 +61,7 @@ from .download_model import CHECK, ID_ROLE, SORT_KEYS, DownloadModel
 from . import theme
 from .icons import bind, category_icon, icon
 from .util import open_folder, open_path, run_async
-from .widgets import COUNT_ROLE, CheckChip, CheckHeader, ListDelegate, TreeDelegate, mono_font
+from .widgets import COUNT_ROLE, CheckChip, CheckHeader, ListDelegate, ToolButton, TreeDelegate, mono_font
 
 ARRANGE = [
     ("By &Order Of Addition", "date_added"),
@@ -280,7 +280,9 @@ class MainWindow(QMainWindow):
             self.inline_menubar.addMenu(menu)
 
     def _tool(self, action: QAction | None, text: str, name: str, icon_name: str | None = None) -> QToolButton:
-        b = QToolButton()
+        # padding, icon size and icon-to-text gap of each kind, as in the design
+        pad, size, gap = {"primary": (16, 17, 8), "ghost": (11, 20, 7)}.get(name, (13, 17, 7))
+        b = ToolButton(pad, gap)
         if action is not None:
             action.setIconText(text)  # toolbar caption; the menus keep the long text
             b.setDefaultAction(action)
@@ -289,7 +291,7 @@ class MainWindow(QMainWindow):
         if icon_name:
             bind(b, icon_name)
         b.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
-        b.setIconSize(QSize(17, 17) if name == "primary" else QSize(15, 15) if name != "ghost" else QSize(19, 19))
+        b.setIconSize(QSize(size, size))
         b.setFixedHeight({"primary": 38, "ghost": 36}.get(name, 34))
         b.setCursor(Qt.PointingHandCursor)
         return b
@@ -316,7 +318,6 @@ class MainWindow(QMainWindow):
         delete.setMenu(menu)
         delete.setPopupMode(QToolButton.MenuButtonPopup)
         self.check_chip = CheckChip()
-        bind(self.check_chip.close, "close")
         self.check_chip.cleared.connect(lambda: self.model.set_all_checked(False))
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)

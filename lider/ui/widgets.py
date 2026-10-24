@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from typing import Callable
 
-from PySide6.QtCore import QEvent, QPoint, QRect, QRectF, QSize, Qt, Signal
-from PySide6.QtGui import QColor, QFont, QFontDatabase, QFontMetrics, QPainter, QPainterPath, QPen, QPixmap
+from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, QRectF, QSize, Qt, Signal
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QFontMetrics, QIcon, QPainter, QPainterPath, QPalette, QPen, QPixmap
 from PySide6.QtWidgets import (
     QBoxLayout,
     QFrame,
@@ -18,7 +18,9 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QStyle,
     QStyledItemDelegate,
+    QStyleOptionToolButton,
     QStyleOptionViewItem,
+    QStylePainter,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -75,6 +77,81 @@ def dialog_header(icon_name: str, title: str, subtitle: str = "") -> QWidget:
         text.addWidget(s)
     lay.addLayout(text, 1)
     return w
+
+
+# ---------------------------------------------------------------- dialog building blocks
+def shell(dialog: QWidget, icon_name: str | None = None, title: str = "", subtitle: str = "",
+          spacing: int = 10) -> tuple[QVBoxLayout, QHBoxLayout]:
+    """The frame of every dialog: optional header, padded body and a footer bar. Returns (body, footer)."""
+    outer = QVBoxLayout(dialog)
+    outer.setContentsMargins(0, 0, 0, 0)
+    outer.setSpacing(0)
+    content = QWidget()
+    body = QVBoxLayout(content)
+    body.setContentsMargins(18, 16, 18, 14)
+    body.setSpacing(spacing)
+    if icon_name:
+        body.addWidget(dialog_header(icon_name, title, subtitle))
+    outer.addWidget(content, 1)
+    bar = QFrame()
+    bar.setObjectName("footer")
+    footer = QHBoxLayout(bar)
+    footer.setContentsMargins(16, 11, 16, 11)
+    footer.setSpacing(8)
+    outer.addWidget(bar)
+    return body, footer
+
+
+def panel(spacing: int = 10) -> tuple[QFrame, QVBoxLayout]:
+    """A rounded card that groups related controls."""
+    frame = QFrame()
+    frame.setObjectName("panel")
+    lay = QVBoxLayout(frame)
+    lay.setContentsMargins(14, 12, 14, 12)
+    lay.setSpacing(spacing)
+    return frame, lay
+
+
+def caption(text: str) -> QLabel:
+    lab = QLabel(text.upper())
+    lab.setObjectName("sectionTitle")
+    return lab
+
+
+def form_label(text: str, width: int = 0) -> QLabel:
+    lab = QLabel(text)
+    lab.setObjectName("formLabel")
+    if width:
+        lab.setFixedWidth(width)
+    return lab
+
+
+def form_row(label: str, *items, width: int = 96, stretch_last: bool = True) -> QHBoxLayout:
+    """Muted label in a fixed column, then the controls."""
+    row = QHBoxLayout()
+    row.setSpacing(8)
+    row.addWidget(form_label(label, width))
+    for i, item in enumerate(items):
+        grow = 1 if (stretch_last and i == len(items) - 1) or getattr(item, "_grow", False) else 0
+        if isinstance(item, QLayout):
+            row.addLayout(item, grow)
+        else:
+            row.addWidget(item, grow)
+    return row
+
+
+def note(text: str, boxed: bool = False) -> QLabel:
+    lab = QLabel(text)
+    lab.setWordWrap(True)
+    lab.setObjectName("noteBox" if boxed else "faint")
+    return lab
+
+
+def pill_label(text: str, kind: str = "muted") -> QLabel:
+    """A small rounded status label; kind is ok, bad, accent or muted."""
+    lab = QLabel(text)
+    lab.setObjectName({"ok": "pillOk", "bad": "pillBad", "accent": "pillAccent"}.get(kind, "pillMuted"))
+    return lab
 
 
 def primary(button):
@@ -404,6 +481,81 @@ def check_box_pixmap(state: Qt.CheckState, size: int, ratio: float = 1.0) -> QPi
     return pm
 
 
+class ToolButton(QToolButton):
+    """A toolbar button measured like the design: padding, icon, gap, text, then a chevron when
+    it has a menu. The style sheet still paints the panel; the label is painted here because
+    QToolButton keeps a fixed 2 px between icon and text and, inside a QToolBar, draws the
+    toolbar's icon size instead of its own."""
+
+    CHEVRON = 11
+
+    def __init__(self, pad: int = 13, gap: int = 7, parent=None):
+        super().__init__(parent)
+        self._pad, self._gap = pad, gap
+
+    def _parts(self) -> tuple[int, str, bool]:
+        icon_w = 0 if self.icon().isNull() else self.iconSize().width()
+        text = "" if self.toolButtonStyle() == Qt.ToolButtonIconOnly else self.text()
+        return icon_w, text, self.popupMode() == QToolButton.MenuButtonPopup and self.menu() is not None
+
+    def sizeHint(self) -> QSize:
+        icon_w, text, menu = self._parts()
+        w = 2 * (self._pad + 1) + icon_w
+        if text:
+            w += (self._gap if icon_w else 0) + self.fontMetrics().horizontalAdvance(text)
+        if menu:
+            w += self._gap + self.CHEVRON
+        return QSize(w, super().sizeHint().height())
+
+    def minimumSizeHint(self) -> QSize:
+        return self.sizeHint()
+
+    def paintEvent(self, e) -> None:
+        p = QStylePainter(self)
+        opt = QStyleOptionToolButton()
+        self.initStyleOption(opt)
+        opt.text, opt.icon = "", QIcon()
+        p.drawComplexControl(QStyle.CC_ToolButton, opt)
+        icon_w, text, menu = self._parts()
+        x, h = 1 + self._pad, self.height()
+        if icon_w:
+            size = self.iconSize()
+            mode = QIcon.Normal if self.isEnabled() else QIcon.Disabled
+            pm = self.icon().pixmap(size, self.devicePixelRatioF(), mode)
+            p.drawPixmap(x, (h - size.height()) // 2, pm)
+            x += icon_w + (self._gap if text else 0)
+        if text:
+            group = QPalette.Active if self.isEnabled() else QPalette.Disabled
+            p.setPen(self.palette().color(group, self.foregroundRole()))
+            tw = self.fontMetrics().horizontalAdvance(text)
+            p.drawText(QRect(x, 0, tw + 1, h), Qt.AlignLeft | Qt.AlignVCenter, text)
+            x += tw
+        if menu:
+            p.setRenderHint(QPainter.Antialiasing)
+            p.setPen(QPen(_c("fa"), 1.2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+            k, top = self.CHEVRON / 24, (h - self.CHEVRON) / 2
+            left = x + self._gap
+            path = QPainterPath()
+            path.moveTo(left + 6 * k, top + 9 * k)
+            path.lineTo(left + 12 * k, top + 15 * k)
+            path.lineTo(left + 18 * k, top + 9 * k)
+            p.drawPath(path)
+
+
+def cross_pixmap(size: int, color: QColor, ratio: float = 1.0) -> QPixmap:
+    pm = QPixmap(round(size * ratio), round(size * ratio))
+    pm.setDevicePixelRatio(ratio)
+    pm.fill(Qt.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.Antialiasing)
+    k = size / 24
+    p.setPen(QPen(color, 2.4 * k, Qt.SolidLine, Qt.RoundCap))
+    p.drawLine(QPointF(6.5 * k, 6.5 * k), QPointF(17.5 * k, 17.5 * k))
+    p.drawLine(QPointF(17.5 * k, 6.5 * k), QPointF(6.5 * k, 17.5 * k))
+    p.end()
+    return pm
+
+
 class CheckChip(QFrame):
     """'3 checked ✕' in the toolbar: how many rows the toolbar acts on; ✕ clears the checks."""
 
@@ -414,14 +566,15 @@ class CheckChip(QFrame):
         self.setObjectName("chip")
         self.setFixedHeight(30)
         lay = QHBoxLayout(self)
-        lay.setContentsMargins(9, 0, 5, 0)
-        lay.setSpacing(7)
+        lay.setContentsMargins(10, 0, 6, 0)
+        lay.setSpacing(8)
         self.box = QLabel()
         self.label = QLabel()
         self.close = QToolButton()
         self.close.setObjectName("chipClose")
         self.close.setFixedSize(20, 20)
-        self.close.setIconSize(QSize(10, 10))
+        self.close.setIconSize(QSize(12, 12))
+        self.close.setAutoRaise(True)  # so the white "active" cross shows on hover
         self.close.setToolTip("Clear the checks")
         self.close.setCursor(Qt.PointingHandCursor)
         self.close.clicked.connect(self.cleared.emit)
@@ -431,7 +584,19 @@ class CheckChip(QFrame):
 
     def setText(self, text: str) -> None:
         self.label.setText(text)
-        self.box.setPixmap(check_box_pixmap(Qt.PartiallyChecked, 14, self.devicePixelRatioF()))
+        self._paint()
+
+    def _paint(self) -> None:
+        ratio = self.devicePixelRatioF()
+        self.box.setPixmap(check_box_pixmap(Qt.PartiallyChecked, 14, ratio))
+        cross = QIcon(cross_pixmap(12, _c("actx"), ratio))
+        cross.addPixmap(cross_pixmap(12, QColor("#FFFFFF"), ratio), QIcon.Active)
+        self.close.setIcon(cross)
+
+    def changeEvent(self, e) -> None:
+        super().changeEvent(e)
+        if e.type() == QEvent.StyleChange:  # theme switch
+            self._paint()
 
     def text(self) -> str:
         return self.label.text()

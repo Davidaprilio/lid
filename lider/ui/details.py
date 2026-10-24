@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QSize, Qt, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QCheckBox,
@@ -11,7 +11,6 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QProgressBar,
-    QPushButton,
     QSizePolicy,
     QSpinBox,
     QStackedWidget,
@@ -29,17 +28,18 @@ from ..core.models import Status
 from .dialogs.progress import SegmentBar
 from .icons import bind, category_icon, icon
 from .util import open_folder, open_path
-from .widgets import mono_font
+from .widgets import ToolButton, mono_font
 
 
-def _label(text: str = "", name: str = "", mono: bool = False, scale: float = 1.0, bold: bool = False) -> QLabel:
+def _label(text: str = "", name: str = "", mono: bool = False, scale: float = 1.0, bold: bool = False,
+           semibold: bool = False) -> QLabel:
     lab = QLabel(text)
     if name:
         lab.setObjectName(name)
     f = mono_font(lab.font()) if mono else QFont(lab.font())
     if scale != 1.0:
         f.setPointSizeF(lab.font().pointSizeF() * scale)
-    f.setBold(bold)
+    f.setWeight(QFont.Bold if bold else QFont.DemiBold if semibold else QFont.Normal)
     lab.setFont(f)
     return lab
 
@@ -58,32 +58,37 @@ class DetailsPane(QFrame):
         self.manager = manager
         self.download_id: int | None = None
 
-        top = QHBoxLayout()
+        head = QFrame()
+        head.setObjectName("detailsTabs")
+        head.setFixedHeight(30)
+        top = QHBoxLayout(head)
         top.setContentsMargins(8, 0, 8, 0)
+        top.setSpacing(2)
         self.tabs = QTabBar()
         for t in ("Download status", "Connections", "Speed Limiter"):
             self.tabs.addTab(t)
         self.tabs.setDrawBase(False)
         top.addWidget(self.tabs)
-        hint = _label("View → Details pane (F9)", "faint", scale=0.9)
+        hint = _label("View → Details pane (F9)", "faint", scale=0.96)
         hint.setMinimumWidth(1)
         hint.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         hint.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
         top.addWidget(hint, 1)
+        top.addSpacing(6)
         pop = QToolButton()
         pop.setObjectName("close")
         bind(pop, "open-window")
+        pop.setIconSize(QSize(13, 13))
         pop.setToolTip("Open in a window")
         pop.clicked.connect(lambda: self.download_id is not None and self.open_window.emit(self.download_id))
         top.addWidget(pop)
         close = QToolButton()
         close.setObjectName("close")
         bind(close, "close")
+        close.setIconSize(QSize(13, 13))
         close.setToolTip("Hide the details pane")
         close.clicked.connect(self.closed.emit)
         top.addWidget(close)
-        head = QWidget()
-        head.setLayout(top)
 
         self.pages = QStackedWidget()
         self.pages.addWidget(self._status_page())
@@ -110,11 +115,24 @@ class DetailsPane(QFrame):
         super().resizeEvent(e)
         self.stats_column.setVisible(e.size().width() >= WIDE)
 
+    @staticmethod
+    def _button(text: str, icon_name: str = "") -> ToolButton:
+        b = ToolButton(pad=14, gap=6)
+        b.setObjectName("compact")
+        b.setText(text)
+        if icon_name:
+            bind(b, icon_name)
+        b.setIconSize(QSize(13, 13))
+        b.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        b.setFixedHeight(30)
+        b.setCursor(Qt.PointingHandCursor)
+        return b
+
     # -- pages
     def _status_page(self) -> QWidget:
         w = QWidget()
         lay = QHBoxLayout(w)
-        lay.setContentsMargins(18, 12, 18, 12)
+        lay.setContentsMargins(18, 14, 18, 14)
         lay.setSpacing(22)
 
         left = QHBoxLayout()
@@ -129,36 +147,37 @@ class DetailsPane(QFrame):
         tl.addWidget(self.pic)
         left.addWidget(tile, 0, Qt.AlignTop)
         info = QVBoxLayout()
-        info.setSpacing(3)
-        self.name = _label(bold=True)
-        self.url = _label(name="link", mono=True, scale=0.9)
-        self.state = _label(name="muted", scale=0.92)
+        info.setSpacing(4)
+        self.name = _label(bold=True, scale=1.125)
+        self.url = _label(name="link", mono=True, scale=0.92)
+        self.state = _label(name="muted", scale=0.96)
         for lab in (self.name, self.url, self.state):
             lab.setMinimumWidth(1)
             info.addWidget(lab)
         buttons = QHBoxLayout()
         buttons.setSpacing(6)
-        self.pause = QPushButton("Pause")
+        self.pause = self._button("Pause", "stop")
         self.pause.clicked.connect(self._pause_resume)
-        self.open_folder = QPushButton("Open folder")
+        self.open_folder = self._button("Open folder")
         self.open_folder.clicked.connect(self._open_folder)
         buttons.addWidget(self.pause)
         buttons.addWidget(self.open_folder)
         buttons.addStretch(1)
-        info.addSpacing(6)
+        info.addSpacing(8)
         info.addLayout(buttons)
         info.addStretch(1)
         left.addLayout(info, 1)
         lw = QWidget()
         lw.setLayout(left)
-        lw.setFixedWidth(300)
+        lw.setFixedWidth(290)
         lay.addWidget(lw)
 
         mid = QVBoxLayout()
-        mid.setSpacing(8)
+        mid.setSpacing(12)
         row = QHBoxLayout()
-        self.pct = _label(mono=True, scale=1.8, bold=True, name="bigNumber")
-        self.of = _label(name="muted", scale=0.95)
+        row.setSpacing(8)
+        self.pct = _label(mono=True, scale=2.0, bold=True, name="bigNumber")
+        self.of = _label(name="muted")
         row.addWidget(self.pct)
         row.addWidget(self.of, 0, Qt.AlignBottom)
         row.addStretch(1)
@@ -169,7 +188,7 @@ class DetailsPane(QFrame):
         self.bar.setFixedHeight(10)
         mid.addWidget(self.bar)
         self.of.setMinimumWidth(1)
-        caption = _label("Start positions and download progress by connections", "muted", scale=0.92, bold=True)
+        caption = _label("Start positions and download progress by connections", "muted", scale=0.96, semibold=True)
         caption.setWordWrap(True)
         mid.addWidget(caption)
         self.segments = SegmentBar()
@@ -178,16 +197,19 @@ class DetailsPane(QFrame):
         lay.addLayout(mid, 1)
 
         grid = QGridLayout()
-        grid.setHorizontalSpacing(22)
-        grid.setVerticalSpacing(4)
+        grid.setHorizontalSpacing(18)
+        grid.setVerticalSpacing(12)
         self.stats = {}
-        for i, (key, title) in enumerate((("rate", "TRANSFER RATE"), ("left", "TIME LEFT"), ("done", "DOWNLOADED"),
-                                          ("conns", "CONNECTIONS"), ("resume", "RESUME"))):
-            r, c = divmod(i, 2)
-            grid.addWidget(_label(title, "faint", scale=0.82, bold=True), r * 2, c)
-            v = _label(mono=True, bold=True)
-            grid.addWidget(v, r * 2 + 1, c)
+        for i, (key, title) in enumerate((("rate", "Transfer rate"), ("left", "Time left"), ("done", "Downloaded"),
+                                          ("conns", "Connections"), ("resume", "Resume"))):
+            cell = QVBoxLayout()
+            cell.setSpacing(3)
+            cell.addWidget(_label(title.upper(), "faint", scale=0.92, semibold=True))
+            v = _label(mono=True, bold=True, scale=1.08)
+            cell.addWidget(v)
+            grid.addLayout(cell, *divmod(i, 2))
             self.stats[key] = v
+        self.stats["resume"].setObjectName("okText")
         self.stats_column = gw = QWidget()
         gw.setLayout(grid)
         gw.setFixedWidth(330)
@@ -258,15 +280,18 @@ class DetailsPane(QFrame):
         task = self.manager.task(d.id)
         running = self.manager.is_running(d.id)
         snap = task.snapshot() if task else {"segments": d.segments, "connections": [], "rate": 0.0, "time_left": -1}
-        self.name.setText(self._elide(self.name, d.filename))
-        self.url.setText(self._elide(self.url, d.url))
+        self.name.setText(self._elide(self.name, d.filename, Qt.ElideRight))
+        self.url.setText(self._elide(self.url, d.url.split("://", 1)[-1], Qt.ElideRight))
         self.url.setToolTip(d.url)
         state = {Status.COMPLETE: "Complete", Status.ERROR: f"Error: {d.error}", Status.PAUSED: "Paused",
                  Status.ASSEMBLING: "Assembling…", Status.CONNECTING: "Connecting…"}.get(d.status)
         if state is None:
             state = "Receiving data…" if running else ("Queued" if not d.downloaded else "Paused")
         self.state.setText(self._elide(self.state, f"{state} · {d.category}"))
-        self.pause.setText("Pause" if running else "Resume")
+        if self.pause.text() != ("Pause" if running else "Resume"):
+            self.pause.setText("Pause" if running else "Resume")
+            bind(self.pause, "stop" if running else "resume")
+            self.pause.updateGeometry()
         self.pause.setEnabled(d.status != Status.COMPLETE)
         self.pct.setText(f"{d.progress * 100:.1f}%" if d.size > 0 else fmt.size(d.downloaded))
         self.of.setText(f"{fmt.size(d.downloaded)} of {fmt.size(d.size)}" if d.size > 0 else "")
@@ -290,9 +315,9 @@ class DetailsPane(QFrame):
             item.setText(3, info if is_alive or running else "")
 
     @staticmethod
-    def _elide(label: QLabel, text: str) -> str:
+    def _elide(label: QLabel, text: str, mode=Qt.ElideMiddle) -> str:
         width = max(80, label.width())
-        return label.fontMetrics().elidedText(text, Qt.ElideMiddle, width)
+        return label.fontMetrics().elidedText(text, mode, width)
 
     def _pause_resume(self) -> None:
         if self.download_id is None:
