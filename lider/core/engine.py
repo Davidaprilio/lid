@@ -27,7 +27,8 @@ from urllib.parse import unquote, urlsplit
 
 from .models import Download, Segment, Status
 
-CHUNK = 64 * 1024
+CHUNK = 1024 * 1024  # largest read when no speed limit applies; big reads keep the GIL out of the way
+LIMITED_CHUNK = 64 * 1024  # smaller reads keep a speed limit smooth
 MIN_SPLIT = 256 * 1024  # never create a segment smaller than this
 FATAL_HTTP = {400, 401, 403, 404, 405, 410, 451}
 
@@ -402,12 +403,16 @@ class DownloadTask:
                     if ranged and getattr(response, "status", 200) != 206:
                         raise ResumeNotSupported("server ignored the Range header")
                 conn.status = "Receiving data..."
+                # read1 returns what has arrived (up to the chunk size), so slow links still report progress often
+                read = getattr(response, "read1", response.read)
                 while not self._stop.is_set():
+                    limited = self.file_limiter.rate > 0 or (self.global_limiter is not None and self.global_limiter.rate > 0)
+                    step = LIMITED_CHUNK if limited else CHUNK
                     with self._lock:
-                        want = seg.end - seg.pos if seg.end >= 0 else CHUNK
+                        want = seg.end - seg.pos if seg.end >= 0 else step
                     if want <= 0:
                         return "done"
-                    data = response.read(min(CHUNK, want))
+                    data = read(min(step, want))
                     if not data:
                         if seg.end < 0:
                             with self._lock:
