@@ -12,8 +12,8 @@ import tempfile
 from pathlib import Path
 
 from PySide6.QtCore import Qt
-from PySide6.QtGui import QColor, QGuiApplication, QPalette
-from PySide6.QtWidgets import QApplication, QStyleFactory
+from PySide6.QtGui import QColor, QFontDatabase, QGuiApplication, QPalette
+from PySide6.QtWidgets import QApplication, QProxyStyle, QStyle, QStyleFactory
 
 from . import icons
 
@@ -104,6 +104,10 @@ def _write_assets(c: dict[str, str]) -> Path:
     return _assets
 
 
+def _fixed_family() -> str:
+    return QFontDatabase.systemFont(QFontDatabase.FixedFont).family()
+
+
 def stylesheet(name: str) -> str:
     c = THEMES[name]
     a = _write_assets(c).as_posix()
@@ -164,10 +168,11 @@ QPushButton#small {{ padding: 5px 0; border-radius: 10px; }}
 QPushButton::menu-indicator {{ image: url({a}/down.svg); width: 11px; subcontrol-position: right center; right: 8px; }}
 
 QLineEdit, QPlainTextEdit, QTextEdit, QSpinBox, QDoubleSpinBox, QComboBox, QDateEdit, QTimeEdit, QDateTimeEdit {{
-    background: {c['input']}; border: 1px solid {c['line2']}; border-radius: 8px; padding: 5px 8px;
+    background: {c['input']}; border: 1px solid {c['line2']}; border-radius: 8px; padding: 4px 9px; min-height: 20px;
     selection-background-color: {c['ac']}; selection-color: #FFFFFF; }}
 QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus, QSpinBox:focus, QComboBox:focus, QDateEdit:focus, QTimeEdit:focus, QDateTimeEdit:focus {{
     border: 1px solid {c['ac']}; }}
+QComboBox[mono="true"] {{ font-family: "{_fixed_family()}"; }}
 QLineEdit:disabled, QSpinBox:disabled, QComboBox:disabled, QTimeEdit:disabled, QDateEdit:disabled {{ color: {c['fa']}; background: {c['win']}; }}
 QComboBox::drop-down, QDateEdit::drop-down, QDateTimeEdit::drop-down {{ border: none; width: 22px; }}
 QComboBox::down-arrow, QDateEdit::down-arrow, QDateTimeEdit::down-arrow {{ image: url({a}/down.svg); width: 12px; height: 12px; }}
@@ -180,7 +185,7 @@ QSpinBox::down-arrow, QTimeEdit::down-arrow, QDateEdit::down-arrow {{ image: url
 
 QCheckBox, QRadioButton {{ spacing: 8px; }}
 QCheckBox::indicator, QTreeView::indicator, QTreeWidget::indicator, QListWidget::indicator, QGroupBox::indicator {{
-    width: 16px; height: 16px; border-radius: 4px; border: 1.5px solid {c['line2']}; background: {c['input']}; }}
+    width: 14px; height: 14px; border-radius: 4px; border: 1px solid {c['line2']}; background: {c['input']}; }}
 QCheckBox::indicator:hover, QTreeView::indicator:hover {{ border-color: {c['ac']}; }}
 QCheckBox::indicator:checked, QTreeView::indicator:checked, QTreeWidget::indicator:checked, QListWidget::indicator:checked, QGroupBox::indicator:checked {{
     background: {c['ac']}; border-color: {c['ac']}; image: url({a}/check.svg); }}
@@ -189,7 +194,7 @@ QCheckBox::indicator:indeterminate, QTreeView::indicator:indeterminate, QTreeWid
 QCheckBox::indicator:disabled {{ background: {c['win']}; border-color: {c['line']}; }}
 QCheckBox::indicator:checked:disabled {{ background: {c['acsel']}; border-color: {c['acsel']}; }}
 QCheckBox:disabled, QRadioButton:disabled {{ color: {c['fa']}; }}
-QRadioButton::indicator {{ width: 16px; height: 16px; border-radius: 8px; border: 1.5px solid {c['line2']}; background: {c['input']}; }}
+QRadioButton::indicator {{ width: 14px; height: 14px; border-radius: 8px; border: 1px solid {c['line2']}; background: {c['input']}; }}
 QRadioButton::indicator:checked {{ border-color: {c['ac']};
     background: qradialgradient(cx:0.5, cy:0.5, radius:0.5, fx:0.5, fy:0.5, stop:0 #FFFFFF, stop:0.36 #FFFFFF, stop:0.42 {c['ac']}, stop:1 {c['ac']}); }}
 
@@ -242,9 +247,10 @@ QStatusBar::item {{ border: none; }}
 QStatusBar QLabel {{ color: {c['mu']}; padding: 0 8px; }}
 
 QFrame#footer {{ background: {c['win']}; border-top: 1px solid {c['line']}; }}
+QFrame#footer QPushButton {{ min-width: 62px; }}
 QLabel#formLabel {{ color: {c['mu']}; }}
 QLabel#noteBox {{ background: {c['track']}; color: {c['mu']}; border-radius: 9px; padding: 9px 12px; }}
-QLabel#pillOk, QLabel#pillBad, QLabel#pillAccent, QLabel#pillMuted {{ border-radius: 10px; padding: 2px 10px; font-weight: 600; }}
+QLabel#pillOk, QLabel#pillBad, QLabel#pillAccent, QLabel#pillMuted {{ border-radius: 11px; padding: 3px 10px; }}
 QLabel#pillOk {{ background: {_rgba(c['ok'], 0.14)}; color: {c['ok']}; }}
 QLabel#pillBad {{ background: {_rgba(c['bad'], 0.12)}; color: {c['bad']}; }}
 QLabel#pillAccent {{ background: {c['acsel']}; color: {c['actx']}; }}
@@ -258,7 +264,10 @@ QLabel#dialogTitle {{ font-weight: 700; }}
 QLabel#bigNumber {{ font-weight: 700; }}
 QLabel#link {{ color: {c['actx']}; }}
 QFrame#panel {{ background: {c['pane']}; border: 1px solid {c['line']}; border-radius: 10px; }}
-QFrame#tile {{ background: {c['win']}; border: 1px solid {c['line']}; border-radius: 12px; }}
+QFrame#tile, QFrame#tileSmall, QFrame#tileLarge {{ background: {c['pane']}; border: 1px solid {c['line']}; border-radius: 12px; }}
+QFrame#tileSmall {{ border-radius: 10px; }}
+QFrame#tileLarge {{ border-radius: 18px; }}
+QFrame#details QFrame#tile {{ background: {c['win']}; }}
 QFrame#details {{ background: {c['pane']}; }}
 QFrame#detailsTabs {{ background: {c['hdr']}; border: none; border-bottom: 1px solid {c['line']}; }}
 QFrame#detailsTabs QTabBar::tab {{ padding: 6px 12px 5px 12px; margin: 0; border-bottom: 2px solid transparent; }}
@@ -288,13 +297,22 @@ def palette(name: str) -> QPalette:
     return p
 
 
+class _Style(QProxyStyle):
+    """Fusion without underlined shortcut letters; Alt+letter still works, as on KDE and GNOME."""
+
+    def styleHint(self, hint, option=None, widget=None, data=None):
+        if hint == QStyle.SH_UnderlineShortcut:
+            return 0
+        return super().styleHint(hint, option, widget, data)
+
+
 def apply(name: str) -> None:
     """Switch the whole application to theme ``name``."""
     global _current
     _current = name if name in THEMES else "ember"
     app = QApplication.instance()
     if not app.property("lider_fusion"):  # once: with a style sheet app.style() is a wrapper, not Fusion itself
-        app.setStyle(QStyleFactory.create("Fusion"))
+        app.setStyle(_Style(QStyleFactory.create("Fusion")))
         app.setProperty("lider_fusion", True)
     sheet = stylesheet(_current)
     if app.styleSheet() != sheet:  # re-applying the same sheet would re-polish every widget for nothing

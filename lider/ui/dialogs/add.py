@@ -10,8 +10,8 @@ from dataclasses import dataclass
 from html.parser import HTMLParser
 from urllib.parse import urljoin, urlsplit
 
-from PySide6.QtCore import Qt
-from PySide6.QtGui import QGuiApplication
+from PySide6.QtCore import QSize, Qt
+from PySide6.QtGui import QColor, QGuiApplication
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QButtonGroup,
@@ -19,12 +19,11 @@ from PySide6.QtWidgets import (
     QComboBox,
     QDialog,
     QFileDialog,
+    QFrame,
     QGridLayout,
-    QGroupBox,
     QHBoxLayout,
     QHeaderView,
     QLabel,
-    QLayout,
     QLineEdit,
     QMenu,
     QPushButton,
@@ -39,11 +38,20 @@ from PySide6.QtWidgets import (
 from ...core import categories, fmt, media
 from ...core.engine import filename_from_url, safe_filename
 from ...core.settings import Settings
-from ..icons import file_icon, icon
-from ..util import dlu
-from ..widgets import add_header, primary
+from .. import theme
+from ..icons import bind, category_icon, icon
+from ..widgets import (CheckHeader, TypePillDelegate, caption, form_label, form_row, link_field, mono_font, panel,
+                       pill_label, primary, shell)
 
 URL_RE = re.compile(r"^(https?|ftp)://\S+$", re.I)
+
+
+def link_combo(combo: QComboBox) -> QComboBox:
+    """An editable address combo: monospaced, with a link icon in front. The font comes from the
+    style sheet: a font set on a QComboBox is dropped when the combo is put into a layout."""
+    bind(combo.lineEdit().addAction(icon("link"), QLineEdit.LeadingPosition), "link")
+    combo.setProperty("mono", True)
+    return combo
 
 
 def clipboard_url() -> str:
@@ -59,21 +67,49 @@ def queue_menu(parent: QWidget, queues: list[str], at) -> str | None:
     return act.data() if act else None
 
 
-class AuthBox(QGroupBox):
-    """"Use authorization" checkbox-group with Login / Password (dialogs 148 and 280)."""
+class AuthBox(QFrame):
+    """"Use authorization" check box with Login / Password. As a panel the fields are always there
+    (Add URL); ``compact`` is a bare check box whose fields show once it is checked (Batch)."""
 
-    def __init__(self, parent=None):
-        super().__init__("Use &authorization", parent)
-        self.setCheckable(True)
-        self.setChecked(False)
-        lay = QHBoxLayout(self)
+    def __init__(self, parent=None, compact: bool = False):
+        super().__init__(parent)
+        self.compact = compact
+        lay = QVBoxLayout(self)
+        if compact:
+            lay.setContentsMargins(0, 0, 0, 0)
+        else:
+            self.setObjectName("panel")
+            lay.setContentsMargins(14, 14, 14, 14)
+            lay.setSpacing(12)
+        self.use = QCheckBox("Use &authorization")
+        lay.addWidget(self.use)
+        self.fields = QWidget()
+        row = QHBoxLayout(self.fields)
+        row.setContentsMargins(0, 0, 0, 0)
+        row.setSpacing(10)
         self.login = QLineEdit()
         self.password = QLineEdit()
         self.password.setEchoMode(QLineEdit.Password)
-        lay.addWidget(QLabel("Login"))
-        lay.addWidget(self.login)
-        lay.addWidget(QLabel("Password"))
-        lay.addWidget(self.password)
+        self.labels = (form_label("Login"), form_label("Password"))
+        row.addWidget(self.labels[0])
+        row.addWidget(self.login, 1)
+        row.addWidget(self.labels[1])
+        row.addWidget(self.password, 1)
+        lay.addWidget(self.fields)
+        self.use.toggled.connect(self._toggled)
+        self._toggled(False)
+
+    def _toggled(self, on: bool) -> None:
+        for w in (self.login, self.password, *self.labels):
+            w.setEnabled(on)
+        if self.compact:
+            self.fields.setVisible(on)
+
+    def isChecked(self) -> bool:
+        return self.use.isChecked()
+
+    def setChecked(self, on: bool) -> None:
+        self.use.setChecked(on)
 
     def credentials(self) -> tuple[str, str]:
         return (self.login.text(), self.password.text()) if self.isChecked() else ("", "")
@@ -87,37 +123,37 @@ class AddUrlDialog(QDialog):
     def __init__(self, parent=None, url: str = ""):
         super().__init__(parent)
         self.setWindowTitle("Enter new address to download")
-        self.resize(dlu(373, 57).width(), 0)
-        grid = QGridLayout(self)
+        self.setMinimumWidth(560)  # height follows from the layout at this width
+        body, footer = shell(self, "add-url", "Enter new address to download",
+                             "Paste a link. LID reads the file name and size next.")
         self.address = QComboBox()
         self.address.setEditable(True)
         self.address.addItems(self.history)
         self.address.setCurrentText(url or clipboard_url())
         self.address.lineEdit().selectAll()
-        self.auth = AuthBox()
-        ok = primary(QPushButton("O&K"))
-        ok.setDefault(True)
-        cancel = QPushButton("&Cancel")
-        ok.clicked.connect(self.accept)
-        cancel.clicked.connect(self.reject)
+        link_combo(self.address)
+        body.addLayout(form_row("Address", self.address, width=64))
         self.youtube_hint = QWidget()
         hint = QHBoxLayout(self.youtube_hint)
-        hint.setContentsMargins(0, 0, 0, 0)
+        hint.setContentsMargins(72, 0, 0, 0)
         pic = QLabel()
         pic.setPixmap(icon("category-video").pixmap(16, 16))
         hint.addWidget(pic)
         hint.addWidget(QLabel("<b>YouTube video detected</b> — choose the resolution or audio only "
                               "in the next window."), 1)
-        grid.addWidget(QLabel("Address"), 0, 0)
-        grid.addWidget(self.address, 0, 1)
-        grid.addWidget(ok, 0, 2)
-        grid.addWidget(self.youtube_hint, 1, 1)
-        grid.addWidget(self.auth, 2, 0, 1, 2)
-        grid.addWidget(cancel, 1, 2, Qt.AlignTop)
-        grid.setColumnStretch(1, 1)
+        body.addWidget(self.youtube_hint)
+        self.auth = AuthBox()
+        body.addWidget(self.auth)
+        ok = primary(QPushButton("O&K"))
+        ok.setDefault(True)
+        cancel = QPushButton("&Cancel")
+        ok.clicked.connect(self.accept)
+        cancel.clicked.connect(self.reject)
+        footer.addStretch(1)
+        footer.addWidget(cancel)
+        footer.addWidget(ok)
         self.address.currentTextChanged.connect(self._detect)
         self._detect(self.address.currentText())
-        add_header(self, "add-url", "Enter new address to download", "Paste a link. LID reads the file name and size next.")
 
     def _detect(self, text: str) -> None:
         youtube = media.is_youtube(text)
@@ -155,7 +191,8 @@ class FileInfoDialog(QDialog):
 
     def __init__(self, settings: Settings, url: str, filename: str, size: int, queues: list[str],
                  description: str = "", parent=None, new_category=None,
-                 media_info: media.MediaInfo | None = None, media_kind: str = "video", media_quality: str = ""):
+                 media_info: media.MediaInfo | None = None, media_kind: str = "video", media_quality: str = "",
+                 resumable: bool | None = None):
         super().__init__(parent)
         self.media_info = media_info
         self.variant: media.Variant | None = None
@@ -165,13 +202,16 @@ class FileInfoDialog(QDialog):
         self.new_category = new_category
         self.result_value: FileInfoResult | None = None
         self.setWindowTitle("Download File Info")
-        self.resize(dlu(380, 128))
-        self.setMaximumWidth(1000)
+        self.setMinimumWidth(720)  # height follows from the layout at this width
+        self.setMaximumWidth(1100)
+        body, footer = shell(self, "folder", "Download File Info", filename, tile=True)
 
-        grid = QGridLayout()
         self.url = QLineEdit(url)
+        self.url.setFont(mono_font(self.url.font()))
         self.category = QComboBox()
-        self.category.addItems([c.name for c in settings.categories])
+        for c in settings.categories:
+            self.category.addItem(icon(category_icon(c.name)), c.name)
+        self.category.setMinimumWidth(200)
         add_cat = QPushButton("+")
         add_cat.setObjectName("small")
         add_cat.setFixedWidth(34)
@@ -181,7 +221,6 @@ class FileInfoDialog(QDialog):
         self.save_as.setEditable(True)
         self.save_as.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
         self.save_as.setMinimumContentsLength(30)
-        self.category.setMinimumWidth(dlu(116, 0).width())
         browse = QPushButton("...")
         browse.setObjectName("small")
         browse.setFixedWidth(34)
@@ -189,60 +228,69 @@ class FileInfoDialog(QDialog):
         self.remember = QCheckBox()
         self.description = QLineEdit(description)
 
-        cat_row = QHBoxLayout()
-        cat_row.addWidget(self.category)
-        cat_row.addWidget(add_cat)
-        cat_row.addStretch(1)
-        save_row = QHBoxLayout()
-        save_row.addWidget(self.save_as, 1)
-        save_row.addWidget(browse)
-
-        grid.addWidget(QLabel("URL"), 0, 0)
-        grid.addWidget(self.url, 0, 1)
-        grid.addWidget(QLabel("Category"), 1, 0)
-        grid.addLayout(cat_row, 1, 1)
-        grid.addWidget(QLabel("Save As"), 2, 0)
-        grid.addLayout(save_row, 2, 1)
-        grid.addWidget(self.remember, 3, 1)
+        form = QVBoxLayout()
+        form.setSpacing(10)
+        form.addLayout(form_row("URL", self.url, width=78))
+        form.addLayout(form_row("Category", self.category, add_cat, QWidget(), width=78))
+        form.addLayout(form_row("Save As", self.save_as, browse, width=78, stretch_last=False))
+        remember = QHBoxLayout()
+        remember.addSpacing(86)
+        remember.addWidget(self.remember)
+        form.addLayout(remember)
         if media_info:
             self.url.setReadOnly(True)
-            grid.addWidget(self._media_box(media_info), 4, 0, 1, 2)
-        grid.addWidget(QLabel("Description"), 5, 0)
-        grid.addWidget(self.description, 5, 1)
-        grid.setColumnStretch(1, 1)
+            form.addWidget(self._media_box(media_info))
+        form.addLayout(form_row("Description", self.description, width=78))
 
         side = QVBoxLayout()
+        side.setContentsMargins(0, 0, 0, 0)
+        side.setSpacing(8)
+        tile = QFrame()
+        tile.setObjectName("tileLarge")
+        tile.setFixedSize(72, 72)
+        tl = QVBoxLayout(tile)
+        tl.setContentsMargins(0, 0, 0, 0)
         self.pic = pic = QLabel()
-        pic.setPixmap(file_icon(filename).pixmap(32, 32))
         pic.setAlignment(Qt.AlignCenter)
+        tl.addWidget(pic)
         self.size_label = QLabel(fmt.size(size) or "(unknown)")
+        self.size_label.setFont(mono_font(self.size_label.font()))
+        f = self.size_label.font()
+        f.setBold(True)
+        self.size_label.setFont(f)
         self.size_label.setAlignment(Qt.AlignCenter)
-        side.addSpacing(20)
-        side.addWidget(pic)
+        side.addSpacing(4)
+        side.addWidget(tile, 0, Qt.AlignHCenter)
         side.addWidget(self.size_label)
+        if resumable is not None:
+            side.addWidget(pill_label("✓ Resumable", "ok") if resumable else pill_label("Not resumable", "muted"),
+                           0, Qt.AlignHCenter)
         side.addStretch(1)
+        sw = QWidget()
+        sw.setLayout(side)
+        sw.setFixedWidth(116)
 
         top = QHBoxLayout()
-        top.addLayout(grid, 1)
-        top.addLayout(side)
+        top.setSpacing(16)
+        top.addLayout(form, 1)
+        top.addWidget(sw)
+        body.addLayout(top)
 
         later = QPushButton("Download &Later")
+        later.setIcon(icon("queue"))
         start = primary(QPushButton("&Start Download"))
+        start.setIcon(icon("add-white"))
+        for b in (later, start):
+            b.setIconSize(QSize(15, 15))
         cancel = QPushButton("&Cancel")
         start.setDefault(True)
         later.clicked.connect(self._later)
         start.clicked.connect(lambda: self._finish("start", ""))
         cancel.clicked.connect(self.reject)
-        buttons = QHBoxLayout()
-        buttons.addStretch(1)
+        footer.addStretch(1)
         for b in (later, start, cancel):
-            b.setMinimumWidth(dlu(74, 14).width())
-            buttons.addWidget(b)
-        buttons.addStretch(1)
-
-        lay = QVBoxLayout(self)
-        lay.addLayout(top)
-        lay.addLayout(buttons)
+            footer.addWidget(b)
+        start.setFocus()  # once it is in the dialog; Enter starts the download
 
         self.category.currentTextChanged.connect(self._category_changed)
         cat = categories.classify(settings, filename, url)
@@ -253,36 +301,33 @@ class FileInfoDialog(QDialog):
             kind = media_kind if has_kind else media_info.variants[0].kind
             (self.kind_video if kind == "video" else self.kind_audio).setChecked(True)
             self._fill_quality(media_quality)
-        add_header(self, "folder-download", "Download File Info", filename)
 
     # -- YouTube variant picker (shown only for YouTube links)
 
-    def _media_box(self, info: media.MediaInfo) -> QGroupBox:
-        box = QGroupBox("YouTube video")
-        g = QGridLayout(box)
+    def _media_box(self, info: media.MediaInfo) -> QFrame:
+        box, g = panel(8)
+        g.addWidget(caption("YouTube video"))
         title = QLabel(f"<b>{html.escape(info.title)}</b>")
         title.setWordWrap(True)
         mins, secs = divmod(info.duration, 60)
         hours, mins = divmod(mins, 60)
         length = f"{hours}:{mins:02d}:{secs:02d}" if hours else f"{mins}:{secs:02d}"
         meta = QLabel(" · ".join(x for x in (info.uploader, length if info.duration else "") if x))
-        meta.setEnabled(False)
+        meta.setObjectName("muted")
         self.kind_video = QRadioButton("Video")
         self.kind_audio = QRadioButton("Audio only")
         self.kind_video.setEnabled(any(v.kind == "video" for v in info.variants))
         self.kind_audio.setEnabled(any(v.kind == "audio" for v in info.variants))
-        kinds = QHBoxLayout()
-        kinds.addWidget(self.kind_video)
-        kinds.addWidget(self.kind_audio)
-        kinds.addStretch(1)
         self.quality = QComboBox()
-        g.addWidget(title, 0, 0, 1, 2)
-        g.addWidget(meta, 1, 0, 1, 2)
-        g.addWidget(QLabel("Download"), 2, 0)
-        g.addLayout(kinds, 2, 1)
-        g.addWidget(QLabel("Quality"), 3, 0)
-        g.addWidget(self.quality, 3, 1)
-        g.setColumnStretch(1, 1)
+        row = QHBoxLayout()
+        row.addWidget(self.kind_video)
+        row.addWidget(self.kind_audio)
+        row.addSpacing(10)
+        row.addWidget(form_label("Quality"))
+        row.addWidget(self.quality, 1)
+        g.addWidget(title)
+        g.addWidget(meta)
+        g.addLayout(row)
         self.kind_video.toggled.connect(lambda on: on and self._fill_quality())
         self.kind_audio.toggled.connect(lambda on: on and self._fill_quality())
         self.quality.currentIndexChanged.connect(self._variant_changed)
@@ -309,13 +354,14 @@ class FileInfoDialog(QDialog):
             return
         self.variant = v
         self.size_label.setText(("~" if v.convert == "mp3" else "") + (fmt.size(v.size) or "(unknown)"))
-        self.pic.setPixmap(file_icon(f"x.{v.ext}").pixmap(32, 32))
         root, _ = os.path.splitext(self.save_as.currentText())
         self.save_as.setCurrentText(f"{root}.{v.ext}")
         self._category_changed(self.category.currentText())
 
     def _category_changed(self, name: str) -> None:
         cat = self.settings.category(name)
+        self.pic.setPixmap(icon(category_icon(cat.name)).pixmap(39, 39))
+        self.header_icon.setPixmap(icon(category_icon(cat.name)).pixmap(22, 22))
         self.remember.setText(f'Remember this path for "{cat.name}" category')
         current = os.path.basename(self.save_as.currentText()) or self.filename
         path = os.path.join(cat.save_dir, current)
@@ -365,35 +411,29 @@ class DuplicateDialog(QDialog):
     def __init__(self, url: str, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Duplicate download link")
-        self.resize(dlu(286, 154))
-        lay = QVBoxLayout(self)
-        lay.setSizeConstraint(QLayout.SetFixedSize)
-        edit = QLineEdit(url)
+        self.setMinimumWidth(600)  # height follows from the layout at this width
+        body, footer = shell(self, "queue", "Duplicate download link", "This file is already in your download list.")
+        edit = link_field(QLineEdit(url))
         edit.setReadOnly(True)
-        lay.addWidget(edit)
-        note = QLabel("This file already exists in your download list. You may choose to add a duplicate "
-                      "download with a numbered file name, overwrite the existing file, or show the existing one.")
-        note.setWordWrap(True)
-        lay.addWidget(note)
+        edit.setFocusPolicy(Qt.NoFocus)
+        body.addWidget(edit)
+        box, lay = panel()
         self.group = QButtonGroup(self)
         for i, (key, text) in enumerate(self.CHOICES):
             rb = QRadioButton(text)
             rb.setChecked(i == 0)
             self.group.addButton(rb, i)
             lay.addWidget(rb)
-        row = QHBoxLayout()
+        body.addWidget(box)
+        self.remember = QCheckBox("Remember my selection and don't ask again (change it in Options → Downloads)")
+        body.addWidget(self.remember)
         ok, cancel = primary(QPushButton("OK")), QPushButton("Cancel")
+        ok.setDefault(True)
         ok.clicked.connect(self.accept)
         cancel.clicked.connect(self.reject)
-        row.addStretch(1)
-        row.addWidget(ok)
-        row.addWidget(cancel)
-        row.addStretch(1)
-        lay.addLayout(row)
-        self.remember = QCheckBox("Remember my selection and don't show this dialog again.\n"
-                                  "You can change it later in Options->Downloads.")
-        lay.addWidget(self.remember)
-        add_header(self, "queue", "Duplicate download link", "This file is already in your download list.")
+        footer.addStretch(1)
+        footer.addWidget(cancel)
+        footer.addWidget(ok)
 
     def choice(self) -> str:
         return self.CHOICES[self.group.checkedId()][0]
@@ -405,85 +445,99 @@ class BatchDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Batch download")
-        self.resize(dlu(316, 238))
-        lay = QVBoxLayout(self)
-        lay.setSizeConstraint(QLayout.SetFixedSize)
-        intro = QLabel("It's possible to add a group of sequential file names like img001.jpg, img002.jpg, etc., "
-                       "img100.jpg to the download queue. Use the asterisk wildcard for the file name pattern.\n"
-                       "For example:   http://www.example.com/pictures/img*.jpg")
-        intro.setWordWrap(True)
-        lay.addWidget(intro)
-        row = QHBoxLayout()
-        row.addWidget(QLabel("Address"))
+        self.setMinimumWidth(620)  # height follows from the layout at this width
+        body, footer = shell(self, "add-url", "Batch download",
+                             "Add a numbered series of files: put one asterisk in the address, e.g. "
+                             "https://www.example.com/pictures/img*.jpg")
         self.address = QComboBox()
         self.address.setEditable(True)
         self.address.setCurrentText(clipboard_url())
-        row.addWidget(self.address, 1)
-        lay.addLayout(row)
+        link_combo(self.address)
+        body.addLayout(form_row("Address", self.address, width=64))
 
-        box = QGroupBox("Replace asterisk to")
-        g = QGridLayout(box)
+        box, b = panel()
+        b.addWidget(caption("Replace asterisk with"))
         self.numbers = QRadioButton("Numbers")
         self.letters = QRadioButton("Letters")
         self.numbers.setChecked(True)
-        self.num_from, self.num_to, self.width = QSpinBox(), QSpinBox(), QSpinBox()
+        kinds = QHBoxLayout()
+        kinds.addWidget(self.numbers)
+        kinds.addSpacing(20)
+        kinds.addWidget(self.letters)
+        kinds.addStretch(1)
+        b.addLayout(kinds)
+        self.num_from, self.num_to, self.wildcard_size = QSpinBox(), QSpinBox(), QSpinBox()
+        for sb in (self.num_from, self.num_to, self.wildcard_size):
+            sb.setButtonSymbols(QSpinBox.NoButtons)
+            sb.setFixedSize(80, 30)
+            sb.setFont(mono_font(sb.font()))
         for sb in (self.num_from, self.num_to):
             sb.setRange(0, 999999)
         self.num_from.setValue(1)
         self.num_to.setValue(10)
-        self.width.setRange(1, 9)
+        self.wildcard_size.setRange(1, 9)
         self.let_from, self.let_to = QLineEdit("a"), QLineEdit("z")
         for e in (self.let_from, self.let_to):
             e.setMaxLength(1)
-            e.setFixedWidth(40)
-        g.addWidget(self.numbers, 0, 0)
-        g.addWidget(self.letters, 0, 2)
-        g.addWidget(QLabel("From:"), 1, 0)
-        g.addWidget(self.num_from, 1, 1)
-        g.addWidget(self.let_from, 1, 1)
-        g.addWidget(QLabel("To:"), 1, 2)
-        g.addWidget(self.num_to, 1, 3)
-        g.addWidget(self.let_to, 1, 3)
-        g.addWidget(QLabel("Wildcard size"), 1, 4)
-        g.addWidget(self.width, 1, 5)
-        lay.addWidget(box)
-        self.auth = AuthBox()
-        lay.addWidget(self.auth)
+            e.setFixedSize(80, 30)
+            e.setFont(mono_font(e.font()))
+        rng = QHBoxLayout()
+        rng.setSpacing(12)
+        rng.addWidget(QLabel("From"))
+        rng.addWidget(self.num_from)
+        rng.addWidget(self.let_from)
+        rng.addSpacing(6)
+        rng.addWidget(QLabel("To"))
+        rng.addWidget(self.num_to)
+        rng.addWidget(self.let_to)
+        rng.addSpacing(6)
+        rng.addWidget(QLabel("Wildcard size"))
+        rng.addWidget(self.wildcard_size)
+        rng.addStretch(1)
+        b.addLayout(rng)
+        body.addWidget(box)
+        self.auth = AuthBox(compact=True)
+        body.addWidget(self.auth)
 
-        preview = QGridLayout()
+        pv, pl = panel(6)
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(12)
         self.first, self.second, self.last = QLabel(), QLabel(), QLabel()
-        for r, (title, lab) in enumerate((("First file:", self.first), ("Second file:", self.second),
-                                          ("...", None), ("Last file:", self.last))):
-            preview.addWidget(QLabel(title), r, 0)
-            if lab:
-                lab.setTextInteractionFlags(Qt.TextSelectableByMouse)
-                preview.addWidget(lab, r, 1)
-        preview.setColumnStretch(1, 1)
-        lay.addLayout(preview)
-        buttons = QHBoxLayout()
-        buttons.addStretch(1)
+        for r, (title, lab) in enumerate((("First file", self.first), ("Second file", self.second),
+                                          ("Last file", self.last))):
+            grid.addWidget(form_label(title), r, 0)
+            lab.setObjectName("link")
+            lab.setFont(mono_font(lab.font()))
+            lab.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            grid.addWidget(lab, r, 1)
+        grid.setColumnStretch(1, 1)
+        pl.addLayout(grid)
+        body.addWidget(pv)
+
+        self.count = form_label("")
         ok, cancel = primary(QPushButton("OK")), QPushButton("Cancel")
+        ok.setDefault(True)
         ok.clicked.connect(self.accept)
         cancel.clicked.connect(self.reject)
-        buttons.addWidget(ok)
-        buttons.addWidget(cancel)
-        lay.addLayout(buttons)
+        footer.addWidget(self.count)
+        footer.addStretch(1)
+        footer.addWidget(cancel)
+        footer.addWidget(ok)
 
-        for w in (self.num_from, self.num_to, self.width):
+        for w in (self.num_from, self.num_to, self.wildcard_size):
             w.valueChanged.connect(self._update)
         for w in (self.let_from, self.let_to):
             w.textChanged.connect(self._update)
         self.address.currentTextChanged.connect(self._update)
         self.numbers.toggled.connect(self._update)
         self._update()
-        add_header(self, "add-url", "Batch download", "Add a numbered series of files with an asterisk wildcard, e.g. img*.jpg")
 
     def urls(self) -> list[str]:
         pattern = self.address.currentText().strip()
         if pattern.count("*") != 1:
             return []
         if self.numbers.isChecked():
-            a, b, w = self.num_from.value(), self.num_to.value(), self.width.value()
+            a, b, w = self.num_from.value(), self.num_to.value(), self.wildcard_size.value()
             step = 1 if b >= a else -1
             parts = [str(n).zfill(w) for n in range(a, b + step, step)]
         else:
@@ -498,13 +552,14 @@ class BatchDialog(QDialog):
     def _update(self) -> None:
         self.num_from.setVisible(self.numbers.isChecked())
         self.num_to.setVisible(self.numbers.isChecked())
-        self.width.setEnabled(self.numbers.isChecked())
+        self.wildcard_size.setEnabled(self.numbers.isChecked())
         self.let_from.setVisible(self.letters.isChecked())
         self.let_to.setVisible(self.letters.isChecked())
         urls = self.urls()
         self.first.setText(urls[0] if urls else "")
         self.second.setText(urls[1] if len(urls) > 1 else "")
         self.last.setText(urls[-1] if urls else "")
+        self.count.setText(f"{len(urls)} files will be added" if urls else "Put one * in the address")
 
 
 # --------------------------------------------------------------------------- links
@@ -561,37 +616,26 @@ class LinksDialog(QDialog):
         self.settings = settings
         self.links = links
         self.setWindowTitle("Download All Links")
-        self.resize(dlu(532, 335))
-        lay = QVBoxLayout(self)
-        lay.addWidget(QLabel("Please check the links, which you want to add to the download list of LID"))
+        self.resize(840, 640)
+        body, footer = shell(self, "grabber", "Download All Links", f"{len(links)} links found · check the ones to add")
+        # A check column with a check-all box in its header, like the download list.
         self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["File Name", "Description", "Address"])
+        self.header = CheckHeader(self._check_state, self.tree)
+        self.header.toggled.connect(lambda: self._check_all(self._check_state() != Qt.Checked))
+        self.tree.setHeader(self.header)
+        self.tree.setHeaderLabels(["", "FILE", "TYPE", "ADDRESS"])
+        self.header.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
         self.tree.setRootIsDecorated(False)
+        self.tree.setAlternatingRowColors(True)
         self.tree.setSelectionMode(QAbstractItemView.ExtendedSelection)
-        self.tree.header().setSectionResizeMode(2, QHeaderView.Stretch)
-        lay.addWidget(self.tree, 1)
+        self.tree.setItemDelegateForColumn(2, TypePillDelegate(self.tree))
+        self.header.setSectionResizeMode(0, QHeaderView.Fixed)
+        self.header.setSectionResizeMode(3, QHeaderView.Stretch)
+        self.tree.setColumnWidth(0, 34)
+        self.tree.setColumnWidth(2, 70)
+        self.tree.itemChanged.connect(lambda *_: self._count())
+        body.addWidget(self.tree, 1)
 
-        bottom = QHBoxLayout()
-        box = QGroupBox("Save To")
-        b = QGridLayout(box)
-        self.by_category = QRadioButton("Every file to the directory according to the category of the file")
-        self.one_category = QRadioButton("All files to one category")
-        self.one_dir = QRadioButton("All files to one directory")
-        self.by_category.setChecked(True)
-        self.cat_combo = QComboBox()
-        self.cat_combo.addItems([c.name for c in settings.categories])
-        self.dir_edit = QLineEdit(settings.categories[0].save_dir)
-        browse = QPushButton("Browse...")
-        browse.clicked.connect(self._browse)
-        b.addWidget(self.by_category, 0, 0, 1, 2)
-        b.addWidget(self.one_category, 1, 0, 1, 2)
-        b.addWidget(self.cat_combo, 2, 0)
-        b.addWidget(self.one_dir, 3, 0, 1, 2)
-        b.addWidget(self.dir_edit, 4, 0)
-        b.addWidget(browse, 4, 1)
-        bottom.addWidget(box, 1)
-
-        right = QVBoxLayout()
         row = QHBoxLayout()
         check_all, uncheck_all = QPushButton("Check All"), QPushButton("Uncheck All")
         check_all.clicked.connect(lambda: self._check_all(True))
@@ -599,35 +643,72 @@ class LinksDialog(QDialog):
         row.addWidget(check_all)
         row.addWidget(uncheck_all)
         row.addStretch(1)
-        right.addLayout(row)
         self.use_text = QCheckBox("Use link texts as download descriptions")
         self.use_text.setChecked(True)
         self.hide_html = QCheckBox("Hide HTML files")
-        self.hide_images = QCheckBox("Hide images located on this web page")
+        self.hide_images = QCheckBox("Hide images")
+        self.hide_images.setToolTip("Hide images located on this web page")
         self.hide_repeated = QCheckBox("Hide repeated files")
         for c in (self.hide_html, self.hide_repeated):
             c.setChecked(True)
-        for c in (self.use_text, self.hide_html, self.hide_images, self.hide_repeated):
-            right.addWidget(c)
-            if c is not self.use_text:
-                c.toggled.connect(self._fill)
-        right.addStretch(1)
-        ok_row = QHBoxLayout()
-        ok_row.addStretch(1)
+        for c in (self.hide_html, self.hide_images, self.hide_repeated):
+            row.addWidget(c)
+            c.toggled.connect(self._fill)
+        body.addLayout(row)
+
+        box, b = panel()
+        b.addWidget(caption("Save to"))
+        self.by_category = QRadioButton("Every file to the folder of its category")
+        self.one_category = QRadioButton("All files to one category")
+        self.one_dir = QRadioButton("All files to one directory")
+        self.by_category.setChecked(True)
+        self.cat_combo = QComboBox()
+        self.cat_combo.addItems([c.name for c in settings.categories])
+        self.cat_combo.setMinimumWidth(180)
+        self.dir_edit = QLineEdit(settings.categories[0].save_dir)
+        browse = QPushButton("Browse...")
+        browse.clicked.connect(self._browse)
+        b.addWidget(self.by_category)
+        r1 = QHBoxLayout()
+        r1.addWidget(self.one_category)
+        r1.addWidget(self.cat_combo)
+        r1.addStretch(1)
+        b.addLayout(r1)
+        r2 = QHBoxLayout()
+        r2.addWidget(self.one_dir)
+        r2.addWidget(self.dir_edit, 1)
+        r2.addWidget(browse)
+        b.addLayout(r2)
+        body.addWidget(box)
+        body.addWidget(self.use_text)
+
+        self.checked_label = pill_label("", "accent")
         ok, cancel = primary(QPushButton("OK")), QPushButton("Cancel")
+        ok.setDefault(True)
         ok.clicked.connect(self.accept)
         cancel.clicked.connect(self.reject)
-        ok_row.addWidget(ok)
-        ok_row.addWidget(cancel)
-        right.addLayout(ok_row)
-        bottom.addLayout(right, 1)
-        lay.addLayout(bottom)
+        footer.addWidget(self.checked_label)
+        footer.addStretch(1)
+        footer.addWidget(cancel)
+        footer.addWidget(ok)
         self._fill()
-        add_header(self, "grabber", "Download All Links", f"{len(links)} links found")
+
+    def _count(self) -> None:
+        n = sum(1 for i in range(self.tree.topLevelItemCount()) if self.tree.topLevelItem(i).checkState(0) == Qt.Checked)
+        self.checked_label.setText(f"{n} checked")
+        self.header.viewport().update()
+
+    def _check_state(self) -> Qt.CheckState:
+        states = {self.tree.topLevelItem(i).checkState(0) for i in range(self.tree.topLevelItemCount())}
+        if states == {Qt.Checked}:
+            return Qt.Checked
+        return Qt.PartiallyChecked if Qt.Checked in states else Qt.Unchecked
 
     def _fill(self) -> None:
         self.tree.clear()
         seen = set()
+        mono = mono_font(self.tree.font())
+        muted = QColor(theme.colors()["mu"])
         for url, text, kind in self.links:
             name = safe_filename(filename_from_url(url))
             ext = categories.extension(name)
@@ -638,12 +719,18 @@ class LinksDialog(QDialog):
             if self.hide_repeated.isChecked() and url in seen:
                 continue
             seen.add(url)
-            item = QTreeWidgetItem([name, text, url])
-            item.setIcon(0, file_icon(name))
+            item = QTreeWidgetItem(["", name, ext.upper(), url.split("://", 1)[-1]])
+            item.setData(0, Qt.UserRole, (url, text, name))
+            item.setIcon(1, icon(category_icon(categories.classify(self.settings, name, url).name)))
+            item.setToolTip(1, text)
+            item.setToolTip(3, url)
+            item.setFont(3, mono)
+            item.setForeground(3, muted)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
             item.setCheckState(0, Qt.Checked if categories.is_auto_capture_type(self.settings, name) else Qt.Unchecked)
             self.tree.addTopLevelItem(item)
-        self.tree.resizeColumnToContents(0)
+        self.tree.resizeColumnToContents(1)
+        self._count()
 
     def _check_all(self, on: bool) -> None:
         for i in range(self.tree.topLevelItemCount()):
@@ -661,7 +748,7 @@ class LinksDialog(QDialog):
             item = self.tree.topLevelItem(i)
             if item.checkState(0) != Qt.Checked:
                 continue
-            name, text, url = item.text(0), item.text(1), item.text(2)
+            url, text, name = item.data(0, Qt.UserRole)
             if self.one_category.isChecked():
                 cat = self.settings.category(self.cat_combo.currentText())
             else:

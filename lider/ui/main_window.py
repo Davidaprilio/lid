@@ -880,7 +880,7 @@ class MainWindow(QMainWindow):
             name = self._unique_name(save_dir, name)
         if self.settings.show_start_dialog:
             dlg = FileInfoDialog(self.settings, url, name, size, self._queue_names(), description, self,
-                                 new_category=self.add_category)
+                                 new_category=self.add_category, resumable=resumable)
             if not dlg.exec() or not dlg.result_value:
                 return
             r = dlg.result_value

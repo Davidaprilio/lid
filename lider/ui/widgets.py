@@ -28,7 +28,7 @@ from PySide6.QtWidgets import (
 )
 
 from . import theme
-from .icons import icon
+from .icons import bind, icon
 
 STATUS_ROLE = Qt.UserRole + 10  # (kind, progress 0..1, text); kind: run | pause | queue | done | error | ""
 COUNT_ROLE = Qt.UserRole + 11  # number shown as a badge in the Categories tree
@@ -52,21 +52,34 @@ def _alpha(col: QColor, a: int) -> QColor:
 
 
 # ---------------------------------------------------------------- dialog header
-def dialog_header(icon_name: str, title: str, subtitle: str = "") -> QWidget:
-    """Icon, bold title and a muted line under it; sits at the top of a dialog."""
+def dialog_header(icon_name: str, title: str, subtitle: str = "", tile: bool = False) -> QWidget:
+    """Icon (bare, or 22 px on a 40 px tile), bold title and a muted line under it; sits at the top
+    of a dialog. The icon label is ``header.pic``."""
     w = QWidget()
     lay = QHBoxLayout(w)
-    lay.setContentsMargins(0, 0, 0, 6)
+    lay.setContentsMargins(0, 0, 0, 2)
     lay.setSpacing(12)
     pic = QLabel()
-    pic.setPixmap(icon(icon_name).pixmap(30, 30))
-    lay.addWidget(pic, 0, Qt.AlignTop)
+    pic.setAlignment(Qt.AlignCenter)
+    if tile:
+        box = QFrame()
+        box.setObjectName("tileSmall")
+        box.setFixedSize(40, 40)
+        bl = QVBoxLayout(box)
+        bl.setContentsMargins(0, 0, 0, 0)
+        bl.addWidget(pic)
+        pic.setPixmap(icon(icon_name).pixmap(22, 22))
+        lay.addWidget(box, 0, Qt.AlignTop)
+    else:
+        pic.setPixmap(icon(icon_name).pixmap(30, 30))
+        lay.addWidget(pic, 0, Qt.AlignTop)
+    w.pic = pic
     text = QVBoxLayout()
-    text.setSpacing(1)
+    text.setSpacing(2)
     t = QLabel(title)
     t.setObjectName("dialogTitle")
     f = QFont(t.font())
-    f.setPointSizeF(f.pointSizeF() * 1.15)
+    f.setPointSizeF(f.pointSizeF() * 1.25)
     f.setBold(True)
     t.setFont(f)
     text.addWidget(t)
@@ -81,8 +94,9 @@ def dialog_header(icon_name: str, title: str, subtitle: str = "") -> QWidget:
 
 # ---------------------------------------------------------------- dialog building blocks
 def shell(dialog: QWidget, icon_name: str | None = None, title: str = "", subtitle: str = "",
-          spacing: int = 10) -> tuple[QVBoxLayout, QHBoxLayout]:
-    """The frame of every dialog: optional header, padded body and a footer bar. Returns (body, footer)."""
+          spacing: int = 10, tile: bool = False) -> tuple[QVBoxLayout, QHBoxLayout]:
+    """The frame of every dialog: optional header, padded body and a footer bar. Returns (body, footer);
+    the header's icon label is ``dialog.header_icon``."""
     outer = QVBoxLayout(dialog)
     outer.setContentsMargins(0, 0, 0, 0)
     outer.setSpacing(0)
@@ -91,23 +105,25 @@ def shell(dialog: QWidget, icon_name: str | None = None, title: str = "", subtit
     body.setContentsMargins(18, 16, 18, 14)
     body.setSpacing(spacing)
     if icon_name:
-        body.addWidget(dialog_header(icon_name, title, subtitle))
+        header = dialog_header(icon_name, title, subtitle, tile)
+        dialog.header_icon = header.pic
+        body.addWidget(header)
     outer.addWidget(content, 1)
     bar = QFrame()
     bar.setObjectName("footer")
     footer = QHBoxLayout(bar)
-    footer.setContentsMargins(16, 11, 16, 11)
+    footer.setContentsMargins(16, 12, 16, 12)
     footer.setSpacing(8)
     outer.addWidget(bar)
     return body, footer
 
 
-def panel(spacing: int = 10) -> tuple[QFrame, QVBoxLayout]:
+def panel(spacing: int = 12) -> tuple[QFrame, QVBoxLayout]:
     """A rounded card that groups related controls."""
     frame = QFrame()
     frame.setObjectName("panel")
     lay = QVBoxLayout(frame)
-    lay.setContentsMargins(14, 12, 14, 12)
+    lay.setContentsMargins(14, 14, 14, 14)
     lay.setSpacing(spacing)
     return frame, lay
 
@@ -115,7 +131,17 @@ def panel(spacing: int = 10) -> tuple[QFrame, QVBoxLayout]:
 def caption(text: str) -> QLabel:
     lab = QLabel(text.upper())
     lab.setObjectName("sectionTitle")
+    f = QFont(lab.font())
+    f.setPointSizeF(f.pointSizeF() * 11 / 12)
+    lab.setFont(f)
     return lab
+
+
+def link_field(edit: QLineEdit) -> QLineEdit:
+    """An address field: monospaced, with a link icon in front."""
+    edit.setFont(mono_font(edit.font()))
+    bind(edit.addAction(icon("link"), QLineEdit.LeadingPosition), "link")
+    return edit
 
 
 def form_label(text: str, width: int = 0) -> QLabel:
@@ -151,6 +177,10 @@ def pill_label(text: str, kind: str = "muted") -> QLabel:
     """A small rounded status label; kind is ok, bad, accent or muted."""
     lab = QLabel(text)
     lab.setObjectName({"ok": "pillOk", "bad": "pillBad", "accent": "pillAccent"}.get(kind, "pillMuted"))
+    f = QFont(lab.font())
+    f.setPointSizeF(f.pointSizeF() * 11.5 / 12)
+    f.setWeight(QFont.DemiBold)
+    lab.setFont(f)
     return lab
 
 
@@ -624,6 +654,40 @@ class CheckHeader(QHeaderView):
             self.viewport().update()
             return
         super().mousePressEvent(e)
+
+
+class TypePillDelegate(QStyledItemDelegate):
+    """Paints a column's text as a small muted pill (the file type in link lists); its 27 px height
+    sets the row height of the list."""
+
+    ROW = 27
+
+    def sizeHint(self, option, index):
+        return QSize(super().sizeHint(option, index).width() + 20, self.ROW)
+
+    def paint(self, painter, option, index):
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        text = opt.text
+        opt.text = ""
+        opt.widget.style().drawControl(QStyle.CE_ItemViewItem, opt, painter, opt.widget)
+        if not text:
+            return
+        f = QFont(option.font)
+        f.setPointSizeF(f.pointSizeF() * 11.5 / 12)
+        f.setWeight(QFont.DemiBold)
+        fm = QFontMetrics(f)
+        h = min(22, option.rect.height() - 4)
+        r = QRectF(option.rect.x() + 6, option.rect.y() + (option.rect.height() - h) / 2, fm.horizontalAdvance(text) + 20, h)
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing)
+        path = QPainterPath()
+        path.addRoundedRect(r, h / 2, h / 2)
+        painter.fillPath(path, _c("track"))
+        painter.setFont(f)
+        painter.setPen(_c("mu"))
+        painter.drawText(r, Qt.AlignCenter, text)
+        painter.restore()
 
 
 class ListDelegate(QStyledItemDelegate):
