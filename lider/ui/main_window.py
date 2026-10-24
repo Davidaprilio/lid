@@ -1003,10 +1003,14 @@ class MainWindow(QMainWindow):
         box = QMessageBox(QMessageBox.Question, "Confirm deletion of downloads",
                           f"Are you sure you want to delete {len(ids)} file(s) from the download list?",
                           QMessageBox.Yes | QMessageBox.No, self)
-        also = QCheckBox("Also delete the downloaded files from disk")
+        # Parented: PySide does not hand the check box to the message box, so a parentless one would be
+        # freed with this Python variable and leave the box with a dangling pointer.
+        also = QCheckBox("Also delete the downloaded files from disk", box)
         box.setCheckBox(also)
-        if box.exec() == QMessageBox.Yes:
-            self.manager.remove(ids, delete_files=also.isChecked())
+        answer, delete_files = box.exec(), also.isChecked()
+        box.deleteLater()  # a parented message box would otherwise live as long as the window
+        if answer == QMessageBox.Yes:
+            self.manager.remove(ids, delete_files=delete_files)
             self.model.set_checked(ids, False)
             self.refresh_rows()
 
@@ -1098,9 +1102,26 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------ settings & view
     def open_options(self):
         if OptionsDialog(self.settings, self).exec():
+            self.apply_appearance()
             self.save_settings()
             self.rebuild_tree()
             self.refresh_rows()
+
+    def apply_appearance(self):
+        """Apply what Options → Appearance may have changed."""
+        s = self.settings
+        self.apply_theme()
+        self.set_toolbar_labels(s.toolbar_labels)
+        self.toggle_categories(not s.show_categories)
+        self.set_details_visible(s.show_details)
+        self.set_statusbar_visible(s.show_statusbar)
+        f = QFont()
+        self.view.setFont(f if s.list_font and f.fromString(s.list_font) else QApplication.font())
+        if s.tray_icon and self.tray is None:
+            self._build_tray()
+        elif not s.tray_icon and self.tray is not None:
+            self.tray.hide()
+            self.tray = None
 
     def set_limiter(self, on: bool):
         self.manager.set_speed_limiter(on)

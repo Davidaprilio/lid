@@ -7,7 +7,9 @@ from typing import Callable
 from PySide6.QtCore import QEvent, QPoint, QRect, QRectF, QSize, Qt, Signal
 from PySide6.QtGui import QColor, QFont, QFontDatabase, QFontMetrics, QPainter, QPainterPath, QPen
 from PySide6.QtWidgets import (
+    QBoxLayout,
     QFrame,
+    QGridLayout,
     QHBoxLayout,
     QHeaderView,
     QLabel,
@@ -75,6 +77,29 @@ def dialog_header(icon_name: str, title: str, subtitle: str = "") -> QWidget:
     return w
 
 
+def primary(button):
+    """Mark the button that finishes a dialog; the theme paints it in the accent colour."""
+    button.setProperty("primary", True)
+    return button
+
+
+def add_header(dialog: QWidget, icon_name: str, title: str, subtitle: str = "") -> None:
+    """Put a dialog_header above whatever the dialog's layout already holds."""
+    lay = dialog.layout()
+    header = dialog_header(icon_name, title, subtitle)
+    if isinstance(lay, QGridLayout):
+        items = []
+        while lay.count():
+            pos = lay.getItemPosition(0)
+            items.append((lay.takeAt(0), pos))
+        cols = max((c + cs for _i, (_r, c, _rs, cs) in items), default=1)
+        lay.addWidget(header, 0, 0, 1, cols)
+        for item, (r, c, rs, cs) in items:
+            lay.addItem(item, r + 1, c, rs, cs)
+    elif isinstance(lay, QBoxLayout) and lay.direction() in (QBoxLayout.TopToBottom, QBoxLayout.Down):
+        lay.insertWidget(0, header)
+
+
 # ---------------------------------------------------------------- tag input
 class FlowLayout(QLayout):
     """Lays children left to right and wraps them onto new lines."""
@@ -107,6 +132,15 @@ class FlowLayout(QLayout):
 
     def hasHeightForWidth(self):
         return True
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self._fit()
+
+    def _fit(self) -> None:
+        h = self.flow.heightForWidth(max(1, self.width()))
+        if self.minimumHeight() != h:
+            self.setMinimumHeight(h)
 
     def heightForWidth(self, width):
         return self._do_layout(QRect(0, 0, width, 0), True)
@@ -169,7 +203,7 @@ class TagInput(QFrame):
         self.flow = FlowLayout(self)
         self.edit = _TagEdit()
         self.edit.setPlaceholderText(placeholder)
-        self.edit.setMinimumWidth(120)
+        self.edit.setMinimumWidth(max(120, self.edit.fontMetrics().horizontalAdvance(placeholder) + 24))
         self.edit.commit.connect(self._commit)
         self.edit.backspace_on_empty.connect(self._remove_last)
         self.edit.installEventFilter(self)
@@ -230,6 +264,15 @@ class TagInput(QFrame):
     def hasHeightForWidth(self):
         return True
 
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self._fit()
+
+    def _fit(self) -> None:
+        h = self.flow.heightForWidth(max(1, self.width()))
+        if self.minimumHeight() != h:
+            self.setMinimumHeight(h)
+
     def heightForWidth(self, w):
         return self.flow.heightForWidth(w)
 
@@ -274,6 +317,7 @@ class TagInput(QFrame):
         chip.setToolTip(f"Remove {v}")
         chip.clicked.connect(lambda _=False, c=chip: self._remove(c))
         self.flow.insertWidget(self.flow.count() - 1, chip)
+        self._fit()
         if emit:
             self.changed.emit()
 
@@ -287,6 +331,7 @@ class TagInput(QFrame):
                 break
         chip.deleteLater()
         self.flow.invalidate()
+        self._fit()
         self.changed.emit()
 
     def _remove_last(self) -> None:

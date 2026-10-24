@@ -41,7 +41,12 @@ Package and command name: **`lider`**.
 * **Clipboard monitoring** for the auto-capture file types, plus drag-and-drop.
   A single instance takes URLs from the command line.
 * **Import / export** of `.ef2` export files and plain text lists.
-* **View:** tray icon, dark mode, a font picker and column customisation.
+* **Themes:** Ember (light), Ember Dark and Dark. LID follows the system light/dark setting
+  unless you pick one in View → Theme or Options → Appearance.
+* **Download list:** check boxes with a check-all header. Start, Stop and Delete act on the checked
+  downloads (or the selected ones), and the status column shows progress pills.
+* **Details pane** (F9) under the list: progress, the connections bar and a per-download speed limit.
+* **View:** tray icon, list density, toolbar labels, a font picker and column customisation.
 
 ## Install
 

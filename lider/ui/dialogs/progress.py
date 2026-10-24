@@ -32,6 +32,7 @@ from ...core.manager import DownloadManager
 from ...core.models import Download, Segment, Status
 from ..icons import file_icon
 from ..util import dlu, open_folder, open_path, separator
+from ..widgets import primary
 
 
 class SegmentBar(QWidget):
@@ -303,7 +304,7 @@ class CompleteDialog(QDialog):
         lay.addWidget(saved)
         row = QHBoxLayout()
         for text, slot in (("Open", self._open), ("Open with...", self._open_with), ("Open folder", self._folder)):
-            b = QPushButton(text)
+            b = primary(QPushButton(text)) if slot == self._open else QPushButton(text)
             b.clicked.connect(slot)
             row.addWidget(b)
         row.addStretch(1)

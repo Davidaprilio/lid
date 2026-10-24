@@ -115,7 +115,7 @@ def main(argv: list[str] | None = None) -> int:
             return 0
         server = None
 
-    if not (args.minimized and win.tray):
+    if not ((args.minimized or settings.start_minimized) and win.tray):
         win.show()
     for url in args.urls:
         QTimer.singleShot(0, lambda u=url: win.add_url(u, ask_address=False))

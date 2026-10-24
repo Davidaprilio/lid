@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 
 from ... import browser
 from ..util import dlu, open_path, page_header, separator
+from ..widgets import add_header, primary
 
 STEPS = {
     "chromium": "<b>Chrome, Chromium, Brave, Edge, Vivaldi, Opera:</b> open <code>chrome://extensions</code>, "
@@ -45,7 +46,7 @@ class BrowserIntegrationDialog(QDialog):
         self.tree.setMinimumHeight(dlu(0, 112).height())
         lay.addWidget(self.tree, 1)
         row = QHBoxLayout()
-        install = QPushButton("Install for checked browsers")
+        install = primary(QPushButton("Install for checked browsers"))
         remove = QPushButton("Remove")
         install.clicked.connect(self._install)
         remove.clicked.connect(self._remove)
@@ -101,6 +102,7 @@ class BrowserIntegrationDialog(QDialog):
         bb.accepted.connect(self.accept)
         lay.addWidget(bb)
         self._fill()
+        add_header(self, "connection", "Browser integration", "LID talks to its extension through native messaging; no network port is opened.")
 
     def _fill(self):
         self.tree.clear()

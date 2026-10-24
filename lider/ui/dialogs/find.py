@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 from ...core.search import SearchFlags, SearchSettings, SearchSettingsError
 from ..icons import bind
 from ..util import separator
+from ..widgets import primary
 
 
 class FindDialog(QDialog):
@@ -53,7 +54,7 @@ class FindDialog(QDialog):
             row.addWidget(c)
             lay.addLayout(row)
         buttons = QHBoxLayout()
-        find = QPushButton("Find" if show_query else "OK")
+        find = primary(QPushButton("Find" if show_query else "OK"))
         cancel = QPushButton("Cancel")
         find.setDefault(True)
         find.clicked.connect(self.accept)
@@ -99,7 +100,7 @@ class SearchBar(QWidget):
         self.edit = QLineEdit()
         self.edit.setClearButtonEnabled(True)
         self.edit.returnPressed.connect(self.find_requested)
-        find = QPushButton("Find")
+        find = primary(QPushButton("Find"))
         find.clicked.connect(self.find_requested)
         settings = QPushButton("Settings...")
         settings.setToolTip("LID Search settings")

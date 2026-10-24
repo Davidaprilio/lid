@@ -12,6 +12,7 @@ import weakref
 from functools import lru_cache
 from pathlib import Path
 
+import shiboken6
 from PySide6.QtCore import QByteArray, QFileInfo, QRectF, Qt
 from PySide6.QtGui import QIcon, QPainter, QPixmap
 from PySide6.QtSvg import QSvgRenderer
@@ -42,7 +43,7 @@ def set_colors(ink: str, accent: str) -> None:
     alive = []
     for ref, name in _bound:
         obj = ref()
-        if obj is not None:
+        if obj is not None and shiboken6.isValid(obj):  # the C++ side of a closed window may be gone already
             obj.setIcon(icon(name))
             alive.append((ref, name))
     _bound[:] = alive

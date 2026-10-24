@@ -100,6 +100,14 @@ class ManagerTests(unittest.TestCase):
         self.assertEqual(m2.downloads[7].status, Status.PAUSED)
 
 
+class SettingsMigrationTests(unittest.TestCase):
+    def test_old_dark_mode_and_toolbar_size_map_to_themes(self):
+        s = settings_mod._from_dict({"dark_mode": True, "toolbar_large": False})
+        self.assertEqual((s.theme, s.follow_system, s.toolbar_labels), ("ember-dark", False, False))
+        s = settings_mod._from_dict({})
+        self.assertEqual((s.theme, s.follow_system, s.dark_theme), ("ember", True, "ember-dark"))
+
+
 class CategoryAndFormatTests(unittest.TestCase):
     def test_default_extension_lists(self):
         s = Settings()

@@ -6,8 +6,14 @@ import os
 from pathlib import Path
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QButtonGroup,
+    QFontDialog,
+    QFrame,
+    QRadioButton,
+    QToolButton,
     QCheckBox,
     QComboBox,
     QDialog,
@@ -31,7 +37,10 @@ from PySide6.QtWidgets import (
 )
 
 from ...core.settings import CONNECTION_CHOICES, DEFAULT_COLUMNS, DEFAULT_FILE_TYPES, Category, Settings
+from .. import theme
+from ..icons import category_icon
 from ..util import dlu, page_header, separator
+from ..widgets import TagInput, add_header, dialog_header, extension_tag, primary, site_tag
 
 AUTOSTART = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "autostart" / "lider.desktop"
 
@@ -54,52 +63,60 @@ def _browse_dir(parent: QWidget, edit: QLineEdit) -> None:
 
 
 class CategoryDialog(QDialog):
-    """Category editor."""
+    """Category editor: file types and sites are removable badges."""
 
     def __init__(self, cat: Category | None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("LID categories")
-        self.resize(dlu(322, 177).width(), 0)
+        self.resize(640, 0)
+        new = cat is None
         cat = cat or Category("", [], os.path.join(str(Path.home() / "Downloads"), "New"))
-        g = QGridLayout(self)
+        lay = QVBoxLayout(self)
+        lay.setSpacing(9)
+        lay.addWidget(dialog_header(category_icon(cat.name) if cat.name else "folder", "LID categories",
+                                    "New category" if new else f"Edit the {cat.name} category"))
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Category name"))
         self.name = QLineEdit(cat.name)
-        self.exts = QLineEdit(" ".join(cat.extensions))
-        self.use_sites = QCheckBox("Automatically put in this category the files from the following sites:")
+        row.addWidget(self.name, 1)
+        lay.addLayout(row)
+        lay.addWidget(QLabel("Automatically put in this category the following file types:"))
+        self.exts = TagInput(cat.extensions, "Add a type, e.g. mkv", extension_tag, "types")
+        lay.addWidget(self.exts)
+        lay.addWidget(self.exts.meta_row())
+        self.use_sites = QCheckBox("Automatically put in this category the files from these sites:")
         self.use_sites.setChecked(bool(cat.sites))
-        self.sites = QLineEdit(" ".join(cat.sites))
+        self.sites = TagInput(cat.sites, "Add a site, e.g. *.example.com", site_tag, "sites")
+        self.sites.setEnabled(self.use_sites.isChecked())
+        self.use_sites.toggled.connect(self.sites.setEnabled)
+        lay.addWidget(self.use_sites)
+        lay.addWidget(self.sites)
+        lay.addWidget(QLabel("Save future downloads of this category to:"))
+        row = QHBoxLayout()
         self.folder = QLineEdit(cat.save_dir)
-        self.remember = QCheckBox("Remember last save path")
-        self.remember.setChecked(cat.remember_last)
         browse = QPushButton("Browse...")
         browse.clicked.connect(lambda: _browse_dir(self, self.folder))
-        ok, cancel = QPushButton("OK"), QPushButton("Cancel")
-        ok.clicked.connect(self.accept)
-        cancel.clicked.connect(self.reject)
-        g.addWidget(QLabel("Category name"), 0, 0)
-        g.addWidget(self.name, 1, 0)
-        g.addWidget(ok, 1, 1)
-        g.addWidget(QLabel("Automatically put in this category the following file types:"), 2, 0)
-        g.addWidget(self.exts, 3, 0)
-        g.addWidget(cancel, 3, 1)
-        g.addWidget(QLabel("Note: type file extensions separated by space (e.g. avi mpg mpeg)"), 4, 0, 1, 2)
-        g.addWidget(separator(), 5, 0, 1, 2)
-        g.addWidget(self.use_sites, 6, 0, 1, 2)
-        g.addWidget(self.sites, 7, 0, 1, 2)
-        g.addWidget(QLabel("Separate sites by spaces. You may use asterisk as a wildcard, e.g. *.example.com"), 8, 0, 1, 2)
-        g.addWidget(separator(), 9, 0, 1, 2)
-        g.addWidget(QLabel("Save future downloads of this category to the following folder:"), 10, 0, 1, 2)
-        g.addWidget(self.folder, 11, 0, 1, 2)
-        g.addWidget(self.remember, 12, 0)
-        g.addWidget(browse, 12, 1)
+        row.addWidget(self.folder, 1)
+        row.addWidget(browse)
+        lay.addLayout(row)
+        self.remember = QCheckBox("Remember last save path")
+        self.remember.setChecked(cat.remember_last)
+        lay.addWidget(self.remember)
+        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        primary(bb.button(QDialogButtonBox.Ok))
+        bb.accepted.connect(self.accept)
+        bb.rejected.connect(self.reject)
+        lay.addSpacing(4)
+        lay.addWidget(bb)
         if cat.name == "General":
             self.name.setReadOnly(True)
 
     def category(self) -> Category:
         return Category(
             self.name.text().strip(),
-            [e.lstrip(".").lower() for e in self.exts.text().split()],
+            self.exts.values(),
             self.folder.text().strip(),
-            self.sites.text().split() if self.use_sites.isChecked() else [],
+            self.sites.values() if self.use_sites.isChecked() else [],
             self.remember.isChecked(),
         )
 
@@ -125,6 +142,7 @@ class ServerLimitDialog(QDialog):
         g.addWidget(QLabel("Max. connections number"), 2, 0)
         g.addWidget(self.conns, 2, 1)
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        primary(bb.button(QDialogButtonBox.Ok))
         bb.accepted.connect(self.accept)
         bb.rejected.connect(self.reject)
         g.addWidget(bb, 3, 0, 1, 2)
@@ -155,9 +173,11 @@ class SpeedLimiterDialog(QDialog):
         g.addWidget(note, 1, 0, 1, 3)
         g.addWidget(self.on_startup, 2, 0, 1, 3)
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        primary(bb.button(QDialogButtonBox.Ok))
         bb.accepted.connect(self.accept)
         bb.rejected.connect(self.reject)
         g.addWidget(bb, 3, 0, 1, 3)
+        add_header(self, "options", "Speed Limiter settings", "Applies to all downloads while the limiter is on.")
 
     def accept(self):
         self.settings.speed_limit_kbps = self.kbps.value()
@@ -207,6 +227,7 @@ class ColumnsDialog(QDialog):
         lay.addLayout(w)
         lay.addWidget(separator())
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        primary(bb.button(QDialogButtonBox.Ok))
         bb.accepted.connect(self.accept)
         bb.rejected.connect(self.reject)
         lay.addWidget(bb)
@@ -262,7 +283,7 @@ class OptionsDialog(QDialog):
                            for c in settings.categories]
         self.server_limits = dict(settings.server_limits)
         self.setWindowTitle("LID options")
-        self.resize(dlu(268, 257).width() + 40, dlu(268, 257).height() + 60)
+        self.resize(720, 640)
         self.tabs = QTabWidget()
         self.tabs.addTab(self._general(), "General")
         self.tabs.addTab(self._file_types(), "File types")
@@ -270,9 +291,11 @@ class OptionsDialog(QDialog):
         self.tabs.addTab(self._downloads(), "Downloads")
         self.tabs.addTab(self._connection(), "Connection")
         self.tabs.addTab(self._proxy(), "Proxy / Socks")
+        self.tabs.addTab(self._appearance(), "Appearance")
         lay = QVBoxLayout(self)
         lay.addWidget(self.tabs)
         bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        primary(bb.button(QDialogButtonBox.Ok))
         bb.accepted.connect(self.accept)
         bb.rejected.connect(self.reject)
         lay.addWidget(bb)
@@ -322,20 +345,17 @@ class OptionsDialog(QDialog):
     def _file_types(self):
         w, lay = self._page("filetypes", "Downloaded file types")
         lay.addWidget(QLabel("Automatically start downloading the following file types:"))
-        self.types = QPlainTextEdit(self.settings.auto_capture_types)
-        self.types.setFixedHeight(dlu(0, 36).height() + 10)
+        self.types = TagInput(self.settings.auto_capture_types, "Add a file type…", extension_tag, "types")
         lay.addWidget(self.types)
-        row = QHBoxLayout()
-        row.addStretch(1)
+        meta = self.types.meta_row()
         default = QPushButton("Default")
-        default.clicked.connect(lambda: self.types.setPlainText(DEFAULT_FILE_TYPES))
-        row.addWidget(default)
-        lay.addLayout(row)
+        default.clicked.connect(lambda: self.types.set_values(DEFAULT_FILE_TYPES))
+        meta.layout().addWidget(default)
+        lay.addWidget(meta)
+        lay.addSpacing(6)
         lay.addWidget(QLabel("Don't start downloading automatically from the following sites:"))
-        self.no_sites = QPlainTextEdit(self.settings.no_auto_sites)
-        self.no_sites.setFixedHeight(dlu(0, 30).height() + 10)
+        self.no_sites = TagInput(self.settings.no_auto_sites, "Add a site, e.g. *.example.com", site_tag, "sites")
         lay.addWidget(self.no_sites)
-        lay.addWidget(QLabel("(separate names by spaces)"))
         lay.addStretch(1)
         return w
 
@@ -348,7 +368,7 @@ class OptionsDialog(QDialog):
         new.clicked.connect(self._new_category)
         edit.clicked.connect(self._edit_category)
         self.cat_types_label = QLabel()
-        self.cat_types = QLineEdit()
+        self.cat_types = TagInput([], "Add a type…", extension_tag, "types")
         self.cat_dir_label = QLabel()
         self.cat_dir = QLineEdit()
         browse = QPushButton("Browse")
@@ -395,7 +415,7 @@ class OptionsDialog(QDialog):
     def _store_category(self):
         if 0 <= self._cat_index < len(self.categories):
             c = self.categories[self._cat_index]
-            c.extensions = [e.lstrip(".").lower() for e in self.cat_types.text().split()]
+            c.extensions = self.cat_types.values()
             c.save_dir = self.cat_dir.text().strip() or c.save_dir
 
     def _show_category(self, index: int):
@@ -405,7 +425,7 @@ class OptionsDialog(QDialog):
             return
         c = self.categories[index]
         self.cat_types_label.setText(f'Automatically put in "{c.name}" category the following file types:')
-        self.cat_types.setText(" ".join(c.extensions))
+        self.cat_types.set_values(c.extensions)
         self.cat_dir_label.setText(f'Default download directory for "{c.name}" category')
         self.cat_dir.setText(c.save_dir)
 
@@ -546,6 +566,87 @@ class OptionsDialog(QDialog):
         lay.addStretch(1)
         return w
 
+    def _appearance(self):
+        w, lay = self._page("general", "Appearance")
+        s = self.settings
+        lay.addWidget(_caption("THEME"))
+        cards = QHBoxLayout()
+        self.theme_group = QButtonGroup(self)
+        for key in theme.THEMES:
+            card = _ThemeCard(key, self.theme_group)
+            card.radio.setChecked(key == s.theme)
+            cards.addWidget(card)
+        lay.addLayout(cards)
+        row = QHBoxLayout()
+        self.follow_system = QCheckBox("Follow the system light / dark setting")
+        self.follow_system.setChecked(s.follow_system)
+        self.dark_theme = QComboBox()
+        for key in theme.DARK_THEMES:
+            self.dark_theme.addItem(theme.TITLES[key], key)
+        self.dark_theme.setCurrentIndex(max(0, self.dark_theme.findData(s.dark_theme)))
+        self.follow_system.toggled.connect(self.dark_theme.setEnabled)
+        self.dark_theme.setEnabled(s.follow_system)
+        row.addWidget(self.follow_system)
+        row.addStretch(1)
+        row.addWidget(QLabel("When dark, use"))
+        row.addWidget(self.dark_theme)
+        lay.addLayout(row)
+        lay.addWidget(separator())
+        grid = QGridLayout()
+        self.density = _segmented([("Comfortable", "comfortable"), ("Compact", "compact")], s.density)
+        self.labels = _segmented([("Icons and labels", True), ("Icons only", False)], s.toolbar_labels)
+        grid.addWidget(QLabel("List density"), 0, 0)
+        grid.addWidget(self.density, 0, 1, Qt.AlignLeft)
+        grid.addWidget(QLabel("Toolbar"), 1, 0)
+        grid.addWidget(self.labels, 1, 1, Qt.AlignLeft)
+        self.list_font = s.list_font
+        self.font_label = QLabel()
+        self._show_font()
+        change, reset = QPushButton("Change..."), QToolButton()
+        reset.setText("Reset")
+        reset.setObjectName("ghost")
+        change.clicked.connect(self._choose_font)
+        reset.clicked.connect(lambda: (setattr(self, "list_font", ""), self._show_font()))
+        fr = QHBoxLayout()
+        fr.addWidget(self.font_label, 1)
+        fr.addWidget(change)
+        fr.addWidget(reset)
+        grid.addWidget(QLabel("List font"), 2, 0)
+        grid.addLayout(fr, 2, 1)
+        grid.setColumnMinimumWidth(0, 140)
+        grid.setColumnStretch(1, 1)
+        lay.addLayout(grid)
+        lay.addWidget(separator())
+        boxes = QGridLayout()
+        self.view_boxes = {}
+        for i, (key, text) in enumerate((("show_categories", "Show Categories panel"), ("show_details", "Show details pane (F9)"),
+                                          ("show_statusbar", "Show status bar"), ("tray_icon", "Show icon in system tray"),
+                                          ("close_to_tray", "Close button hides to tray"), ("start_minimized", "Start minimized to tray"))):
+            cb = QCheckBox(text)
+            cb.setChecked(getattr(s, key))
+            self.view_boxes[key] = cb
+            boxes.addWidget(cb, i // 2, i % 2)
+        lay.addLayout(boxes)
+        lay.addStretch(1)
+        return w
+
+    def _show_font(self):
+        f = QFont()
+        if not (self.list_font and f.fromString(self.list_font)):
+            f = self.font()
+            self.font_label.setText(f"System default · {f.pointSize()} pt")
+        else:
+            self.font_label.setText(f"{f.family()} · {f.pointSize()} pt")
+
+    def _choose_font(self):
+        f = QFont()
+        if not (self.list_font and f.fromString(self.list_font)):
+            f = self.font()
+        ok, font = QFontDialog.getFont(f, self)
+        if ok:
+            self.list_font = font.toString()
+            self._show_font()
+
     # -- apply
     def accept(self):
         self._store_category()
@@ -554,8 +655,8 @@ class OptionsDialog(QDialog):
         set_autostart(s.launch_on_startup)
         s.monitor_clipboard = self.clipboard.isChecked()
         s.browser_capture = self.browser_capture.isChecked()
-        s.auto_capture_types = " ".join(self.types.toPlainText().split())
-        s.no_auto_sites = " ".join(self.no_sites.toPlainText().split())
+        s.auto_capture_types = self.types.text()
+        s.no_auto_sites = self.no_sites.text()
         s.categories = self.categories
         s.temp_dir = self.temp_dir.text().strip() or s.temp_dir
         s.show_progress_dialog = self.show_progress.isChecked()
@@ -568,4 +669,103 @@ class OptionsDialog(QDialog):
         s.server_limits = self.server_limits
         s.retries = self.retries.value()
         s.proxy = self.proxy.text().strip() if self.use_proxy.isChecked() else ""
+        checked = self.theme_group.checkedButton()
+        if checked is not None:
+            s.theme = checked.property("theme")
+        s.follow_system = self.follow_system.isChecked()
+        s.dark_theme = self.dark_theme.currentData()
+        s.density = self.density.value()
+        s.toolbar_labels = self.labels.value()
+        s.list_font = self.list_font
+        for key, cb in self.view_boxes.items():
+            setattr(s, key, cb.isChecked())
         super().accept()
+
+
+def _caption(text: str) -> QLabel:
+    lab = QLabel(text)
+    lab.setObjectName("sectionTitle")
+    return lab
+
+
+class _Segmented(QFrame):
+    def __init__(self, items, current):
+        super().__init__()
+        self.setObjectName("segmented")
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(3, 3, 3, 3)
+        lay.setSpacing(0)
+        self.group = QButtonGroup(self)
+        for text, value in items:
+            b = QToolButton()
+            b.setObjectName("seg")
+            b.setText(text)
+            b.setCheckable(True)
+            b.setProperty("value", value)
+            b.setChecked(value == current)
+            self.group.addButton(b)
+            lay.addWidget(b)
+
+    def value(self):
+        b = self.group.checkedButton()
+        return b.property("value") if b else None
+
+
+def _segmented(items, current) -> _Segmented:
+    return _Segmented(items, current)
+
+
+class _ThemePreview(QWidget):
+    """A tiny drawing of the main window in a theme's colours."""
+
+    def __init__(self, key: str):
+        super().__init__()
+        self.key = key
+        self.setFixedHeight(78)
+
+    def paintEvent(self, _e):
+        c = theme.THEMES[self.key]
+        p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
+        r = self.rect().adjusted(0, 0, -1, -1)
+        path = QPainterPath()
+        path.addRoundedRect(r, 8, 8)
+        p.fillPath(path, QColor(c["pane"]))
+        p.setClipPath(path)
+        w, h = r.width(), r.height()
+        p.fillRect(0, 0, w, 16, QColor(c["win"]))
+        bar = lambda x, y, bw, bh, col: p.fillRect(x, y, bw, bh, QColor(col))  # noqa: E731
+        bar(6, 5, 22, 7, c["ac"])
+        bar(32, 5, 14, 7, c["track"])
+        bar(50, 5, 14, 7, c["track"])
+        side = int(w * .3)
+        p.fillRect(0, 16, side, h - 16, QColor(c["win"]))
+        bar(5, 22, side - 10, 6, c["acsel"])
+        bar(5, 32, int((side - 10) * .7), 6, c["track"])
+        bar(5, 42, int((side - 10) * .8), 6, c["track"])
+        x0 = side + 6
+        bar(x0, 22, w - x0 - 6, 7, c["acsel"])
+        bar(x0, 22, 2, 7, c["ac"])
+        bar(x0, 34, int((w - x0) * .4), 6, c["track"])
+        bar(x0 + int((w - x0) * .45), 34, int((w - x0) * .24), 6, c["ac"])
+        bar(x0, 44, int((w - x0) * .5), 6, c["track"])
+        bar(x0 + int((w - x0) * .55), 44, int((w - x0) * .2), 6, c["ok"])
+        p.setClipping(False)
+        p.setPen(QColor(c["line"]))
+        p.drawPath(path)
+
+
+class _ThemeCard(QFrame):
+    def __init__(self, key: str, group: QButtonGroup):
+        super().__init__()
+        self.setObjectName("panel")
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(8, 8, 8, 8)
+        lay.addWidget(_ThemePreview(key))
+        self.radio = QRadioButton(theme.TITLES[key])
+        self.radio.setProperty("theme", key)
+        group.addButton(self.radio)
+        lay.addWidget(self.radio)
+
+    def mousePressEvent(self, e):
+        self.radio.setChecked(True)

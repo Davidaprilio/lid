@@ -34,6 +34,7 @@ from ...core.manager import DownloadManager, QueueSchedule
 from ...core.models import MAIN_QUEUE, SYNC_QUEUE
 from ..icons import file_icon, icon
 from ..util import dlu, separator
+from ..widgets import primary
 
 DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
@@ -106,7 +107,8 @@ class ScheduleTab(QWidget):
         self.open_enabled = QCheckBox("Open the following file when done:")
         self.open_file = QLineEdit()
         browse = QPushButton("...")
-        browse.setFixedWidth(28)
+        browse.setObjectName("small")
+        browse.setFixedWidth(34)
         browse.clicked.connect(self._browse)
         g.addWidget(self.open_enabled, 11, 0, 1, 4)
         g.addWidget(self.open_file, 12, 0, 1, 3)
@@ -293,7 +295,7 @@ class SchedulerDialog(QDialog):
             buttons.addWidget(b)
         buttons.addSpacing(20)
         for text, slot in (("&Start now", self._start), ("S&top", self._stop)):
-            b = QPushButton(text)
+            b = primary(QPushButton(text)) if slot == self._start else QPushButton(text)
             b.clicked.connect(slot)
             buttons.addWidget(b)
         buttons.addStretch(1)

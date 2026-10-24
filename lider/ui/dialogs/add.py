@@ -41,6 +41,7 @@ from ...core.engine import filename_from_url, safe_filename
 from ...core.settings import Settings
 from ..icons import file_icon, icon
 from ..util import dlu
+from ..widgets import add_header, primary
 
 URL_RE = re.compile(r"^(https?|ftp)://\S+$", re.I)
 
@@ -94,7 +95,7 @@ class AddUrlDialog(QDialog):
         self.address.setCurrentText(url or clipboard_url())
         self.address.lineEdit().selectAll()
         self.auth = AuthBox()
-        ok = QPushButton("O&K")
+        ok = primary(QPushButton("O&K"))
         ok.setDefault(True)
         cancel = QPushButton("&Cancel")
         ok.clicked.connect(self.accept)
@@ -116,6 +117,7 @@ class AddUrlDialog(QDialog):
         grid.setColumnStretch(1, 1)
         self.address.currentTextChanged.connect(self._detect)
         self._detect(self.address.currentText())
+        add_header(self, "add-url", "Enter new address to download", "Paste a link. LID reads the file name and size next.")
 
     def _detect(self, text: str) -> None:
         youtube = media.is_youtube(text)
@@ -171,7 +173,8 @@ class FileInfoDialog(QDialog):
         self.category = QComboBox()
         self.category.addItems([c.name for c in settings.categories])
         add_cat = QPushButton("+")
-        add_cat.setFixedWidth(28)
+        add_cat.setObjectName("small")
+        add_cat.setFixedWidth(34)
         add_cat.setToolTip("Add category")
         add_cat.clicked.connect(self._add_category)
         self.save_as = QComboBox()
@@ -180,7 +183,8 @@ class FileInfoDialog(QDialog):
         self.save_as.setMinimumContentsLength(30)
         self.category.setMinimumWidth(dlu(116, 0).width())
         browse = QPushButton("...")
-        browse.setFixedWidth(28)
+        browse.setObjectName("small")
+        browse.setFixedWidth(34)
         browse.clicked.connect(self._browse)
         self.remember = QCheckBox()
         self.description = QLineEdit(description)
@@ -223,7 +227,7 @@ class FileInfoDialog(QDialog):
         top.addLayout(side)
 
         later = QPushButton("Download &Later")
-        start = QPushButton("&Start Download")
+        start = primary(QPushButton("&Start Download"))
         cancel = QPushButton("&Cancel")
         start.setDefault(True)
         later.clicked.connect(self._later)
@@ -249,8 +253,10 @@ class FileInfoDialog(QDialog):
             kind = media_kind if has_kind else media_info.variants[0].kind
             (self.kind_video if kind == "video" else self.kind_audio).setChecked(True)
             self._fill_quality(media_quality)
+        add_header(self, "folder-download", "Download File Info", filename)
 
     # -- YouTube variant picker (shown only for YouTube links)
+
     def _media_box(self, info: media.MediaInfo) -> QGroupBox:
         box = QGroupBox("YouTube video")
         g = QGridLayout(box)
@@ -376,7 +382,7 @@ class DuplicateDialog(QDialog):
             self.group.addButton(rb, i)
             lay.addWidget(rb)
         row = QHBoxLayout()
-        ok, cancel = QPushButton("OK"), QPushButton("Cancel")
+        ok, cancel = primary(QPushButton("OK")), QPushButton("Cancel")
         ok.clicked.connect(self.accept)
         cancel.clicked.connect(self.reject)
         row.addStretch(1)
@@ -387,6 +393,7 @@ class DuplicateDialog(QDialog):
         self.remember = QCheckBox("Remember my selection and don't show this dialog again.\n"
                                   "You can change it later in Options->Downloads.")
         lay.addWidget(self.remember)
+        add_header(self, "queue", "Duplicate download link", "This file is already in your download list.")
 
     def choice(self) -> str:
         return self.CHOICES[self.group.checkedId()][0]
@@ -455,7 +462,7 @@ class BatchDialog(QDialog):
         lay.addLayout(preview)
         buttons = QHBoxLayout()
         buttons.addStretch(1)
-        ok, cancel = QPushButton("OK"), QPushButton("Cancel")
+        ok, cancel = primary(QPushButton("OK")), QPushButton("Cancel")
         ok.clicked.connect(self.accept)
         cancel.clicked.connect(self.reject)
         buttons.addWidget(ok)
@@ -469,6 +476,7 @@ class BatchDialog(QDialog):
         self.address.currentTextChanged.connect(self._update)
         self.numbers.toggled.connect(self._update)
         self._update()
+        add_header(self, "add-url", "Batch download", "Add a numbered series of files with an asterisk wildcard, e.g. img*.jpg")
 
     def urls(self) -> list[str]:
         pattern = self.address.currentText().strip()
@@ -606,7 +614,7 @@ class LinksDialog(QDialog):
         right.addStretch(1)
         ok_row = QHBoxLayout()
         ok_row.addStretch(1)
-        ok, cancel = QPushButton("OK"), QPushButton("Cancel")
+        ok, cancel = primary(QPushButton("OK")), QPushButton("Cancel")
         ok.clicked.connect(self.accept)
         cancel.clicked.connect(self.reject)
         ok_row.addWidget(ok)
@@ -615,6 +623,7 @@ class LinksDialog(QDialog):
         bottom.addLayout(right, 1)
         lay.addLayout(bottom)
         self._fill()
+        add_header(self, "grabber", "Download All Links", f"{len(links)} links found")
 
     def _fill(self) -> None:
         self.tree.clear()

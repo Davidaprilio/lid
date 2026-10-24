@@ -124,12 +124,16 @@ QToolButton#primary:hover {{ background: {c['actx']}; }}
 QToolButton#ghost {{ font-weight: 600; }}
 QToolButton#chip {{ background: {c['acsel']}; color: {c['actx']}; border-radius: 15px; padding: 4px 10px; font-weight: 700; }}
 QToolButton#close {{ padding: 3px; border-radius: 6px; }}
+QFrame#segmented {{ background: {c['track']}; border-radius: 15px; }}
+QToolButton#seg {{ border-radius: 12px; padding: 4px 13px; color: {c['mu']}; font-weight: 600; }}
+QToolButton#seg:checked {{ background: {c['pane']}; color: {c['tx']}; }}
 
 QPushButton {{ background: {c['btn']}; border: 1px solid {c['line2']}; border-radius: 15px; padding: 6px 15px; min-height: 18px; font-weight: 600; }}
 QPushButton:hover {{ border-color: {c['ac']}; }}
-QPushButton:default {{ background: {c['ac']}; border-color: {c['ac']}; color: #FFFFFF; }}
-QPushButton:default:hover {{ background: {c['actx']}; }}
+QPushButton[primary="true"] {{ background: {c['ac']}; border-color: {c['ac']}; color: #FFFFFF; }}
+QPushButton[primary="true"]:hover {{ background: {c['actx']}; }}
 QPushButton:disabled {{ color: {c['fa']}; background: {c['win']}; border-color: {c['line']}; }}
+QPushButton#small {{ padding: 5px 0; border-radius: 10px; }}
 QPushButton::menu-indicator {{ image: url({a}/down.svg); width: 11px; subcontrol-position: right center; right: 8px; }}
 
 QLineEdit, QPlainTextEdit, QTextEdit, QSpinBox, QDoubleSpinBox, QComboBox, QDateEdit, QTimeEdit, QDateTimeEdit {{
@@ -138,8 +142,8 @@ QLineEdit, QPlainTextEdit, QTextEdit, QSpinBox, QDoubleSpinBox, QComboBox, QDate
 QLineEdit:focus, QPlainTextEdit:focus, QTextEdit:focus, QSpinBox:focus, QComboBox:focus, QDateEdit:focus, QTimeEdit:focus, QDateTimeEdit:focus {{
     border: 1px solid {c['ac']}; }}
 QLineEdit:disabled, QSpinBox:disabled, QComboBox:disabled, QTimeEdit:disabled, QDateEdit:disabled {{ color: {c['fa']}; background: {c['win']}; }}
-QComboBox::drop-down {{ border: none; width: 22px; }}
-QComboBox::down-arrow {{ image: url({a}/down.svg); width: 12px; height: 12px; }}
+QComboBox::drop-down, QDateEdit::drop-down, QDateTimeEdit::drop-down {{ border: none; width: 22px; }}
+QComboBox::down-arrow, QDateEdit::down-arrow, QDateTimeEdit::down-arrow {{ image: url({a}/down.svg); width: 12px; height: 12px; }}
 QComboBox QAbstractItemView {{ background: {c['pane']}; border: 1px solid {c['line2']}; border-radius: 8px; padding: 4px;
     selection-background-color: {c['acsel']}; selection-color: {c['actx']}; }}
 QSpinBox::up-button, QSpinBox::down-button, QTimeEdit::up-button, QTimeEdit::down-button, QDateEdit::up-button, QDateEdit::down-button {{

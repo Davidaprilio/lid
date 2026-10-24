@@ -7,6 +7,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
+from PySide6.QtCore import Qt  # noqa: E402
 from PySide6.QtWidgets import QApplication, QMenu, QMessageBox  # noqa: E402
 
 from lider.core.manager import DownloadManager  # noqa: E402
@@ -159,6 +160,46 @@ class MainWindowTests(unittest.TestCase):
         finally:
             QMessageBox.exec = orig
         self.assertNotIn(d.id, self.m.downloads)
+
+
+    def test_checked_rows_drive_start_stop_delete(self):
+        ids = [self.m.add(f"https://example.com/f{i}.zip", f"f{i}.zip").id for i in range(3)]
+        self.w.refresh_rows()
+        self.w.view.setCurrentIndex(self.w.model.index(1, 1))
+        self.assertEqual(self.w.target_ids(), self.w.selected_ids())  # nothing checked: the selection
+        self.w.model.set_checked([ids[0], ids[2]])
+        self.assertEqual(sorted(self.w.target_ids()), sorted([ids[0], ids[2]]))
+        self.assertEqual(self.w.model.check_state(), Qt.PartiallyChecked)
+        self.assertEqual(self.w.check_chip.text(), "2 checked")
+        self.w.model.toggle_all()
+        self.assertEqual(self.w.model.check_state(), Qt.Checked)
+        self.w.model.toggle_all()
+        self.assertEqual(self.w.checked_ids(), [])
+        index = self.w.model.index(0, 0)
+        self.assertTrue(self.w.model.setData(index, Qt.Checked.value, Qt.CheckStateRole))
+        self.assertEqual(self.w.checked_ids(), [self.w.model.rows[0].id])
+
+    def test_theme_choice_switches_palette(self):
+        from lider.ui import theme
+
+        self.w.choose_theme("dark")
+        self.assertEqual(theme.current(), "dark")
+        self.assertFalse(self.w.settings.follow_system)
+        self.w.choose_theme("ember")
+        self.assertEqual(theme.current(), "ember")
+
+
+class TagInputTests(unittest.TestCase):
+    def test_enter_comma_paste_and_backspace(self):
+        from lider.ui.widgets import TagInput, extension_tag
+
+        t = TagInput("AVI .mkv avi", normalize=extension_tag)
+        self.assertEqual(t.values(), ["avi", "mkv"])
+        t.edit.setText("MP4, ogg avi")
+        t.edit.commit.emit()
+        self.assertEqual(t.values(), ["avi", "mkv", "mp4", "ogg"])
+        t.edit.backspace_on_empty.emit()
+        self.assertEqual(t.text(), "avi mkv mp4")
 
 
 class BrowserDialogTests(unittest.TestCase):

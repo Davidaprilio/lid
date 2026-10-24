@@ -23,6 +23,7 @@ from ...core.manager import DownloadManager
 from ...core.models import Status
 from ..icons import file_icon
 from ..util import dlu, open_path, separator
+from ..widgets import primary
 
 
 class PropertiesDialog(QDialog):
@@ -99,7 +100,7 @@ class PropertiesDialog(QDialog):
         open_btn = QPushButton("Open")
         open_btn.setEnabled(d.status == Status.COMPLETE)
         open_btn.clicked.connect(lambda: open_path(d.path))
-        ok = QPushButton("OK")
+        ok = primary(QPushButton("OK"))
         ok.setDefault(True)
         ok.clicked.connect(self.accept)
         bottom.addWidget(open_btn)
