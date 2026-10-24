@@ -56,7 +56,7 @@ from .dialogs.options import CategoryDialog, ColumnsDialog, OptionsDialog, Speed
 from .dialogs.progress import CompleteDialog, ProgressDialog
 from .dialogs.properties import PropertiesDialog
 from .dialogs.scheduler import SchedulerDialog
-from .details import DetailsPane
+from .details import MIN_WIDTH as DETAILS_MIN_WIDTH, DetailsPane
 from .download_model import CHECK, ID_ROLE, SORT_KEYS, DownloadModel
 from . import theme
 from .icons import bind, category_icon, icon
@@ -405,25 +405,32 @@ class MainWindow(QMainWindow):
         header.setContextMenuPolicy(Qt.CustomContextMenu)
         header.customContextMenuRequested.connect(lambda _p: self.customize_columns())
         self.view.selectionModel().selectionChanged.connect(lambda *_: self.update_actions())
+        self.view.selectionModel().selectionChanged.connect(lambda *_: self._show_details())
         self.view.selectionModel().currentChanged.connect(lambda *_: self._show_details())
         self.apply_column_widths()
 
         self.details = DetailsPane(self.manager)
         self.details.closed.connect(lambda: self.set_details_visible(False))
+        self.details.open_window.connect(lambda i: self.show_progress(i, force=True))
         self.vsplit = QSplitter(Qt.Vertical)
         self.vsplit.addWidget(self.view)
         self.vsplit.addWidget(self.details)
         self.vsplit.setStretchFactor(0, 1)
-        self.vsplit.setSizes([420, 210])
+        self.vsplit.setObjectName("detailsSplit")
+        self.vsplit.setSizes([420, self.settings.details_height])
         self.vsplit.setChildrenCollapsible(False)
         rl.addWidget(self.vsplit)
-        self.details.setVisible(self.settings.show_details)
+        self.details.setVisible(False)  # until a row is highlighted
+        right.setMinimumWidth(DETAILS_MIN_WIDTH)  # the same whether the pane shows or not
 
+        self.cat_panel.setMinimumWidth(170)
         self.splitter = QSplitter()
+        self.splitter.setObjectName("sidebar")
         self.splitter.addWidget(self.cat_panel)
         self.splitter.addWidget(right)
         self.splitter.setStretchFactor(1, 1)
-        self.splitter.setSizes([236, 800])
+        self.splitter.setChildrenCollapsible(False)
+        self.splitter.setSizes([self.settings.sidebar_width, 800])
         self.setCentralWidget(self.splitter)
         self.cat_panel.setVisible(self.settings.show_categories)
         self.rebuild_tree()
@@ -987,8 +994,9 @@ class MainWindow(QMainWindow):
             self.handle_events(self.manager.start_queue(MAIN_QUEUE))
 
     # ------------------------------------------------------------------ download control
-    def show_progress(self, download_id: int):
-        if not self.settings.show_progress_dialog:
+    def show_progress(self, download_id: int, force: bool = False):
+        """The download's status window; ``force`` opens it even when Options turn it off."""
+        if not force and not self.settings.show_progress_dialog:
             return
         dlg = self.progress_dialogs.get(download_id)
         if dlg is None:
@@ -1003,7 +1011,7 @@ class MainWindow(QMainWindow):
         for i in ids:
             if self.manager.downloads[i].status != Status.COMPLETE and not self.manager.is_running(i):
                 self.manager.start(i)
-                if len(ids) == 1 and not self.details.isVisible():
+                if len(ids) == 1 and not self.settings.show_details:
                     self.show_progress(i)
         self.refresh_rows()
 
@@ -1189,10 +1197,8 @@ class MainWindow(QMainWindow):
 
     def set_details_visible(self, on: bool):
         self.settings.show_details = on
-        self.details.setVisible(on)
         self.a_details.setChecked(on)
-        if on:
-            self._show_details()
+        self._show_details()
 
     def set_statusbar_visible(self, on: bool):
         self.settings.show_statusbar = on
@@ -1201,12 +1207,17 @@ class MainWindow(QMainWindow):
         self.update_statusbar()
 
     def _show_details(self):
-        idx = self.view.currentIndex()
-        d_id = self.model.rows[idx.row()].id if idx.isValid() and idx.row() < len(self.model.rows) else None
-        if d_id is None and self.model.rows:
-            sel = self.selected_ids()
-            d_id = sel[0] if sel else None
-        self.details.show_download(d_id)
+        """The pane follows the highlighted row and steps aside while no row is highlighted
+        (checked rows do not count)."""
+        sel = self.selected_ids()
+        d_id = None
+        if sel and self.settings.show_details:
+            idx = self.view.currentIndex()
+            current = self.model.rows[idx.row()].id if idx.isValid() and idx.row() < len(self.model.rows) else None
+            self.details.setVisible(True)  # first, so the pane fills in right away
+            self.details.show_download(current if current in sel else sel[0])
+            d_id = self.details.download_id
+        self.details.setVisible(d_id is not None)
 
     def customize_columns(self):
         if ColumnsDialog(self.settings, self).exec():
@@ -1309,8 +1320,6 @@ class MainWindow(QMainWindow):
         self.refresh_rows()
         self.update_tree_counts()
         if self.details.isVisible():
-            if self.details.download_id is None:
-                self._show_details()
             self.details.refresh()
         self.update_statusbar()
         if self.tray:
@@ -1431,6 +1440,10 @@ class MainWindow(QMainWindow):
 
     def save_settings(self):
         self.settings.window_geometry = bytes(self.saveGeometry().toBase64()).decode()
+        if self.cat_panel.isVisible():
+            self.settings.sidebar_width = self.splitter.sizes()[0]
+        if self.details.isVisible():
+            self.settings.details_height = self.vsplit.sizes()[1]
         settings_mod.save(self.settings)
 
     def closeEvent(self, e):

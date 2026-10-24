@@ -202,6 +202,43 @@ class MainWindowTests(unittest.TestCase):
         self.assertEqual([a.text() for a in self.w.inline_menubar.actions()],
                          [a.text() for a in self.w.menuBar().actions()])
 
+    def test_details_pane_follows_the_highlighted_row(self):
+        from PySide6.QtCore import QItemSelectionModel
+
+        a = self.m.add("https://example.com/a.zip", "a.zip")
+        b = self.m.add("https://example.com/b.mp3", "b.mp3")
+        self.w.refresh_rows()
+        self.w.show()
+        app.processEvents()
+        self.assertFalse(self.w.details.isVisible())
+        self.w.model.set_checked([a.id])  # checking a row is not highlighting it
+        self.assertFalse(self.w.details.isVisible())
+        row = next(i for i, d in enumerate(self.w.model.rows) if d.id == b.id)
+        self.w.view.selectionModel().setCurrentIndex(self.w.model.index(row, 1),
+                                                     QItemSelectionModel.ClearAndSelect | QItemSelectionModel.Rows)
+        self.assertTrue(self.w.details.isVisible())
+        self.assertEqual(self.w.details.download_id, b.id)
+        self.w.details.open_window.emit(b.id)  # the button beside the close button
+        self.assertIn(b.id, self.w.progress_dialogs)
+        self.w.progress_dialogs[b.id].close()
+        self.w.set_details_visible(False)
+        self.assertFalse(self.w.details.isVisible())
+        self.w.set_details_visible(True)
+        self.assertTrue(self.w.details.isVisible())
+        self.w.view.clearSelection()
+        self.assertFalse(self.w.details.isVisible())
+
+    def test_sidebar_widens_and_its_width_is_kept(self):
+        self.w.resize(1320, 860)
+        self.w.show()
+        app.processEvents()
+        self.w.splitter.moveSplitter(560, 1)
+        self.assertEqual(self.w.splitter.sizes()[0], 560)
+        self.w.save_settings()
+        self.assertEqual(self.w.settings.sidebar_width, 560)
+        self.w.splitter.moveSplitter(5000, 1)  # the details pane keeps its own minimum
+        self.assertGreaterEqual(self.w.splitter.sizes()[1], 560)
+
 
 class TagInputTests(unittest.TestCase):
     def test_enter_comma_paste_and_backspace(self):

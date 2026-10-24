@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QProgressBar,
     QPushButton,
+    QSizePolicy,
     QSpinBox,
     QStackedWidget,
     QTabBar,
@@ -43,8 +44,13 @@ def _label(text: str = "", name: str = "", mono: bool = False, scale: float = 1.
     return lab
 
 
+MIN_WIDTH = 560  # the tabs, the file block and a usable progress column
+WIDE = 960  # from here the transfer rate / time left / ... column fits as well
+
+
 class DetailsPane(QFrame):
     closed = Signal()
+    open_window = Signal(int)  # the download's own status window
 
     def __init__(self, manager: DownloadManager, parent=None):
         super().__init__(parent)
@@ -59,9 +65,17 @@ class DetailsPane(QFrame):
             self.tabs.addTab(t)
         self.tabs.setDrawBase(False)
         top.addWidget(self.tabs)
-        top.addStretch(1)
         hint = _label("View → Details pane (F9)", "faint", scale=0.9)
-        top.addWidget(hint)
+        hint.setMinimumWidth(1)
+        hint.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
+        hint.setAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        top.addWidget(hint, 1)
+        pop = QToolButton()
+        pop.setObjectName("close")
+        bind(pop, "open-window")
+        pop.setToolTip("Open in a window")
+        pop.clicked.connect(lambda: self.download_id is not None and self.open_window.emit(self.download_id))
+        top.addWidget(pop)
         close = QToolButton()
         close.setObjectName("close")
         bind(close, "close")
@@ -77,6 +91,7 @@ class DetailsPane(QFrame):
         self.pages.addWidget(self._limiter_page())
         self.empty = _label("Select a download to see its progress, connections and speed limit here.", "faint")
         self.empty.setAlignment(Qt.AlignCenter)
+        self.empty.setWordWrap(True)
         self.pages.addWidget(self.empty)
         self.tabs.currentChanged.connect(lambda i: self.pages.setCurrentIndex(i) if self.download_id is not None else None)
 
@@ -86,7 +101,14 @@ class DetailsPane(QFrame):
         lay.addWidget(head)
         lay.addWidget(self.pages, 1)
         self.setMinimumHeight(170)
+        # Set outright so the stats column below does not hold the pane (and the
+        # sidebar next to it) at its full width; resizeEvent drops that column instead.
+        self.setMinimumWidth(MIN_WIDTH)
         self.show_download(None)
+
+    def resizeEvent(self, e):
+        super().resizeEvent(e)
+        self.stats_column.setVisible(e.size().width() >= WIDE)
 
     # -- pages
     def _status_page(self) -> QWidget:
@@ -146,7 +168,10 @@ class DetailsPane(QFrame):
         self.bar.setTextVisible(False)
         self.bar.setFixedHeight(10)
         mid.addWidget(self.bar)
-        mid.addWidget(_label("Start positions and download progress by connections", "muted", scale=0.92, bold=True))
+        self.of.setMinimumWidth(1)
+        caption = _label("Start positions and download progress by connections", "muted", scale=0.92, bold=True)
+        caption.setWordWrap(True)
+        mid.addWidget(caption)
         self.segments = SegmentBar()
         mid.addWidget(self.segments)
         mid.addStretch(1)
@@ -163,7 +188,7 @@ class DetailsPane(QFrame):
             v = _label(mono=True, bold=True)
             grid.addWidget(v, r * 2 + 1, c)
             self.stats[key] = v
-        gw = QWidget()
+        self.stats_column = gw = QWidget()
         gw.setLayout(grid)
         gw.setFixedWidth(330)
         lay.addWidget(gw, 0, Qt.AlignTop)

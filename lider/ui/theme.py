@@ -230,6 +230,10 @@ QStatusBar::item {{ border: none; }}
 QStatusBar QLabel {{ color: {c['mu']}; padding: 0 8px; }}
 
 QLabel#sectionTitle {{ color: {c['fa']}; font-weight: 700; letter-spacing: 1px; }}
+QSplitter#sidebar::handle {{ width: 6px; background: {c['win']}; border-right: 1px solid {c['line']}; }}
+QSplitter#sidebar::handle:hover {{ border-right: 2px solid {c['ac']}; }}
+QSplitter#detailsSplit::handle {{ height: 6px; background: {c['pane']}; border-top: 1px solid {c['line']}; }}
+QSplitter#detailsSplit::handle:hover {{ border-top: 2px solid {c['ac']}; }}
 QLabel#muted {{ color: {c['mu']}; }}
 QLabel#faint {{ color: {c['fa']}; }}
 QLabel#dialogTitle {{ font-weight: 700; }}

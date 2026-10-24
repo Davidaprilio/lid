@@ -155,6 +155,8 @@ class Settings:
     sort_key: str = "date_added"
     sort_desc: bool = False
     window_geometry: str = ""
+    sidebar_width: int = 236
+    details_height: int = 210
     # Search (last query and options)
     search_flags: int = 0x04
     search_string: str = ""
