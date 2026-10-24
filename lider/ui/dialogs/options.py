@@ -599,6 +599,15 @@ class OptionsDialog(QDialog):
         grid.addWidget(self.density, 0, 1, Qt.AlignLeft)
         grid.addWidget(QLabel("Toolbar"), 1, 0)
         grid.addWidget(self.labels, 1, 1, Qt.AlignLeft)
+        self.menubar = _segmented([("Native", "native"), ("In window", "custom"), ("Both", "both")], s.menubar)
+        mb_row = QHBoxLayout()
+        mb_row.addWidget(self.menubar)
+        hint = QLabel("Native uses the desktop's global menu when it has one" if theme.global_menu_available()
+                      else "No global menu on this desktop: Native shows the menu in the window")
+        hint.setObjectName("faint")
+        mb_row.addWidget(hint, 1)
+        grid.addWidget(QLabel("Menu bar"), 3, 0)
+        grid.addLayout(mb_row, 3, 1)
         self.list_font = s.list_font
         self.font_label = QLabel()
         self._show_font()
@@ -676,6 +685,7 @@ class OptionsDialog(QDialog):
         s.dark_theme = self.dark_theme.currentData()
         s.density = self.density.value()
         s.toolbar_labels = self.labels.value()
+        s.menubar = self.menubar.value()
         s.list_font = self.list_font
         for key, cb in self.view_boxes.items():
             setattr(s, key, cb.isChecked())

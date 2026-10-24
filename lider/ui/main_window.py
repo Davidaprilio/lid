@@ -21,6 +21,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
     QMenu,
+    QMenuBar,
     QMessageBox,
     QSizePolicy,
     QSplitter,
@@ -180,6 +181,13 @@ class MainWindow(QMainWindow):
         self.a_details.setChecked(self.settings.show_details)
         self.a_statusbar = A("Status &bar", lambda on: self.set_statusbar_visible(on), checkable=True)
         self.a_statusbar.setChecked(self.settings.show_statusbar)
+        self.menubar_group = QActionGroup(self)
+        self.menubar_actions = {}
+        for key, text in (("native", "&Native (desktop menu)"), ("custom", "In the &window"), ("both", "&Both")):
+            a = A(text, partial(self.set_menubar_mode, key), checkable=True)
+            a.setChecked(key == self.settings.menubar)
+            self.menubar_group.addAction(a)
+            self.menubar_actions[key] = a
         self.a_labels = A("Icons and &labels", lambda: self.set_toolbar_labels(True), checkable=True)
         self.a_icons_only = A("&Icons only", lambda: self.set_toolbar_labels(False), checkable=True)
         g2 = QActionGroup(self)
@@ -249,6 +257,8 @@ class MainWindow(QMainWindow):
         arrange.addActions(self.arrange_actions)
         tb = view.addMenu("&Toolbar")
         tb.addActions([self.a_labels, self.a_icons_only])
+        mbm = view.addMenu("&Menu bar")
+        mbm.addActions(list(self.menubar_actions.values()))
         view.addAction(self.a_columns)
         themes = view.addMenu("T&heme")
         themes.addAction(self.theme_actions["system"])
@@ -259,6 +269,12 @@ class MainWindow(QMainWindow):
 
         help_menu = mb.addMenu("&Help")
         help_menu.addAction(self.a_about)
+
+        # The in-window copy used by "custom" and "both": the same menus in a plain QMenuBar.
+        self.inline_menubar = QMenuBar()
+        self.inline_menubar.setNativeMenuBar(False)
+        for menu in (tasks, file, dl, view, help_menu):
+            self.inline_menubar.addMenu(menu)
 
     def _tool(self, action: QAction | None, text: str, name: str, icon_name: str | None = None) -> QToolButton:
         b = QToolButton()
@@ -275,6 +291,13 @@ class MainWindow(QMainWindow):
         return b
 
     def _build_toolbar(self):
+        self.menu_toolbar = QToolBar("Menu bar")
+        self.menu_toolbar.setObjectName("menubar")
+        self.menu_toolbar.setMovable(False)
+        self.menu_toolbar.toggleViewAction().setVisible(False)
+        self._menubar_action = self.menu_toolbar.addWidget(self.inline_menubar)
+        self.addToolBar(self.menu_toolbar)
+        self.addToolBarBreak()
         self.toolbar = tb = QToolBar("Toolbar")
         tb.setObjectName("toolbar")
         tb.setMovable(False)
@@ -314,6 +337,7 @@ class MainWindow(QMainWindow):
             tb.addWidget(b)
         self._toolbar_buttons = [add, start, stop, delete, options, sched, grab]
         self.set_toolbar_labels(self.settings.toolbar_labels)
+        self.set_menubar_mode(self.settings.menubar)
 
     def _build_central(self):
         # -- left: "Categories" group with a close button
@@ -1112,6 +1136,7 @@ class MainWindow(QMainWindow):
         s = self.settings
         self.apply_theme()
         self.set_toolbar_labels(s.toolbar_labels)
+        self.set_menubar_mode(s.menubar)
         self.toggle_categories(not s.show_categories)
         self.set_details_visible(s.show_details)
         self.set_statusbar_visible(s.show_statusbar)
@@ -1149,6 +1174,22 @@ class MainWindow(QMainWindow):
             primary = b.objectName() == "primary"
             b.setToolButtonStyle(Qt.ToolButtonTextBesideIcon if on or primary else Qt.ToolButtonIconOnly)
         (self.a_labels if on else self.a_icons_only).setChecked(True)
+
+    def set_menubar_mode(self, mode: str):
+        """native: the desktop's global menu (Qt falls back to the window when there is none);
+        custom: a menu bar in the window only; both: the global menu and the window."""
+        if mode not in self.menubar_actions:
+            mode = "native"
+        self.settings.menubar = mode
+        global_menu = theme.global_menu_available()
+        self.menuBar().setNativeMenuBar(mode != "custom")
+        self.menuBar().setVisible(mode != "custom")
+        inline = mode == "custom" or (mode == "both" and global_menu)
+        self.menu_toolbar.setVisible(inline)
+        # Qt hides every new QMenuBar while a global menu is around, even one set to non-native; in a
+        # toolbar that hides the widget's action, which is what decides whether the widget shows.
+        self._menubar_action.setVisible(inline)
+        self.menubar_actions[mode].setChecked(True)
 
     def set_details_visible(self, on: bool):
         self.settings.show_details = on

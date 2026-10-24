@@ -189,6 +189,20 @@ class MainWindowTests(unittest.TestCase):
         self.assertEqual(theme.current(), "ember")
 
 
+    def test_menu_bar_modes(self):
+        from lider.ui import theme
+
+        self.w.set_menubar_mode("custom")
+        self.assertFalse(self.w.menuBar().isNativeMenuBar())
+        self.assertTrue(self.w._menubar_action.isVisible())
+        self.w.set_menubar_mode("native")  # isNativeMenuBar() depends on the platform, so only the window side is checked
+        self.assertFalse(self.w._menubar_action.isVisible())
+        self.w.set_menubar_mode("both")
+        self.assertEqual(self.w._menubar_action.isVisible(), theme.global_menu_available())
+        self.assertEqual([a.text() for a in self.w.inline_menubar.actions()],
+                         [a.text() for a in self.w.menuBar().actions()])
+
+
 class TagInputTests(unittest.TestCase):
     def test_enter_comma_paste_and_backspace(self):
         from lider.ui.widgets import TagInput, extension_tag

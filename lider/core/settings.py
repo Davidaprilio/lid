@@ -144,6 +144,7 @@ class Settings:
     dark_theme: str = "ember-dark"  # the theme used when following a dark system
     density: str = "comfortable"  # comfortable | compact
     toolbar_labels: bool = True
+    menubar: str = "native"  # native (desktop global menu when there is one) | custom (in the window) | both
     show_categories: bool = True
     show_details: bool = True
     show_statusbar: bool = True

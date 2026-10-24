@@ -58,6 +58,19 @@ def system_is_dark() -> bool:
     return hasattr(hints, "colorScheme") and hints.colorScheme() == Qt.ColorScheme.Dark
 
 
+def global_menu_available() -> bool:
+    """True when the desktop shows application menus in a global menu (KDE, Unity and others)."""
+    try:
+        from PySide6.QtDBus import QDBusConnection
+    except ImportError:
+        return False
+    bus = QDBusConnection.sessionBus()
+    if not bus.isConnected():
+        return False
+    reply = bus.interface().isServiceRegistered("com.canonical.AppMenu.Registrar")
+    return bool(reply.value() if hasattr(reply, "value") else reply)
+
+
 def resolve(settings) -> str:
     """The theme to use now: the chosen one, or the light/dark pair when following the system."""
     if settings.follow_system:
@@ -98,6 +111,8 @@ QToolTip {{ background: {c['pane']}; color: {c['tx']}; border: 1px solid {c['lin
 QMenuBar {{ background: {c['win']}; padding: 2px 4px; }}
 QMenuBar::item {{ padding: 5px 10px; border-radius: 6px; background: transparent; }}
 QMenuBar::item:selected {{ background: {c['acsel']}; color: {c['actx']}; }}
+QToolBar#menubar {{ background: {c['win']}; border: none; padding: 2px 4px 0; spacing: 0; }}
+QToolBar#menubar QMenuBar {{ background: transparent; }}
 QMenu {{ background: {c['pane']}; border: 1px solid {c['line2']}; border-radius: 10px; padding: 6px; }}
 QMenu::item {{ padding: 6px 28px 6px 12px; border-radius: 7px; }}
 QMenu::item:selected {{ background: {c['acsel']}; color: {c['actx']}; }}
