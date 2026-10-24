@@ -1,0 +1,294 @@
+"""Details pane under the download list: status, connections and speed limiter of the current download."""
+
+from __future__ import annotations
+
+from PySide6.QtCore import Qt, Signal
+from PySide6.QtGui import QFont
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QFrame,
+    QGridLayout,
+    QHBoxLayout,
+    QLabel,
+    QProgressBar,
+    QPushButton,
+    QSpinBox,
+    QStackedWidget,
+    QTabBar,
+    QToolButton,
+    QTreeWidget,
+    QTreeWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
+
+from ..core import fmt
+from ..core.manager import DownloadManager
+from ..core.models import Status
+from .dialogs.progress import SegmentBar
+from .icons import bind, category_icon, icon
+from .util import open_folder, open_path
+from .widgets import mono_font
+
+
+def _label(text: str = "", name: str = "", mono: bool = False, scale: float = 1.0, bold: bool = False) -> QLabel:
+    lab = QLabel(text)
+    if name:
+        lab.setObjectName(name)
+    f = mono_font(lab.font()) if mono else QFont(lab.font())
+    if scale != 1.0:
+        f.setPointSizeF(lab.font().pointSizeF() * scale)
+    f.setBold(bold)
+    lab.setFont(f)
+    return lab
+
+
+class DetailsPane(QFrame):
+    closed = Signal()
+
+    def __init__(self, manager: DownloadManager, parent=None):
+        super().__init__(parent)
+        self.setObjectName("details")
+        self.manager = manager
+        self.download_id: int | None = None
+
+        top = QHBoxLayout()
+        top.setContentsMargins(8, 0, 8, 0)
+        self.tabs = QTabBar()
+        for t in ("Download status", "Connections", "Speed Limiter"):
+            self.tabs.addTab(t)
+        self.tabs.setDrawBase(False)
+        top.addWidget(self.tabs)
+        top.addStretch(1)
+        hint = _label("View → Details pane (F9)", "faint", scale=0.9)
+        top.addWidget(hint)
+        close = QToolButton()
+        close.setObjectName("close")
+        bind(close, "close")
+        close.setToolTip("Hide the details pane")
+        close.clicked.connect(self.closed.emit)
+        top.addWidget(close)
+        head = QWidget()
+        head.setLayout(top)
+
+        self.pages = QStackedWidget()
+        self.pages.addWidget(self._status_page())
+        self.pages.addWidget(self._connections_page())
+        self.pages.addWidget(self._limiter_page())
+        self.empty = _label("Select a download to see its progress, connections and speed limit here.", "faint")
+        self.empty.setAlignment(Qt.AlignCenter)
+        self.pages.addWidget(self.empty)
+        self.tabs.currentChanged.connect(lambda i: self.pages.setCurrentIndex(i) if self.download_id is not None else None)
+
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+        lay.addWidget(head)
+        lay.addWidget(self.pages, 1)
+        self.setMinimumHeight(170)
+        self.show_download(None)
+
+    # -- pages
+    def _status_page(self) -> QWidget:
+        w = QWidget()
+        lay = QHBoxLayout(w)
+        lay.setContentsMargins(18, 12, 18, 12)
+        lay.setSpacing(22)
+
+        left = QHBoxLayout()
+        left.setSpacing(12)
+        tile = QFrame()
+        tile.setObjectName("tile")
+        tile.setFixedSize(52, 52)
+        tl = QVBoxLayout(tile)
+        tl.setContentsMargins(0, 0, 0, 0)
+        self.pic = QLabel()
+        self.pic.setAlignment(Qt.AlignCenter)
+        tl.addWidget(self.pic)
+        left.addWidget(tile, 0, Qt.AlignTop)
+        info = QVBoxLayout()
+        info.setSpacing(3)
+        self.name = _label(bold=True)
+        self.url = _label(name="link", mono=True, scale=0.9)
+        self.state = _label(name="muted", scale=0.92)
+        for lab in (self.name, self.url, self.state):
+            lab.setMinimumWidth(1)
+            info.addWidget(lab)
+        buttons = QHBoxLayout()
+        buttons.setSpacing(6)
+        self.pause = QPushButton("Pause")
+        self.pause.clicked.connect(self._pause_resume)
+        self.open_folder = QPushButton("Open folder")
+        self.open_folder.clicked.connect(self._open_folder)
+        buttons.addWidget(self.pause)
+        buttons.addWidget(self.open_folder)
+        buttons.addStretch(1)
+        info.addSpacing(6)
+        info.addLayout(buttons)
+        info.addStretch(1)
+        left.addLayout(info, 1)
+        lw = QWidget()
+        lw.setLayout(left)
+        lw.setFixedWidth(300)
+        lay.addWidget(lw)
+
+        mid = QVBoxLayout()
+        mid.setSpacing(8)
+        row = QHBoxLayout()
+        self.pct = _label(mono=True, scale=1.8, bold=True, name="bigNumber")
+        self.of = _label(name="muted", scale=0.95)
+        row.addWidget(self.pct)
+        row.addWidget(self.of, 0, Qt.AlignBottom)
+        row.addStretch(1)
+        mid.addLayout(row)
+        self.bar = QProgressBar()
+        self.bar.setRange(0, 1000)
+        self.bar.setTextVisible(False)
+        self.bar.setFixedHeight(10)
+        mid.addWidget(self.bar)
+        mid.addWidget(_label("Start positions and download progress by connections", "muted", scale=0.92, bold=True))
+        self.segments = SegmentBar()
+        mid.addWidget(self.segments)
+        mid.addStretch(1)
+        lay.addLayout(mid, 1)
+
+        grid = QGridLayout()
+        grid.setHorizontalSpacing(22)
+        grid.setVerticalSpacing(4)
+        self.stats = {}
+        for i, (key, title) in enumerate((("rate", "TRANSFER RATE"), ("left", "TIME LEFT"), ("done", "DOWNLOADED"),
+                                          ("conns", "CONNECTIONS"), ("resume", "RESUME"))):
+            r, c = divmod(i, 2)
+            grid.addWidget(_label(title, "faint", scale=0.82, bold=True), r * 2, c)
+            v = _label(mono=True, bold=True)
+            grid.addWidget(v, r * 2 + 1, c)
+            self.stats[key] = v
+        gw = QWidget()
+        gw.setLayout(grid)
+        gw.setFixedWidth(330)
+        lay.addWidget(gw, 0, Qt.AlignTop)
+        return w
+
+    def _connections_page(self) -> QWidget:
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(14, 10, 14, 10)
+        self.conns = QTreeWidget()
+        self.conns.setHeaderLabels(["N.", "DOWNLOADED", "SPEED", "INFO"])
+        self.conns.setRootIsDecorated(False)
+        self.conns.setAlternatingRowColors(True)
+        for col, width in ((0, 50), (1, 120), (2, 110)):
+            self.conns.setColumnWidth(col, width)
+        lay.addWidget(self.conns)
+        return w
+
+    def _limiter_page(self) -> QWidget:
+        w = QWidget()
+        lay = QVBoxLayout(w)
+        lay.setContentsMargins(18, 14, 18, 14)
+        self.use_limit = QCheckBox("Use Speed Limiter for this download")
+        row = QHBoxLayout()
+        row.addWidget(QLabel("Maximum download speed:"))
+        self.limit = QSpinBox()
+        self.limit.setRange(1, 10_000_000)
+        self.limit.setMinimumWidth(110)
+        row.addWidget(self.limit)
+        row.addWidget(QLabel("KBytes/sec"))
+        row.addStretch(1)
+        lay.addWidget(self.use_limit)
+        lay.addLayout(row)
+        lay.addStretch(1)
+        self.use_limit.toggled.connect(self._apply_limit)
+        self.limit.valueChanged.connect(self._apply_limit)
+        return w
+
+    # -- behaviour
+    def show_download(self, download_id: int | None) -> None:
+        if download_id is not None and download_id not in self.manager.downloads:
+            download_id = None
+        changed = download_id != self.download_id
+        self.download_id = download_id
+        if download_id is None:
+            self.pages.setCurrentWidget(self.empty)
+            return
+        if changed:
+            d = self.manager.downloads[download_id]
+            self.pic.setPixmap(icon(category_icon(d.category)).pixmap(30, 30))
+            for wdg in (self.use_limit, self.limit):
+                wdg.blockSignals(True)
+            self.use_limit.setChecked(d.speed_limit_kbps > 0)
+            self.limit.setValue(d.speed_limit_kbps or self.manager.settings.speed_limit_kbps)
+            for wdg in (self.use_limit, self.limit):
+                wdg.blockSignals(False)
+            self.pages.setCurrentIndex(self.tabs.currentIndex())
+        self.refresh()
+
+    def refresh(self) -> None:
+        if self.download_id is None or self.download_id not in self.manager.downloads:
+            self.show_download(None)
+            return
+        if not self.isVisible():
+            return
+        d = self.manager.downloads[self.download_id]
+        task = self.manager.task(d.id)
+        running = self.manager.is_running(d.id)
+        snap = task.snapshot() if task else {"segments": d.segments, "connections": [], "rate": 0.0, "time_left": -1}
+        self.name.setText(self._elide(self.name, d.filename))
+        self.url.setText(self._elide(self.url, d.url))
+        self.url.setToolTip(d.url)
+        state = {Status.COMPLETE: "Complete", Status.ERROR: f"Error: {d.error}", Status.PAUSED: "Paused",
+                 Status.ASSEMBLING: "Assembling…", Status.CONNECTING: "Connecting…"}.get(d.status)
+        if state is None:
+            state = "Receiving data…" if running else ("Queued" if not d.downloaded else "Paused")
+        self.state.setText(self._elide(self.state, f"{state} · {d.category}"))
+        self.pause.setText("Pause" if running else "Resume")
+        self.pause.setEnabled(d.status != Status.COMPLETE)
+        self.pct.setText(f"{d.progress * 100:.1f}%" if d.size > 0 else fmt.size(d.downloaded))
+        self.of.setText(f"{fmt.size(d.downloaded)} of {fmt.size(d.size)}" if d.size > 0 else "")
+        self.bar.setValue(int(d.progress * 1000))
+        self.segments.set_segments(d.size, snap["segments"])
+        conns = snap["connections"]
+        alive = sum(1 for c in conns if c[3])
+        finished = sum(1 for s in snap["segments"] if s.end >= 0 and s.pos >= s.end)
+        self.stats["rate"].setText(fmt.rate(snap["rate"]) if running else "—")
+        self.stats["left"].setText(fmt.duration(snap["time_left"]) if running and snap["time_left"] >= 0 else "—")
+        self.stats["done"].setText(f"{fmt.size(d.downloaded)} / {fmt.size(d.size)}" if d.size > 0 else fmt.size(d.downloaded))
+        self.stats["conns"].setText(f"{alive} active · {finished} done" if conns or finished else "—")
+        self.stats["resume"].setText({True: "Yes", False: "No"}.get(d.resumable, "Unknown"))
+        while self.conns.topLevelItemCount() > len(conns):
+            self.conns.takeTopLevelItem(self.conns.topLevelItemCount() - 1)
+        for i, (n, received, info, is_alive, conn_rate) in enumerate(conns):
+            item = self.conns.topLevelItem(i) or QTreeWidgetItem(self.conns)
+            item.setText(0, str(n))
+            item.setText(1, fmt.size(received))
+            item.setText(2, fmt.rate(conn_rate) if is_alive and running else "")
+            item.setText(3, info if is_alive or running else "")
+
+    @staticmethod
+    def _elide(label: QLabel, text: str) -> str:
+        width = max(80, label.width())
+        return label.fontMetrics().elidedText(text, Qt.ElideMiddle, width)
+
+    def _pause_resume(self) -> None:
+        if self.download_id is None:
+            return
+        if self.manager.is_running(self.download_id):
+            self.manager.stop(self.download_id)
+        else:
+            self.manager.start(self.download_id)
+        self.refresh()
+
+    def _open_folder(self) -> None:
+        if self.download_id is None:
+            return
+        d = self.manager.downloads[self.download_id]
+        open_folder(d.path) if d.status == Status.COMPLETE else open_path(d.save_dir)
+
+    def _apply_limit(self) -> None:
+        if self.download_id is None:
+            return
+        kbps = self.limit.value() if self.use_limit.isChecked() else 0
+        task = self.manager.task(self.download_id)
+        if task:
+            task.set_speed_limit(kbps)
+        self.manager.downloads[self.download_id].speed_limit_kbps = kbps

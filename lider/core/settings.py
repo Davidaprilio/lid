@@ -27,12 +27,12 @@ _DEFAULT_CATEGORIES = [
 
 # (key, title, visible by default, width) in the default column order.
 DEFAULT_COLUMNS = [
-    ("queue", "Q", True, 24),
-    ("filename", "File Name", True, 260),
-    ("size", "Size", True, 80),
-    ("status", "Status", True, 90),
-    ("time_left", "Time left", True, 90),
-    ("rate", "Transfer rate", True, 100),
+    ("queue", "Q", True, 34),
+    ("filename", "File Name", True, 280),
+    ("size", "Size", True, 92),
+    ("status", "Status", True, 180),
+    ("time_left", "Time left", True, 100),
+    ("rate", "Transfer rate", True, 120),
     ("last_try", "Last Try Date", True, 130),
     ("description", "Description", True, 200),
     ("date_added", "Date Added", False, 130),
@@ -137,11 +137,19 @@ class Settings:
     speed_limiter_on: bool = False
     speed_limit_kbps: int = 200
     speed_limiter_on_startup: bool = False
-    # View
+    # View / Options -> Appearance
     columns: list[list] = field(default_factory=lambda: [[k, v, w] for k, _, v, w in DEFAULT_COLUMNS])
-    toolbar_large: bool = True
+    theme: str = "ember"  # ember | ember-dark | dark, used when not following the system
+    follow_system: bool = True
+    dark_theme: str = "ember-dark"  # the theme used when following a dark system
+    density: str = "comfortable"  # comfortable | compact
+    toolbar_labels: bool = True
     show_categories: bool = True
-    dark_mode: bool = False
+    show_details: bool = True
+    show_statusbar: bool = True
+    tray_icon: bool = True
+    close_to_tray: bool = True
+    start_minimized: bool = False
     list_font: str = ""
     sort_key: str = "date_added"
     sort_desc: bool = False
@@ -173,6 +181,11 @@ class Settings:
 def _from_dict(d: dict) -> Settings:
     s = Settings()
     names = {f.name for f in fields(Settings)}
+    # Settings written before the themes existed.
+    if "theme" not in d and d.get("dark_mode"):
+        d = {**d, "theme": "ember-dark", "follow_system": False}
+    if "toolbar_labels" not in d and "toolbar_large" in d:
+        d = {**d, "toolbar_labels": bool(d["toolbar_large"])}
     for k, v in d.items():
         if k not in names:
             continue

@@ -1,0 +1,446 @@
+"""Widgets and delegates of the Ember look: tag input, check-all header, status pills, tree badges."""
+
+from __future__ import annotations
+
+from typing import Callable
+
+from PySide6.QtCore import QEvent, QPoint, QRect, QRectF, QSize, Qt, Signal
+from PySide6.QtGui import QColor, QFont, QFontDatabase, QFontMetrics, QPainter, QPainterPath, QPen
+from PySide6.QtWidgets import (
+    QFrame,
+    QHBoxLayout,
+    QHeaderView,
+    QLabel,
+    QLayout,
+    QLineEdit,
+    QSizePolicy,
+    QStyle,
+    QStyledItemDelegate,
+    QStyleOptionViewItem,
+    QToolButton,
+    QVBoxLayout,
+    QWidget,
+    QWidgetItem,
+)
+
+from . import theme
+from .icons import icon
+
+STATUS_ROLE = Qt.UserRole + 10  # (kind, progress 0..1, text); kind: run | pause | queue | done | error | ""
+COUNT_ROLE = Qt.UserRole + 11  # number shown as a badge in the Categories tree
+
+
+def mono_font(base: QFont | None = None) -> QFont:
+    f = QFontDatabase.systemFont(QFontDatabase.FixedFont)
+    if base is not None:
+        f.setPointSizeF(base.pointSizeF() * 0.95)
+    return f
+
+
+def _c(name: str) -> QColor:
+    return QColor(theme.colors()[name])
+
+
+def _alpha(col: QColor, a: int) -> QColor:
+    col = QColor(col)
+    col.setAlpha(a)
+    return col
+
+
+# ---------------------------------------------------------------- dialog header
+def dialog_header(icon_name: str, title: str, subtitle: str = "") -> QWidget:
+    """Icon, bold title and a muted line under it; sits at the top of a dialog."""
+    w = QWidget()
+    lay = QHBoxLayout(w)
+    lay.setContentsMargins(0, 0, 0, 6)
+    lay.setSpacing(12)
+    pic = QLabel()
+    pic.setPixmap(icon(icon_name).pixmap(30, 30))
+    lay.addWidget(pic, 0, Qt.AlignTop)
+    text = QVBoxLayout()
+    text.setSpacing(1)
+    t = QLabel(title)
+    t.setObjectName("dialogTitle")
+    f = QFont(t.font())
+    f.setPointSizeF(f.pointSizeF() * 1.15)
+    f.setBold(True)
+    t.setFont(f)
+    text.addWidget(t)
+    if subtitle:
+        s = QLabel(subtitle)
+        s.setObjectName("muted")
+        s.setWordWrap(True)
+        text.addWidget(s)
+    lay.addLayout(text, 1)
+    return w
+
+
+# ---------------------------------------------------------------- tag input
+class FlowLayout(QLayout):
+    """Lays children left to right and wraps them onto new lines."""
+
+    def __init__(self, parent=None, spacing: int = 6):
+        super().__init__(parent)
+        self._items: list = []
+        self._spacing = spacing
+        self.setContentsMargins(8, 8, 8, 8)
+
+    def addItem(self, item):
+        self._items.append(item)
+
+    def insertWidget(self, index: int, w: QWidget) -> None:
+        self.addChildWidget(w)
+        self._items.insert(index, QWidgetItem(w))
+        self.invalidate()
+
+    def count(self):
+        return len(self._items)
+
+    def itemAt(self, i):
+        return self._items[i] if 0 <= i < len(self._items) else None
+
+    def takeAt(self, i):
+        return self._items.pop(i) if 0 <= i < len(self._items) else None
+
+    def expandingDirections(self):
+        return Qt.Orientations(0)
+
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, width):
+        return self._do_layout(QRect(0, 0, width, 0), True)
+
+    def setGeometry(self, rect):
+        super().setGeometry(rect)
+        self._do_layout(rect, False)
+
+    def sizeHint(self):
+        return self.minimumSize()
+
+    def minimumSize(self):
+        s = QSize()
+        for it in self._items:
+            s = s.expandedTo(it.minimumSize())
+        m = self.contentsMargins()
+        return s + QSize(m.left() + m.right(), m.top() + m.bottom())
+
+    def _do_layout(self, rect: QRect, test: bool) -> int:
+        m = self.contentsMargins()
+        r = rect.adjusted(m.left(), m.top(), -m.right(), -m.bottom())
+        x, y, line_h = r.x(), r.y(), 0
+        for it in self._items:
+            hint = it.sizeHint()
+            if x + hint.width() > r.right() + 1 and line_h > 0:
+                x, y, line_h = r.x(), y + line_h + self._spacing, 0
+            if not test:
+                it.setGeometry(QRect(QPoint(x, y), hint))
+            x += hint.width() + self._spacing
+            line_h = max(line_h, hint.height())
+        return y + line_h - rect.y() + m.bottom()
+
+
+class _TagEdit(QLineEdit):
+    backspace_on_empty = Signal()
+    commit = Signal()
+
+    def keyPressEvent(self, e):
+        if e.key() in (Qt.Key_Return, Qt.Key_Enter) or e.text() == ",":
+            self.commit.emit()
+            return
+        if e.key() == Qt.Key_Backspace and not self.text():
+            self.backspace_on_empty.emit()
+            return
+        super().keyPressEvent(e)
+
+
+class TagInput(QFrame):
+    """Values shown as removable badges. Type and press Enter or comma to add; Backspace removes the last."""
+
+    changed = Signal()
+
+    def __init__(self, values: list[str] | str = (), placeholder: str = "", normalize: Callable[[str], str] | None = None,
+                 noun: str = "items", parent=None):
+        super().__init__(parent)
+        self.setObjectName("tagInput")
+        self._normalize = normalize or (lambda s: s.strip())
+        self._noun = noun
+        self._values: list[str] = []
+        self.flow = FlowLayout(self)
+        self.edit = _TagEdit()
+        self.edit.setPlaceholderText(placeholder)
+        self.edit.setMinimumWidth(120)
+        self.edit.commit.connect(self._commit)
+        self.edit.backspace_on_empty.connect(self._remove_last)
+        self.edit.installEventFilter(self)
+        self.flow.addWidget(self.edit)
+        self.setCursor(Qt.IBeamCursor)
+        sp = QSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+        sp.setHeightForWidth(True)
+        self.setSizePolicy(sp)
+        self.set_values(values)
+
+    # -- public API
+    def values(self) -> list[str]:
+        self._commit()
+        return list(self._values)
+
+    def text(self) -> str:
+        return " ".join(self.values())
+
+    def set_values(self, values) -> None:
+        if isinstance(values, str):
+            values = values.split()
+        for i in reversed(range(self.flow.count() - 1)):
+            item = self.flow.takeAt(i)
+            item.widget().deleteLater()
+        self._values = []
+        for v in values:
+            self._add(v, emit=False)
+        self.changed.emit()
+
+    def setText(self, text: str) -> None:
+        self.set_values(text)
+
+    def meta_row(self) -> QWidget:
+        """'N items · Clear all' line to place under the input."""
+        w = QWidget()
+        lay = QHBoxLayout(w)
+        lay.setContentsMargins(0, 0, 0, 0)
+        hint = QLabel("Enter or , adds · Backspace removes the last")
+        hint.setObjectName("faint")
+        lay.addWidget(hint)
+        lay.addStretch(1)
+        count = QLabel()
+        count.setObjectName("faint")
+        clear = QToolButton()
+        clear.setText("Clear all")
+        clear.setObjectName("ghost")
+        clear.clicked.connect(lambda: self.set_values([]))
+        lay.addWidget(count)
+        lay.addWidget(clear)
+
+        def update():
+            count.setText(f"{len(self._values)} {self._noun}")
+        self.changed.connect(update)
+        update()
+        return w
+
+    # -- internals
+    def hasHeightForWidth(self):
+        return True
+
+    def heightForWidth(self, w):
+        return self.flow.heightForWidth(w)
+
+    def sizeHint(self):
+        return QSize(300, self.flow.heightForWidth(max(300, self.width())))
+
+    def mousePressEvent(self, e):
+        self.edit.setFocus()
+        super().mousePressEvent(e)
+
+    def eventFilter(self, obj, e):
+        if obj is self.edit and e.type() in (QEvent.FocusIn, QEvent.FocusOut):
+            self.setProperty("focused", e.type() == QEvent.FocusIn)
+            self.style().unpolish(self)
+            self.style().polish(self)
+            if e.type() == QEvent.FocusOut:
+                self._commit()
+        return super().eventFilter(obj, e)
+
+    def _commit(self) -> None:
+        text = self.edit.text()
+        if not text.strip():
+            self.edit.clear()
+            return
+        for part in text.replace(",", " ").split():
+            self._add(part)
+        self.edit.clear()
+
+    def _add(self, raw: str, emit: bool = True) -> None:
+        v = self._normalize(raw)
+        if not v or v in self._values:
+            return
+        self._values.append(v)
+        chip = QToolButton()
+        chip.setObjectName("tag")
+        chip.setText(v)
+        chip.setIcon(icon("close"))
+        chip.setIconSize(QSize(11, 11))
+        chip.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        chip.setLayoutDirection(Qt.RightToLeft)
+        chip.setCursor(Qt.PointingHandCursor)
+        chip.setToolTip(f"Remove {v}")
+        chip.clicked.connect(lambda _=False, c=chip: self._remove(c))
+        self.flow.insertWidget(self.flow.count() - 1, chip)
+        if emit:
+            self.changed.emit()
+
+    def _remove(self, chip: QToolButton) -> None:
+        v = chip.text()
+        if v in self._values:
+            self._values.remove(v)
+        for i in range(self.flow.count()):
+            if self.flow.itemAt(i).widget() is chip:
+                self.flow.takeAt(i)
+                break
+        chip.deleteLater()
+        self.flow.invalidate()
+        self.changed.emit()
+
+    def _remove_last(self) -> None:
+        if self.flow.count() > 1:
+            self._remove(self.flow.itemAt(self.flow.count() - 2).widget())
+
+
+def extension_tag(s: str) -> str:
+    return s.strip().lstrip(".").lower()
+
+
+def site_tag(s: str) -> str:
+    return s.strip().lower()
+
+
+# ---------------------------------------------------------------- painting helpers
+def _box(p: QPainter, r: QRectF, state: Qt.CheckState) -> None:
+    p.save()
+    p.setRenderHint(QPainter.Antialiasing)
+    path = QPainterPath()
+    path.addRoundedRect(r, 4, 4)
+    if state == Qt.Unchecked:
+        p.fillPath(path, _c("input"))
+        p.setPen(QPen(_c("line2"), 1.5))
+        p.drawPath(path)
+    else:
+        p.fillPath(path, _c("ac"))
+        p.setPen(QPen(QColor("#FFFFFF"), 2, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        x, y, s = r.x(), r.y(), r.width()
+        if state == Qt.Checked:
+            p.drawPolyline([QPoint(int(x + s * .27), int(y + s * .52)), QPoint(int(x + s * .43), int(y + s * .68)),
+                            QPoint(int(x + s * .74), int(y + s * .33))])
+        else:
+            p.drawLine(QPoint(int(x + s * .3), int(y + s * .5)), QPoint(int(x + s * .7), int(y + s * .5)))
+    p.restore()
+
+
+def pill(p: QPainter, rect: QRect, text: str, fg: QColor, bg: QColor, font: QFont, fill: float | None = None,
+         fill_color: QColor | None = None, width: int | None = None) -> None:
+    """A rounded label; with ``fill`` it becomes a progress pill filled from the left."""
+    fm = QFontMetrics(font)
+    h = min(rect.height() - 8, fm.height() + 8)
+    w = width or fm.horizontalAdvance(text) + 20
+    w = min(w, rect.width() - 8)
+    r = QRectF(rect.x() + 4, rect.y() + (rect.height() - h) / 2, w, h)
+    p.save()
+    p.setRenderHint(QPainter.Antialiasing)
+    path = QPainterPath()
+    path.addRoundedRect(r, h / 2, h / 2)
+    p.fillPath(path, bg)
+    if fill is not None and fill_color is not None:
+        p.setClipPath(path)
+        p.fillRect(QRectF(r.x(), r.y(), r.width() * max(0.0, min(1.0, fill)), r.height()), _alpha(fill_color, 70))
+        p.fillRect(QRectF(r.x(), r.y(), 3, r.height()), fill_color)
+        p.setClipping(False)
+    p.setFont(font)
+    p.setPen(fg)
+    p.drawText(r.adjusted(10, 0, -6, 0), Qt.AlignVCenter | Qt.AlignLeft, text)
+    p.restore()
+
+
+# ---------------------------------------------------------------- download list
+class CheckHeader(QHeaderView):
+    """Header whose first section is a tri-state check-all box."""
+
+    toggled = Signal()
+
+    def __init__(self, state: Callable[[], Qt.CheckState], parent=None):
+        super().__init__(Qt.Horizontal, parent)
+        self._state = state
+
+    def paintSection(self, painter, rect, index):
+        super().paintSection(painter, rect, index)
+        if self.logicalIndex(0) == index and self.visualIndex(index) == 0 and index == 0:
+            s = 16
+            _box(painter, QRectF(rect.x() + (rect.width() - s) / 2, rect.y() + (rect.height() - s) / 2, s, s), self._state())
+
+    def mousePressEvent(self, e):
+        if self.logicalIndexAt(e.position().toPoint()) == 0:
+            self.toggled.emit()
+            self.viewport().update()
+            return
+        super().mousePressEvent(e)
+
+
+class ListDelegate(QStyledItemDelegate):
+    """Status pills, a tint on checked rows and an accent bar on the current row."""
+
+    def __init__(self, model, parent=None):
+        super().__init__(parent)
+        self.model = model
+        self.row_height = 32
+
+    def sizeHint(self, option, index):
+        s = super().sizeHint(option, index)
+        return QSize(s.width(), self.row_height)
+
+    def paint(self, painter, option, index):
+        row_checked = self.model.is_checked_row(index.row())
+        selected = bool(option.state & QStyle.State_Selected)
+        if row_checked and not selected:
+            painter.fillRect(option.rect, _alpha(_c("acsel"), 150))
+        key = self.model.columns[index.column()]
+        if key == "status":
+            opt = QStyleOptionViewItem(option)
+            self.initStyleOption(opt, index)
+            opt.text = ""
+            opt.widget.style().drawControl(QStyle.CE_ItemViewItem, opt, painter, opt.widget)
+            self._status(painter, option.rect, index.data(STATUS_ROLE), option.font)
+        else:
+            super().paint(painter, option, index)
+        if selected and index.column() == 0:
+            painter.fillRect(QRect(option.rect.x(), option.rect.y(), 3, option.rect.height()), _c("ac"))
+
+    def _status(self, p: QPainter, rect: QRect, info, font: QFont) -> None:
+        if not info:
+            return
+        kind, progress, text = info
+        f = QFont(font)
+        f.setBold(True)
+        f.setPointSizeF(font.pointSizeF() * 0.88)
+        if kind in ("run", "pause"):
+            col = _c("ac") if kind == "run" else _c("fa")
+            pill(p, rect, text, _c("tx"), _c("track"), mono_font(f), progress, col, width=150)
+        elif kind == "done":
+            pill(p, rect, "✓ " + text, _c("ok"), _alpha(_c("ok"), 34), f)
+        elif kind == "error":
+            pill(p, rect, "! " + text, _c("bad"), _alpha(_c("bad"), 30), f)
+        elif kind == "queue":
+            pill(p, rect, text, _c("mu"), _c("track"), f)
+
+
+class TreeDelegate(QStyledItemDelegate):
+    """Category tree rows with a count badge on the right."""
+
+    def paint(self, painter, option, index):
+        super().paint(painter, option, index)
+        n = index.data(COUNT_ROLE)
+        if not n:
+            return
+        selected = bool(option.state & QStyle.State_Selected)
+        f = mono_font(option.font)
+        f.setPointSizeF(option.font.pointSizeF() * 0.82)
+        f.setBold(True)
+        text = str(n)
+        fm = QFontMetrics(f)
+        w, h = fm.horizontalAdvance(text) + 14, fm.height() + 2
+        r = QRectF(option.rect.right() - w - 6, option.rect.center().y() - h / 2 + 1, w, h)
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing)
+        path = QPainterPath()
+        path.addRoundedRect(r, h / 2, h / 2)
+        painter.fillPath(path, _c("ac") if selected else _c("track"))
+        painter.setFont(f)
+        painter.setPen(QColor("#FFFFFF") if selected else _c("mu"))
+        painter.drawText(r, Qt.AlignCenter, text)
+        painter.restore()

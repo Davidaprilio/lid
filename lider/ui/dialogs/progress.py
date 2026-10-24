@@ -7,7 +7,7 @@ import shlex
 import subprocess
 
 from PySide6.QtCore import QRectF, Qt, QTimer
-from PySide6.QtGui import QColor, QPainter, QPalette
+from PySide6.QtGui import QColor, QPainter, QPainterPath
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -41,29 +41,34 @@ class SegmentBar(QWidget):
         super().__init__(parent)
         self.size_total = 0
         self.segments: list[Segment] = []
-        self.setMinimumHeight(16)
+        self.setMinimumHeight(12)
+        self.setMaximumHeight(14)
 
     def set_segments(self, size: int, segments: list[Segment]) -> None:
         self.size_total, self.segments = size, segments
         self.update()
 
     def paintEvent(self, _event):
+        from .. import theme
+
+        c = theme.colors()
         p = QPainter(self)
+        p.setRenderHint(QPainter.Antialiasing)
         r = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
-        pal = self.palette()
-        p.fillRect(r, pal.color(QPalette.Base))
-        fill = pal.color(QPalette.Highlight)
+        clip = QPainterPath()
+        clip.addRoundedRect(r, 4, 4)
+        p.fillPath(clip, QColor(c["track"]))
+        p.setClipPath(clip)
         if self.size_total > 0:
             scale = r.width() / self.size_total
             for s in self.segments:
                 end = s.pos if s.end < 0 else min(s.pos, s.end)
-                p.fillRect(QRectF(r.left() + s.start * scale, r.top(), max(1.0, (end - s.start) * scale), r.height()), fill)
-            p.setPen(pal.color(QPalette.Mid))
+                done = s.end >= 0 and s.pos >= s.end
+                p.fillRect(QRectF(r.left() + s.start * scale, r.top(), max(1.0, (end - s.start) * scale), r.height()),
+                           QColor(c["ok"] if done else c["ac"]))
+            gap = QColor(c["pane"])
             for s in self.segments[1:]:
-                x = r.left() + s.start * scale
-                p.drawLine(int(x), int(r.top()), int(x), int(r.bottom()))
-        p.setPen(pal.color(QPalette.Dark))
-        p.drawRect(r)
+                p.fillRect(QRectF(r.left() + s.start * scale - 1, r.top(), 2, r.height()), gap)
 
 
 class ProgressDialog(QDialog):

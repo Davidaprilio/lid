@@ -8,7 +8,7 @@ from functools import partial
 from urllib.parse import urlsplit
 
 from PySide6.QtCore import QByteArray, QItemSelectionModel, QPoint, QSize, Qt, QTimer
-from PySide6.QtGui import QAction, QActionGroup, QFont, QKeySequence, QPalette, QColor
+from PySide6.QtGui import QAction, QActionGroup, QFont, QGuiApplication, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
@@ -22,8 +22,9 @@ from PySide6.QtWidgets import (
     QMainWindow,
     QMenu,
     QMessageBox,
+    QSizePolicy,
     QSplitter,
-    QStyleFactory,
+    QStatusBar,
     QSystemTrayIcon,
     QToolBar,
     QToolButton,
@@ -54,10 +55,12 @@ from .dialogs.options import CategoryDialog, ColumnsDialog, OptionsDialog, Speed
 from .dialogs.progress import CompleteDialog, ProgressDialog
 from .dialogs.properties import PropertiesDialog
 from .dialogs.scheduler import SchedulerDialog
-from .download_model import ID_ROLE, SORT_KEYS, DownloadModel
-from . import icons
+from .details import DetailsPane
+from .download_model import CHECK, ID_ROLE, SORT_KEYS, DownloadModel
+from . import theme
 from .icons import bind, category_icon, icon
 from .util import open_folder, open_path, run_async
+from .widgets import COUNT_ROLE, CheckHeader, ListDelegate, TreeDelegate, mono_font
 
 ARRANGE = [
     ("By &Order Of Addition", "date_added"),
@@ -73,6 +76,8 @@ ARRANGE = [
     ("By Parent &Web Page", "parent_page"),
 ]
 HIDDEN_TREE_CATEGORIES = {"General"}  # General files are listed only under "All Downloads"
+ROW_HEIGHT = {"comfortable": 32, "compact": 26}
+MIN_WIDTH = {"queue": 34, "size": 88, "status": 170, "time_left": 96, "rate": 116}  # pills and mono numbers need room
 
 
 class MainWindow(QMainWindow):
@@ -96,6 +101,7 @@ class MainWindow(QMainWindow):
         self._build_menus()
         self._build_toolbar()
         self._build_central()
+        self._build_statusbar()
         self._build_tray()
 
         if self.settings.window_geometry:
@@ -104,7 +110,10 @@ class MainWindow(QMainWindow):
             f = QFont()
             if f.fromString(self.settings.list_font):
                 self.view.setFont(f)
-        self.apply_dark_mode(self.settings.dark_mode)
+        self.apply_theme()
+        hints = QGuiApplication.styleHints()
+        if hasattr(hints, "colorSchemeChanged"):
+            hints.colorSchemeChanged.connect(lambda *_: self.apply_theme())
         if self.settings.speed_limiter_on_startup:
             self.manager.set_speed_limiter(True)
         self._sync_limiter_actions()
@@ -142,10 +151,10 @@ class MainWindow(QMainWindow):
         self.a_import_txt = A("From &text file", self.import_text)
         self.a_exit = A("&Exit", self.quit_app, "Ctrl+Q")
 
-        self.a_stop = A("&Stop Download", self.stop_selected, None, "stop", "Stop downloading selected file(s)")
-        self.a_remove = A("&Remove", self.remove_selected, "Del", "delete", "Remove selected file(s) from the list")
+        self.a_stop = A("&Stop Download", self.stop_selected, None, "stop", "Stop the checked (or selected) downloads")
+        self.a_remove = A("&Remove", self.remove_selected, "Del", "delete", "Remove the checked (or selected) files from the list")
         self.a_resume = A("&Download Now", self.resume_selected, None, "resume",
-                          "Start/Resume downloading selected file(s)")
+                          "Start or resume the checked (or selected) downloads")
         self.a_redownload = A("R&edownload", self.redownload_selected)
 
         self.a_pause_all = A("&Pause All", self.manager.stop_all)
@@ -167,15 +176,25 @@ class MainWindow(QMainWindow):
 
         self.a_hide_cats = A("Hide &categories", self.toggle_categories, checkable=True)
         self.a_hide_cats.setChecked(not self.settings.show_categories)
-        self.a_large = A("&Large Buttons", lambda: self.set_toolbar_size(True), checkable=True)
-        self.a_small = A("&Small Buttons", lambda: self.set_toolbar_size(False), checkable=True)
+        self.a_details = A("&Details pane", lambda on: self.set_details_visible(on), "F9", checkable=True)
+        self.a_details.setChecked(self.settings.show_details)
+        self.a_statusbar = A("Status &bar", lambda on: self.set_statusbar_visible(on), checkable=True)
+        self.a_statusbar.setChecked(self.settings.show_statusbar)
+        self.a_labels = A("Icons and &labels", lambda: self.set_toolbar_labels(True), checkable=True)
+        self.a_icons_only = A("&Icons only", lambda: self.set_toolbar_labels(False), checkable=True)
         g2 = QActionGroup(self)
-        g2.addAction(self.a_large)
-        g2.addAction(self.a_small)
-        (self.a_large if self.settings.toolbar_large else self.a_small).setChecked(True)
+        g2.addAction(self.a_labels)
+        g2.addAction(self.a_icons_only)
+        (self.a_labels if self.settings.toolbar_labels else self.a_icons_only).setChecked(True)
         self.a_columns = A("C&ustomize URL List...", self.customize_columns)
-        self.a_dark = A("Dark Mode support", lambda on: self.set_dark_mode(on), checkable=True)
-        self.a_dark.setChecked(self.settings.dark_mode)
+        self.theme_group = QActionGroup(self)
+        self.theme_actions = {}
+        for key in ("system", *theme.THEMES):
+            text = "Follow the system" if key == "system" else theme.TITLES[key]
+            a = A(text, partial(self.choose_theme, key), checkable=True)
+            self.theme_group.addAction(a)
+            self.theme_actions[key] = a
+        self._sync_theme_actions()
         self.a_font = A("Choose Font...", self.choose_font)
         self.a_font_reset = A("Reset to default Font", self.reset_font)
         self.a_about = A("&About LID", self.about)
@@ -224,29 +243,35 @@ class MainWindow(QMainWindow):
         dl.addAction(self.a_options)
 
         view = mb.addMenu("&View")
-        view.addAction(self.a_hide_cats)
+        view.addActions([self.a_hide_cats, self.a_details, self.a_statusbar])
+        view.addSeparator()
         arrange = view.addMenu("&Arrange files")
         arrange.addActions(self.arrange_actions)
         tb = view.addMenu("&Toolbar")
-        tb.addActions([self.a_large, self.a_small])
+        tb.addActions([self.a_labels, self.a_icons_only])
         view.addAction(self.a_columns)
-        view.addAction(self.a_dark)
+        themes = view.addMenu("T&heme")
+        themes.addAction(self.theme_actions["system"])
+        themes.addSeparator()
+        themes.addActions([self.theme_actions[k] for k in theme.THEMES])
         font = view.addMenu("Font")
         font.addActions([self.a_font, self.a_font_reset])
 
         help_menu = mb.addMenu("&Help")
         help_menu.addAction(self.a_about)
 
-    def _queue_button(self, text, tip, icon_name, start: bool) -> QToolButton:
+    def _tool(self, action: QAction | None, text: str, name: str, icon_name: str | None = None) -> QToolButton:
         b = QToolButton()
+        if action is not None:
+            action.setIconText(text)  # toolbar caption; the menus keep the long text
+            b.setDefaultAction(action)
         b.setText(text)
-        b.setToolTip(tip)
-        bind(b, icon_name)
-        b.setPopupMode(QToolButton.MenuButtonPopup)
-        menu = QMenu(b)
-        menu.aboutToShow.connect(lambda: self._fill_queue_menu(menu, start))
-        b.setMenu(menu)
-        b.clicked.connect(lambda: self.start_queue(MAIN_QUEUE) if start else self.stop_queue(MAIN_QUEUE))
+        b.setObjectName(name)
+        if icon_name:
+            bind(b, icon_name)
+        b.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        b.setIconSize(QSize(18, 18))
+        b.setCursor(Qt.PointingHandCursor)
         return b
 
     def _build_toolbar(self):
@@ -254,40 +279,55 @@ class MainWindow(QMainWindow):
         tb.setObjectName("toolbar")
         tb.setMovable(False)
         self.addToolBar(tb)
-        self._toolbar_buttons: list[QToolButton] = []
-        for a, label in ((self.a_add, "Add URL"), (self.a_resume, "Resume"), (self.a_stop, "Stop"),
-                         (self.a_stop_all, "Stop All"), (self.a_remove, "Delete"),
-                         (self.a_delete_completed, "Delete Co..."), (self.a_options, "Options"),
-                         (self.a_scheduler, "Scheduler")):
-            a.setIconText(label)  # toolbar caption; the menus keep the long text
-            b = QToolButton()
-            b.setDefaultAction(a)
+        add = self._tool(self.a_add, "Add URL", "primary", "add-white")
+        start = self._tool(self.a_resume, "Start", "pill")
+        stop = self._tool(self.a_stop, "Stop", "pill")
+        delete = self._tool(self.a_remove, "Delete", "danger")
+        menu = QMenu(delete)
+        menu.addAction(icon("delete"), "Delete checked or selected", self.remove_selected)
+        menu.addAction(icon("delete-completed"), "Delete all completed", self.delete_completed)
+        delete.setMenu(menu)
+        delete.setPopupMode(QToolButton.MenuButtonPopup)
+        self.check_chip = QToolButton()
+        self.check_chip.setObjectName("chip")
+        self.check_chip.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.check_chip.setLayoutDirection(Qt.RightToLeft)
+        bind(self.check_chip, "close")
+        self.check_chip.setIconSize(QSize(11, 11))
+        self.check_chip.setToolTip("Clear the checks")
+        self.check_chip.clicked.connect(lambda: self.model.set_all_checked(False))
+        spacer = QWidget()
+        spacer.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        options = self._tool(self.a_options, "Options", "ghost")
+        sched = self._tool(self.a_scheduler, "Scheduler", "ghost")
+        grab = self._tool(self.a_grabber, "Grabber", "ghost")
+        tb.addWidget(add)
+        tb.addSeparator()
+        tb.addWidget(start)
+        tb.addWidget(stop)
+        tb.addSeparator()
+        tb.addWidget(delete)
+        tb.addSeparator()
+        self._chip_action = tb.addWidget(self.check_chip)
+        tb.addWidget(spacer)
+        for b in (options, sched, grab):
             tb.addWidget(b)
-            self._toolbar_buttons.append(b)
-        self._toolbar_buttons.append(self._queue_button(
-            "Start Queue", "Start main download queue, or choose a queue to start from drop-down list",
-            "start-queue", True))
-        self._toolbar_buttons.append(self._queue_button(
-            "Stop Queue", "Stop main download queue, or choose a queue to stop from drop-down list",
-            "stop-queue", False))
-        for b in self._toolbar_buttons[-2:]:
-            tb.addWidget(b)
-        self.a_grabber.setIconText("Grabber")
-        g = QToolButton()
-        g.setDefaultAction(self.a_grabber)
-        tb.addWidget(g)
-        self._toolbar_buttons.append(g)
-        self.set_toolbar_size(self.settings.toolbar_large)
+        self._toolbar_buttons = [add, start, stop, delete, options, sched, grab]
+        self.set_toolbar_labels(self.settings.toolbar_labels)
 
     def _build_central(self):
         # -- left: "Categories" group with a close button
         self.cat_panel = QWidget()
         cl = QVBoxLayout(self.cat_panel)
-        cl.setContentsMargins(4, 4, 0, 4)
+        cl.setContentsMargins(0, 4, 0, 4)
         head = QHBoxLayout()
-        head.addWidget(QLabel("Categories"))
+        head.setContentsMargins(10, 6, 4, 2)
+        title = QLabel("CATEGORIES")
+        title.setObjectName("sectionTitle")
+        head.addWidget(title)
         head.addStretch(1)
         close = QToolButton()
+        close.setObjectName("close")
         bind(close, "close")
         close.setAutoRaise(True)
         close.setToolTip("Hide categories")
@@ -295,6 +335,9 @@ class MainWindow(QMainWindow):
         head.addWidget(close)
         cl.addLayout(head)
         self.tree = QTreeWidget()
+        self.tree.setObjectName("categories")
+        self.tree.setItemDelegate(TreeDelegate(self.tree))
+        self.tree.setIndentation(16)
         self.tree.setHeaderHidden(True)
         self.tree.setContextMenuPolicy(Qt.CustomContextMenu)
         self.tree.customContextMenuRequested.connect(self._tree_menu)
@@ -304,8 +347,8 @@ class MainWindow(QMainWindow):
         # -- right: SearchBar + download list
         right = QWidget()
         rl = QVBoxLayout(right)
-        rl.setContentsMargins(0, 4, 4, 4)
-        rl.setSpacing(2)
+        rl.setContentsMargins(0, 0, 0, 0)
+        rl.setSpacing(0)
         self.searchbar = SearchBar()
         self.searchbar.setVisible(False)
         self.searchbar.find_requested.connect(self.apply_search)
@@ -313,8 +356,17 @@ class MainWindow(QMainWindow):
         self.searchbar.closed.connect(self.close_searchbar)
         rl.addWidget(self.searchbar)
         self.model = DownloadModel(self.manager, self)
+        self.model.checked_changed.connect(self.update_actions)
         self.view = QTreeView()
+        self.view.setObjectName("downloads")
+        self.header = CheckHeader(self.model.check_state, self.view)
+        self.header.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.header.toggled.connect(self.model.toggle_all)
+        self.view.setHeader(self.header)
         self.view.setModel(self.model)
+        self.list_delegate = ListDelegate(self.model, self.view)
+        self.view.setItemDelegate(self.list_delegate)
+        self.view.setAlternatingRowColors(True)
         self.view.setRootIsDecorated(False)
         self.view.setUniformRowHeights(True)
         self.view.setAllColumnsShowFocus(True)
@@ -333,21 +385,67 @@ class MainWindow(QMainWindow):
         header.setContextMenuPolicy(Qt.CustomContextMenu)
         header.customContextMenuRequested.connect(lambda _p: self.customize_columns())
         self.view.selectionModel().selectionChanged.connect(lambda *_: self.update_actions())
-        rl.addWidget(self.view)
+        self.view.selectionModel().currentChanged.connect(lambda *_: self._show_details())
         self.apply_column_widths()
+
+        self.details = DetailsPane(self.manager)
+        self.details.closed.connect(lambda: self.set_details_visible(False))
+        self.vsplit = QSplitter(Qt.Vertical)
+        self.vsplit.addWidget(self.view)
+        self.vsplit.addWidget(self.details)
+        self.vsplit.setStretchFactor(0, 1)
+        self.vsplit.setSizes([420, 210])
+        self.vsplit.setChildrenCollapsible(False)
+        rl.addWidget(self.vsplit)
+        self.details.setVisible(self.settings.show_details)
 
         self.splitter = QSplitter()
         self.splitter.addWidget(self.cat_panel)
         self.splitter.addWidget(right)
         self.splitter.setStretchFactor(1, 1)
-        self.splitter.setSizes([215, 800])
+        self.splitter.setSizes([236, 800])
         self.setCentralWidget(self.splitter)
         self.cat_panel.setVisible(self.settings.show_categories)
         self.rebuild_tree()
 
+    def _build_statusbar(self):
+        sb = QStatusBar()
+        sb.setSizeGripEnabled(False)
+        self.setStatusBar(sb)
+        mono = mono_font()
+        self.sb_speed = QLabel()
+        self.sb_speed.setFont(mono)
+        self.sb_counts = QLabel()
+        self.sb_limiter, self.sb_clip, self.sb_browser = QLabel(), QLabel(), QLabel()
+        sb.addWidget(self.sb_speed)
+        sb.addWidget(self.sb_counts)
+        for w in (self.sb_limiter, self.sb_clip, self.sb_browser):
+            sb.addPermanentWidget(w)
+        sb.setVisible(self.settings.show_statusbar)
+
+    def update_statusbar(self):
+        if not self.statusBar().isVisible():
+            return
+        from ..core import fmt
+        from .. import browser
+
+        rate = sum(t.meter.rate() for t in self.manager.tasks.values() if getattr(t, "meter", None))
+        self.sb_speed.setText(f"↓ {fmt.rate(rate) or '0 B/s'}")
+        queued = sum(1 for d in self.manager.downloads.values() if d.queue and d.status != Status.COMPLETE
+                     and not self.manager.is_running(d.id))
+        self.sb_counts.setText(f"{len(self.manager.tasks)} downloading · {queued} in queue")
+        self.sb_limiter.setText(f"Speed Limiter: {'on' if self.settings.speed_limiter_on else 'off'}")
+        self.sb_clip.setText(f"Clipboard: {'on' if self.settings.monitor_clipboard else 'off'}")
+        if not hasattr(self, "_browser_ok"):
+            try:
+                self._browser_ok = any(browser.is_installed(b) for b in browser.detected())
+            except Exception:  # never let a status line break the window
+                self._browser_ok = False
+        self.sb_browser.setText(f"Browser: {'connected' if self._browser_ok else 'not set up'}")
+
     def _build_tray(self):
         self.tray = None
-        if not QSystemTrayIcon.isSystemTrayAvailable():
+        if not self.settings.tray_icon or not QSystemTrayIcon.isSystemTrayAvailable():
             return
         self.tray = QSystemTrayIcon(icon("app"), self)
         menu = QMenu()
@@ -375,6 +473,7 @@ class MainWindow(QMainWindow):
             item.setIcon(0, icon(icon_name))
             return item
 
+
         cats = [c.name for c in self.settings.categories if c.name not in HIDDEN_TREE_CATEGORIES]
         for kind, title, ic in (("all", "All Downloads", "folder-download"), ("unfinished", "Unfinished", "unfinished"),
                                 ("finished", "Finished", "finished")):
@@ -389,6 +488,21 @@ class MainWindow(QMainWindow):
         queues.setExpanded(True)
         self.tree.blockSignals(False)
         self._select_tree(current)
+        self.update_tree_counts()
+
+    def update_tree_counts(self):
+        downloads = list(self.manager.downloads.values())
+        for item in _iter_items(self.tree):
+            kind, value = tuple(item.data(0, Qt.UserRole))
+            if kind in ("all", "unfinished", "finished"):
+                n = sum(1 for d in downloads if (kind == "all" or (d.status == Status.COMPLETE) == (kind == "finished"))
+                        and (value is None or d.category == value))
+            elif kind == "queue":
+                n = sum(1 for d in downloads if d.queue == value and d.status != Status.COMPLETE)
+            else:
+                n = 0
+            if item.data(0, COUNT_ROLE) != n:
+                item.setData(0, COUNT_ROLE, n)
 
     def _select_tree(self, data):
         it = _iter_items(self.tree)
@@ -489,6 +603,13 @@ class MainWindow(QMainWindow):
         rows = sorted({i.row() for i in self.view.selectionModel().selectedRows()})
         return [self.model.rows[r].id for r in rows if r < len(self.model.rows)]
 
+    def checked_ids(self) -> list[int]:
+        return [d.id for d in self.model.rows if d.id in self.model.checked]
+
+    def target_ids(self) -> list[int]:
+        """What Start, Stop and Delete act on: the checked rows, or the selection when nothing is checked."""
+        return self.checked_ids() or self.selected_ids()
+
     def refresh_rows(self):
         selected = set(self.selected_ids())
         current = self.view.currentIndex()
@@ -507,10 +628,12 @@ class MainWindow(QMainWindow):
 
     def apply_column_widths(self):
         widths = {k: w for k, v, w in self.settings.columns if v}
+        widths[CHECK] = 40
+        self.view.header().blockSignals(True)
         for i, key in enumerate(self.model.columns):
-            self.view.header().blockSignals(True)
-            self.view.setColumnWidth(i, widths.get(key, 100))
-            self.view.header().blockSignals(False)
+            self.view.setColumnWidth(i, max(widths.get(key, 100), MIN_WIDTH.get(key, 0)))
+        self.view.header().setSectionResizeMode(0, QHeaderView.Fixed)
+        self.view.header().blockSignals(False)
 
     def _column_resized(self, index, _old, new):
         if index < len(self.model.columns):
@@ -521,6 +644,8 @@ class MainWindow(QMainWindow):
 
     def _header_clicked(self, index):
         key = self.model.columns[index]
+        if key == CHECK:
+            return
         if key not in SORT_KEYS:
             return
         if self.settings.sort_key == key:
@@ -538,8 +663,12 @@ class MainWindow(QMainWindow):
         self.refresh_rows()
 
     def update_actions(self):
-        ids = self.selected_ids()
+        ids = self.target_ids()
         ds = [self.manager.downloads[i] for i in ids if i in self.manager.downloads]
+        n = len(self.checked_ids())
+        self.check_chip.setText(f"{n} checked")
+        self._chip_action.setVisible(n > 0)
+        self.header.viewport().update()
         running = [d for d in ds if self.manager.is_running(d.id)]
         resumable = [d for d in ds if not self.manager.is_running(d.id) and d.status != Status.COMPLETE]
         self.a_resume.setEnabled(bool(resumable))
@@ -850,24 +979,25 @@ class MainWindow(QMainWindow):
         dlg.raise_()
 
     def resume_selected(self):
-        for i in self.selected_ids():
-            if self.manager.downloads[i].status != Status.COMPLETE:
+        ids = self.target_ids()
+        for i in ids:
+            if self.manager.downloads[i].status != Status.COMPLETE and not self.manager.is_running(i):
                 self.manager.start(i)
-                if len(self.selected_ids()) == 1:
+                if len(ids) == 1 and not self.details.isVisible():
                     self.show_progress(i)
         self.refresh_rows()
 
     def stop_selected(self):
-        for i in self.selected_ids():
+        for i in self.target_ids():
             self.manager.stop(i)
 
     def redownload_selected(self):
-        for i in self.selected_ids():
+        for i in self.target_ids():
             self.manager.redownload(i)
         self.refresh_rows()
 
     def remove_selected(self):
-        ids = self.selected_ids()
+        ids = self.target_ids()
         if not ids:
             return
         box = QMessageBox(QMessageBox.Question, "Confirm deletion of downloads",
@@ -877,6 +1007,7 @@ class MainWindow(QMainWindow):
         box.setCheckBox(also)
         if box.exec() == QMessageBox.Yes:
             self.manager.remove(ids, delete_files=also.isChecked())
+            self.model.set_checked(ids, False)
             self.refresh_rows()
 
     def delete_completed(self):
@@ -991,15 +1122,33 @@ class MainWindow(QMainWindow):
         self.cat_panel.setVisible(not hide)
         self.a_hide_cats.setChecked(hide)
 
-    def set_toolbar_size(self, large: bool):
-        self.settings.toolbar_large = large
-        size = 32 if large else 16
-        self.toolbar.setIconSize(QSize(size, size))
-        style = Qt.ToolButtonTextUnderIcon if large else Qt.ToolButtonIconOnly
+    def set_toolbar_labels(self, on: bool):
+        self.settings.toolbar_labels = on
         for b in self._toolbar_buttons:
-            b.setToolButtonStyle(style)
-            b.setIconSize(QSize(size, size))
-            b.setMinimumWidth(64 if large else 0)
+            primary = b.objectName() == "primary"
+            b.setToolButtonStyle(Qt.ToolButtonTextBesideIcon if on or primary else Qt.ToolButtonIconOnly)
+        (self.a_labels if on else self.a_icons_only).setChecked(True)
+
+    def set_details_visible(self, on: bool):
+        self.settings.show_details = on
+        self.details.setVisible(on)
+        self.a_details.setChecked(on)
+        if on:
+            self._show_details()
+
+    def set_statusbar_visible(self, on: bool):
+        self.settings.show_statusbar = on
+        self.statusBar().setVisible(on)
+        self.a_statusbar.setChecked(on)
+        self.update_statusbar()
+
+    def _show_details(self):
+        idx = self.view.currentIndex()
+        d_id = self.model.rows[idx.row()].id if idx.isValid() and idx.row() < len(self.model.rows) else None
+        if d_id is None and self.model.rows:
+            sel = self.selected_ids()
+            d_id = sel[0] if sel else None
+        self.details.show_download(d_id)
 
     def customize_columns(self):
         if ColumnsDialog(self.settings, self).exec():
@@ -1007,29 +1156,25 @@ class MainWindow(QMainWindow):
             self.refresh_rows()
             self.apply_column_widths()
 
-    def set_dark_mode(self, on: bool):
-        self.settings.dark_mode = on
-        self.apply_dark_mode(on)
+    def choose_theme(self, key: str):
+        if key == "system":
+            self.settings.follow_system = True
+        else:
+            self.settings.follow_system = False
+            self.settings.theme = key
+        self.apply_theme()
+        self.save_settings()
 
-    def apply_dark_mode(self, on: bool):
-        app = QApplication.instance()
-        if on:
-            app.setStyle(QStyleFactory.create("Fusion"))
-            p = QPalette()
-            dark, base, text = QColor(45, 45, 48), QColor(30, 30, 30), QColor(230, 230, 230)
-            for role, c in ((QPalette.Window, dark), (QPalette.WindowText, text), (QPalette.Base, base),
-                            (QPalette.AlternateBase, dark), (QPalette.Text, text), (QPalette.Button, dark),
-                            (QPalette.ButtonText, text), (QPalette.ToolTipBase, dark), (QPalette.ToolTipText, text),
-                            (QPalette.Highlight, QColor(42, 130, 218)), (QPalette.HighlightedText, Qt.white),
-                            (QPalette.PlaceholderText, QColor(140, 140, 140))):
-                p.setColor(role, c)
-            p.setColor(QPalette.Disabled, QPalette.Text, QColor(120, 120, 120))
-            p.setColor(QPalette.Disabled, QPalette.ButtonText, QColor(120, 120, 120))
-            app.setPalette(p)
-        elif getattr(self, "_dark_applied", False):
-            app.setPalette(app.style().standardPalette())
-        self._dark_applied = on
-        icons.set_dark(on)
+    def _sync_theme_actions(self):
+        key = "system" if self.settings.follow_system else self.settings.theme
+        if key in self.theme_actions:
+            self.theme_actions[key].setChecked(True)
+
+    def apply_theme(self):
+        theme.apply(theme.resolve(self.settings))
+        self.list_delegate.row_height = ROW_HEIGHT.get(self.settings.density, 32)
+        self.view.doItemsLayout()
+        self._sync_theme_actions()
         if hasattr(self, "tree"):
             self.rebuild_tree()
 
@@ -1104,6 +1249,12 @@ class MainWindow(QMainWindow):
     def tick(self):
         self.handle_events(self.manager.poll())
         self.refresh_rows()
+        self.update_tree_counts()
+        if self.details.isVisible():
+            if self.details.download_id is None:
+                self._show_details()
+            self.details.refresh()
+        self.update_statusbar()
         if self.tray:
             active = len(self.manager.tasks)
             self.tray.setToolTip(f"LID - {active} active download(s)" if active else "LID")
@@ -1225,7 +1376,7 @@ class MainWindow(QMainWindow):
         settings_mod.save(self.settings)
 
     def closeEvent(self, e):
-        if self.tray and not self.really_quit:
+        if self.tray and self.settings.close_to_tray and not self.really_quit:
             self.hide()
             e.ignore()
             return

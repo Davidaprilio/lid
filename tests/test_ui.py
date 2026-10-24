@@ -62,8 +62,7 @@ class MainWindowTests(unittest.TestCase):
 
     def test_toolbar_captions(self):
         captions = [b.text() for b in self.w._toolbar_buttons]
-        self.assertEqual(captions, ["Add URL", "Resume", "Stop", "Stop All", "Delete", "Delete Co...", "Options",
-                                    "Scheduler", "Start Queue", "Stop Queue", "Grabber"])
+        self.assertEqual(captions, ["Add URL", "Start", "Stop", "Delete", "Options", "Scheduler", "Grabber"])
 
     def test_category_tree(self):
         top = [self.w.tree.topLevelItem(i).text(0) for i in range(self.w.tree.topLevelItemCount())]
