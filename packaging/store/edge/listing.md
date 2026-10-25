@@ -12,7 +12,8 @@ does not list that id. Reviewers would see "LID helper not found".
 1. **Create the extension and upload the package**, but do not submit yet. Use
    `lid-extension-chromium-store.zip` from `./packaging/build.sh extension`. That build has no
    `key` and no YouTube button.
-2. Copy the id from **Extension overview** (the 32-letter "CRX ID").
+2. Copy the id from **Extension overview** (the 32-letter "CRX ID"). Done: the id is
+   `ophlhhmpoaonhglimkemkgjifigpghej` (Store ID `0RDCKF25DZGT`), now `EDGE_ADDONS_EXTENSION_ID`.
 3. Add it to `CHROMIUM_EXTENSION_IDS`, release LID with it, and upload that release's
    `lid-extension-chromium-store.zip` again (same version as the release).
 4. Fill in the rest below and submit. Once the listing is public, set its address in `lider/browser.py`
@@ -67,9 +68,9 @@ anything to the developer or to third parties, has no analytics and no ads.
 
 ### Privacy policy URL
 
-https://github.com/Davidaprilio/lid/blob/main/packaging/store/edge/privacy.md
+https://github.com/Davidaprilio/lid/blob/redesign/packaging/store/edge/privacy.md
 
-(The file has to be on `main` before submitting.)
+(Entered with the `redesign` branch link; switch it to `main` once the branch is merged.)
 
 ## 4. Store listing — English
 
@@ -95,7 +96,7 @@ Setup
 3. Click the LID button in the toolbar: it shows "Connected to LID".
 
 Privacy
-The extension talks only to the LID app on your computer, through native messaging. It sends nothing to the developer or anyone else, and has no analytics, no tracking and no ads. Details: https://github.com/Davidaprilio/lid/blob/main/packaging/store/edge/privacy.md
+The extension talks only to the LID app on your computer, through native messaging. It sends nothing to the developer or anyone else, and has no analytics, no tracking and no ads. Details: https://github.com/Davidaprilio/lid/blob/redesign/packaging/store/edge/privacy.md
 ```
 
 ### Images

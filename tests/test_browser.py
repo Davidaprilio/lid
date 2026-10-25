@@ -119,7 +119,8 @@ class InstallTests(unittest.TestCase):
         self.assertIn("lider.native_host", exe.read_text())
         brave = json.loads((self.home / ".config/BraveSoftware/Brave-Browser/NativeMessagingHosts"
                             / f"{browser.HOST_NAME}.json").read_text())
-        self.assertEqual(brave["allowed_origins"], [f"chrome-extension://{browser.CHROMIUM_EXTENSION_ID}/"])
+        self.assertEqual(brave["allowed_origins"], [f"chrome-extension://{browser.CHROMIUM_EXTENSION_ID}/",
+                                                     f"chrome-extension://{browser.EDGE_ADDONS_EXTENSION_ID}/"])
         self.assertEqual(brave["path"], str(exe))
         fox = json.loads((self.home / ".mozilla/native-messaging-hosts" / f"{browser.HOST_NAME}.json").read_text())
         self.assertEqual(fox["allowed_extensions"], [browser.FIREFOX_EXTENSION_ID])

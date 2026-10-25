@@ -23,9 +23,11 @@ from .core.settings import data_dir
 HOST_NAME = "io.github.davidaprilio.lid"
 # The id fixed by the "key" in manifest.chromium.json (unpacked installs and the GitHub zip).
 CHROMIUM_EXTENSION_ID = "hljibhdjbmpphbjhbfgiejnijpeobbne"
-# Every Chromium extension id the helper accepts. Add the Chrome Web Store / Edge Add-ons ids here
-# once the listings exist, unless the store kept the id above.
-CHROMIUM_EXTENSION_IDS = (CHROMIUM_EXTENSION_ID,)
+# The id Microsoft Edge Add-ons gave the store build (Partner Center, "CRX ID").
+EDGE_ADDONS_EXTENSION_ID = "ophlhhmpoaonhglimkemkgjifigpghej"
+# Every Chromium extension id the helper accepts. Add the Chrome Web Store id here once that
+# listing exists, unless the store kept the id above.
+CHROMIUM_EXTENSION_IDS = (CHROMIUM_EXTENSION_ID, EDGE_ADDONS_EXTENSION_ID)
 FIREFOX_EXTENSION_ID = "lid@davidaprilio.github.io"
 EXTENSION_SOURCE = Path(__file__).parent / "browser_extension"
 DESCRIPTION = "LID (Linux Internet Downloader) browser integration"
