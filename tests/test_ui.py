@@ -304,6 +304,55 @@ class ChecksumFieldTests(unittest.TestCase):
             dlg.deleteLater()
 
 
+class CheckHashDialogTests(unittest.TestCase):
+    def test_compute_match_mismatch_and_when_finished(self):
+        import hashlib
+
+        from lider.ui.dialogs.checkhash import CheckHashDialog, can_check
+
+        with tempfile.TemporaryDirectory() as tmp:
+            store = Store(os.path.join(tmp, "db"))
+            m = DownloadManager(Settings(temp_dir=tmp), store)
+            data = os.urandom(200_000)
+            good = hashlib.sha256(data).hexdigest()
+            d = m.add("https://example.com/a.iso", "a.iso", save_dir=tmp, size=len(data))
+            d.status, d.downloaded = Status.COMPLETE, len(data)
+            with open(d.path, "wb") as f:
+                f.write(data)
+            fresh = m.add("https://example.com/b.iso", "b.iso", save_dir=tmp, size=10)
+            running = m.add("https://example.com/c.iso", "c.iso", save_dir=tmp, size=10)
+            running.status, running.downloaded = Status.PAUSED, 4
+            self.assertEqual([can_check(m, x) for x in (d, fresh, running)], [True, False, True])
+
+            def run(dlg):
+                dlg.run_btn.click()
+                end = time.time() + 10
+                while dlg.verifier is not None and time.time() < end:
+                    app.processEvents()
+                    time.sleep(0.01)
+
+            dlg = CheckHashDialog(m, d.id)
+            self.assertEqual(dlg.run_btn.text(), "Compute hash")  # nothing entered yet
+            run(dlg)
+            self.assertEqual((dlg.state, dlg.computed_value.text(), d.checksum), ("computed", good, ""))
+            dlg.check.edit.setText(good)
+            run(dlg)
+            self.assertEqual((dlg.state, d.checksum_result, d.checksum), ("match", "verified", "sha256:" + good))
+            dlg.check.edit.setText("0" * 64)
+            dlg.save.setChecked(False)  # a one-off check leaves the download alone
+            run(dlg)
+            self.assertEqual((dlg.state, d.checksum_result), ("mismatch", "verified"))
+            dlg.deleteLater()
+
+            dlg = CheckHashDialog(m, running.id)
+            self.assertEqual(dlg.state, "running")
+            dlg.check.edit.setText(good)
+            dlg.later_btn.click()
+            self.assertEqual((running.checksum, running.checksum_force), ("sha256:" + good, True))
+            dlg.deleteLater()
+            store.close()
+
+
 class TagInputTests(unittest.TestCase):
     def test_enter_comma_paste_and_backspace(self):
         from lider.ui.widgets import TagInput, extension_tag

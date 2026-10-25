@@ -79,6 +79,7 @@ class Download:
     checksum_checked: float = 0.0  # when, and how long it took
     checksum_seconds: float = 0.0
     checksum_retried: bool = False  # the automatic download-again after a mismatch happens once
+    checksum_force: bool = False  # "Check when finished": checked even when Options turn verification off
 
     @property
     def path(self) -> str:

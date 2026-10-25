@@ -216,6 +216,22 @@ class DownloadManager:
         v.start()
         return True
 
+    def check_when_finished(self, download_id: int, checksum: str) -> None:
+        """"Check hash…" on an unfinished download: keep the checksum and check it when the file is complete."""
+        d = self.downloads[download_id]
+        d.checksum, d.checksum_force = checksum, True
+        d.checksum_result, d.checksum_actual = "", ""
+        self.store.save_download(d)
+
+    def record_check(self, download_id: int, checksum: str, result: str, actual: str, seconds: float) -> None:
+        """Keep the outcome of a "Check hash…" run on the download (its "Save this checksum" box)."""
+        d = self.downloads[download_id]
+        d.checksum, d.checksum_result, d.checksum_actual = checksum, result, actual
+        d.checksum_checked, d.checksum_seconds = time.time(), seconds
+        if result == "verified":
+            d.checksum_retried = False
+        self.store.save_download(d)
+
     def skip_check(self, download_id: int) -> None:
         """"Skip check": the download ends as a plain Complete, unverified."""
         v = self.verifiers.get(download_id)
@@ -439,7 +455,8 @@ class DownloadManager:
                 del self.tasks[d.id]
             if d.id not in self.downloads:
                 continue
-            if d.status == Status.COMPLETE and d.checksum and self.settings.verify_checksum and self.verify(d.id):
+            check = self.settings.verify_checksum or d.checksum_force
+            if d.status == Status.COMPLETE and d.checksum and check and self.verify(d.id):
                 self.store.save_download(d)
                 events.append(Event("changed", d.id))  # "complete" follows once the checksum is read
                 continue

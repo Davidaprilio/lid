@@ -297,6 +297,8 @@ QLabel#errorText {{ color: {c['bad']}; }}
 QFrame#badBadge {{ background: {_rgba(c['bad'], 0.12)}; border-radius: 21px; }}
 QFrame#mismatchBox {{ background: {_rgba(c['bad'], 0.07)}; border: 1px solid {_rgba(c['bad'], 0.35)}; border-radius: 10px; }}
 QFrame#mismatchBox QLabel {{ background: transparent; }}
+QFrame#matchBox {{ background: {_rgba(c['ok'], 0.08)}; border: 1px solid {_rgba(c['ok'], 0.35)}; border-radius: 10px; }}
+QFrame#matchBox QLabel {{ background: transparent; }}
 QLabel#badText {{ color: {c['bad']}; }}
 QPushButton#dangerBtn {{ color: {c['bad']}; }}
 QPushButton#dangerBtn:hover {{ border-color: {c['bad']}; }}

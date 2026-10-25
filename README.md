@@ -49,6 +49,8 @@ Package and command name: **`lider`**.
   SHA256SUMS line — in Download File Info or File Properties. When the download finishes, LID reads
   the file and marks it Verified or Checksum mismatch; on a mismatch it asks, keeps the file or
   downloads it again (Options → Downloads).
+  Right-click → Check hash… checks a finished file against a pasted value (or just computes its
+  hash to copy), or, for a download still in progress, checks it as soon as it finishes.
 * **Details pane** (F9) under the list: progress, the connections bar and a per-download speed limit
   of the highlighted download, with a button to open it in its own window.
 * **View:** tray icon, list density, toolbar labels, a font picker and column customisation;

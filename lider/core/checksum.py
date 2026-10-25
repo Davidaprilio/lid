@@ -79,7 +79,7 @@ class Verifier(threading.Thread):
         self.on_finish = on_finish
         self.read = 0
         self.total = 0
-        self.result = ""  # verified | mismatch | skipped | error
+        self.result = ""  # verified | mismatch | computed (nothing to compare with) | skipped | error
         self.actual = ""
         self.error = ""
         self.seconds = 0.0
@@ -109,7 +109,10 @@ class Verifier(threading.Thread):
                 self.result = "skipped"
             else:
                 self.actual = h.hexdigest()
-                self.result = "verified" if self.actual == self.expected else "mismatch"
+                if not self.expected:
+                    self.result = "computed"
+                else:
+                    self.result = "verified" if self.actual == self.expected else "mismatch"
         except (OSError, ValueError) as e:
             self.result, self.error = "error", str(e)
         self.seconds = time.monotonic() - started

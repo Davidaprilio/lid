@@ -87,6 +87,15 @@ class ManagerTests(unittest.TestCase):
         self.assertNotIn("complete", [e.kind for e in events])
         self.assertFalse(self.m.start(d.id) and self.m.is_running(d.id))
 
+    def test_check_when_finished_runs_even_with_verification_off(self):
+        self.settings.verify_checksum = False
+        d = self.m.add(self.srv.url, "a.iso")
+        self.m.check_when_finished(d.id, "sha256:" + self.srv.sha256)
+        self.m.start(d.id)
+        events = wait_for(self.m, lambda: d.status == Status.COMPLETE and d.checksum_result)
+        self.assertEqual(d.checksum_result, "verified")
+        self.assertIn("complete", [e.kind for e in events if e.download_id == d.id])
+
     def test_queue_runs_items_one_at_a_time_in_order(self):
         ids = [self.m.add(self.srv.url, f"f{i}.zip").id for i in range(3)]
         self.m.set_queue(ids, MAIN_QUEUE)
@@ -152,6 +161,18 @@ class ChecksumParseTests(unittest.TestCase):
         self.assertEqual(checksum.parse(f"{self.H} *ubuntu.iso"), "sha256:" + self.H)
         self.assertEqual(checksum.parse("d41d8cd98f00b204e9800998ecf8427e"), "md5:d41d8cd98f00b204e9800998ecf8427e")
         self.assertEqual(checksum.parse(self.H, "sha256"), "sha256:" + self.H)
+
+    def test_verifier_computes_without_an_expected_value(self):
+        import hashlib
+
+        with tempfile.NamedTemporaryFile(delete=False) as f:
+            f.write(b"lider" * 1000)
+        try:
+            v = checksum.Verifier(f.name, "md5:")
+            v.run()
+            self.assertEqual((v.result, v.actual), ("computed", hashlib.md5(b"lider" * 1000).hexdigest()))
+        finally:
+            os.remove(f.name)
 
     def test_invalid_input_says_why(self):
         with self.assertRaisesRegex(checksum.ChecksumError, "expected 64 hex characters, got 62"):

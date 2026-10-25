@@ -53,6 +53,7 @@ from .dialogs.add import (
 )
 from .dialogs.find import FindDialog, SearchBar
 from .dialogs.options import CategoryDialog, ColumnsDialog, OptionsDialog, SpeedLimiterDialog
+from .dialogs.checkhash import CheckHashDialog, can_check
 from .dialogs.progress import CompleteDialog, MismatchDialog, ProgressDialog
 from .dialogs.properties import PropertiesDialog
 from .dialogs.scheduler import SchedulerDialog
@@ -731,6 +732,8 @@ class MainWindow(QMainWindow):
         menu.addSeparator()
         menu.addAction("Move/Rename", lambda: self.properties(d.id))
         menu.addAction(self.a_redownload)
+        a = menu.addAction(icon("checksum"), "Check hash…", lambda: self.check_hash(d.id))
+        a.setEnabled(len(ids) == 1 and can_check(self.manager, d))  # one file per dialog, once it has data
         menu.addSeparator()
         menu.addAction(self.a_resume)
         menu.addAction(self.a_stop)
@@ -1384,6 +1387,13 @@ class MainWindow(QMainWindow):
             self.shutdown_computer()
         elif opts["exit"]:
             self.quit_app()
+
+    def check_hash(self, download_id: int):
+        dlg = CheckHashDialog(self.manager, download_id, self)
+        dlg.exec()
+        if dlg.choice:
+            self._mismatch_choice(download_id, dlg.choice)
+        self.refresh_rows()
 
     def _checksum_mismatch(self, download_id: int, ask: bool = True):
         d = self.manager.downloads.get(download_id)
