@@ -59,7 +59,7 @@ class DistributionTests(unittest.TestCase):
         self.assertNotIn("key", store)
         self.assertNotIn("content_scripts", store)
         self.assertFalse((store_dir / "youtube.js").exists())
-        self.assertEqual(store["version"], __version__)
+        self.assertEqual(store["version"], browser.EXTENSION_VERSION)
         self.assertNotIn("YouTube", store["description"])
 
     def test_update_url_only_for_the_self_distributed_firefox_build(self):
@@ -82,7 +82,7 @@ class DistributionTests(unittest.TestCase):
             self.assertNotIn("youtube.js", z.namelist())
         updates = json.loads((self.dir / "a" / "firefox-updates.json").read_text())
         entry = updates["addons"][browser.FIREFOX_EXTENSION_ID]["updates"][0]
-        self.assertEqual(entry["version"], __version__)
+        self.assertEqual(entry["version"], browser.EXTENSION_VERSION)
         self.assertTrue(entry["update_link"].endswith(f"/v{__version__}/lid-extension-firefox.xpi"))
 
     def test_host_accepts_every_known_chromium_id(self):

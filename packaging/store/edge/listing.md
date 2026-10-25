@@ -142,4 +142,5 @@ Test on any x86_64 Linux (for example Ubuntu 22.04 or later):
 The extension sends no data off the computer. Source code: https://github.com/Davidaprilio/lid (folder lider/browser_extension).
 ```
 
-Replace `<VERSION>` with the LID release that lists the Edge id (step 0): **1.1.2**.
+Replace `<VERSION>` with the LID release that lists the Edge id (step 0): **1.1.2**. The extension
+in that release is version **1.0.0** (`EXTENSION_VERSION`); the LID app is 1.1.2.

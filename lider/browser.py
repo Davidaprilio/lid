@@ -21,6 +21,9 @@ from . import __version__
 from .core.settings import data_dir
 
 HOST_NAME = "io.github.davidaprilio.lid"
+# The extension's own version, apart from LID's __version__: the store listings start at 1.0.0.
+# Raise it when the extension changes (stores, and Mozilla's signing, refuse a version twice).
+EXTENSION_VERSION = "1.0.0"
 # The id fixed by the "key" in manifest.chromium.json (unpacked installs and the GitHub zip).
 CHROMIUM_EXTENSION_ID = "hljibhdjbmpphbjhbfgiejnijpeobbne"
 # The id Microsoft Edge Add-ons gave the store build (Partner Center, "CRX ID").
@@ -179,7 +182,7 @@ def export_extension(family: str, dest: Path, variant: str = "full", update_url:
     skip = ["manifest.*.json", "__pycache__", "*.py"] + (list(YOUTUBE_FILES) if variant == "store" else [])
     shutil.copytree(EXTENSION_SOURCE, dest, ignore=shutil.ignore_patterns(*skip))
     manifest = json.loads((EXTENSION_SOURCE / f"manifest.{family}.json").read_text())
-    manifest["version"] = __version__
+    manifest["version"] = EXTENSION_VERSION
     if variant == "store":
         manifest.pop("key", None)
         manifest.pop("content_scripts", None)
@@ -222,7 +225,7 @@ def build_extensions(dist: str, work: str) -> None:
     zip_folder(export_extension("firefox", w / "firefox"), d / "lid-extension-firefox.zip")
     export_extension("firefox", w / "firefox-unlisted", update_url=FIREFOX_UPDATES_URL)
     xpi = f"https://github.com/Davidaprilio/lid/releases/download/v{__version__}/lid-extension-firefox.xpi"
-    (d / "firefox-updates.json").write_text(json.dumps(firefox_updates_json(__version__, xpi), indent=2) + "\n")
+    (d / "firefox-updates.json").write_text(json.dumps(firefox_updates_json(EXTENSION_VERSION, xpi), indent=2) + "\n")
 
 
 def extension_folder(family: str) -> Path:

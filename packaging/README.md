@@ -107,7 +107,8 @@ To build the packages without publishing anything, use "Run workflow" on the Act
 ## Browser extension
 
 `./packaging/build.sh extension` needs Python and Node.js (it runs `npx web-ext@10.7.0`). The
-extension's version is always `__version__`.
+extension has its own version, `EXTENSION_VERSION` in `lider/browser.py` (1.0.0 for the first
+store release), apart from LID's `__version__`. Raise it whenever the extension changes.
 
 | File | What it is | Where it goes |
 |---|---|---|
@@ -137,7 +138,7 @@ unsigned add-ons outside about:debugging.
    the `.xpi` instead of the unsigned zip.
 
 The secrets are only passed to tag builds; "Run workflow" builds stay unsigned. Mozilla never signs
-the same version twice, so bump `__version__` before tagging again.
+the same version twice, so with these keys set, raise `EXTENSION_VERSION` before every tag.
 
 To list LID on addons.mozilla.org as well, upload `lid-extension-firefox.zip` there as a listed
 add-on. The code is not minified or bundled, so AMO needs no separate source upload. Then set
