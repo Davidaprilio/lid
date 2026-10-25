@@ -449,12 +449,24 @@ class MainWindow(QMainWindow):
         self.sb_speed = QLabel()
         self.sb_speed.setFont(mono)
         self.sb_counts = QLabel()
-        self.sb_limiter, self.sb_clip, self.sb_browser = QLabel(), QLabel(), QLabel()
+        self.sb_limiter, self.sb_clip = QLabel(), QLabel()
+        self.sb_browser = QToolButton()  # reads like the other labels, opens Browser integration
+        self.sb_browser.setObjectName("sbLink")
+        self.sb_browser.setCursor(Qt.PointingHandCursor)
+        self.sb_browser.setToolTip("Browser integration…")
+        self.sb_browser.clicked.connect(self.browser_integration)
         sb.addWidget(self.sb_speed)
         sb.addWidget(self.sb_counts)
         for w in (self.sb_limiter, self.sb_clip, self.sb_browser):
             sb.addPermanentWidget(w)
         sb.setVisible(self.settings.show_statusbar)
+
+    def browser_integration(self):
+        from .dialogs.browsers import BrowserIntegrationDialog
+
+        BrowserIntegrationDialog(self).exec()
+        self.__dict__.pop("_browser_ok", None)  # installed or removed hosts: check again
+        self.update_statusbar()
 
     def update_statusbar(self):
         if not self.statusBar().isVisible():

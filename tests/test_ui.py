@@ -312,6 +312,21 @@ class MainWindowTests(unittest.TestCase):
             shutdown.assert_called_once()
         self.assertEqual(len(answers), 3)
 
+    def test_browser_status_opens_browser_integration(self):
+        from unittest import mock
+
+        from lider.ui.dialogs.browsers import BrowserIntegrationDialog
+
+        self.w.show()
+        self.w.update_statusbar()
+        self.assertTrue(self.w.sb_browser.text().startswith("Browser: "))
+        self.w._browser_ok = True
+        with mock.patch.object(BrowserIntegrationDialog, "exec", return_value=0) as opened, \
+                mock.patch("lider.browser.is_installed", return_value=False):
+            self.w.sb_browser.click()
+        opened.assert_called_once()
+        self.assertEqual(self.w.sb_browser.text(), "Browser: not set up")  # checked again after the dialog
+
     def test_sidebar_widens_and_its_width_is_kept(self):
         self.w.resize(1320, 860)
         self.w.show()

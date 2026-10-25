@@ -246,6 +246,8 @@ QSplitter#detailsSplit::handle:hover {{ border-bottom: 2px solid {c['ac']}; }}
 QStatusBar {{ background: {c['win']}; border-top: 1px solid {c['line']}; color: {c['mu']}; }}
 QStatusBar::item {{ border: none; }}
 QStatusBar QLabel {{ color: {c['mu']}; padding: 0 8px; }}
+QStatusBar QToolButton#sbLink {{ color: {c['mu']}; background: transparent; border: none; padding: 0 8px; }}
+QStatusBar QToolButton#sbLink:hover {{ color: {c['ac']}; background: transparent; }}
 
 QFrame#footer {{ background: {c['win']}; border-top: 1px solid {c['line']}; }}
 QFrame#footer QPushButton {{ min-width: 62px; }}
