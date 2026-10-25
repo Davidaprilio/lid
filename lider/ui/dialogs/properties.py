@@ -5,8 +5,9 @@ from __future__ import annotations
 import mimetypes
 import os
 import shutil
+import time
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
@@ -20,12 +21,18 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from ...core import checksum as checksums
 from ...core import fmt
 from ...core.manager import DownloadManager
 from ...core.models import Status
 from ..icons import category_icon, icon
 from ..util import open_path
-from ..widgets import caption, form_label, form_row, mono_font, panel, pill_label, primary, shell
+from ..widgets import ChecksumEdit, caption, form_label, form_row, mono_font, panel, pill_label, primary, set_pill, shell
+
+
+def _short(ts: float) -> str:
+    """"Oct 24, 10:13"."""
+    return time.strftime("%b %d, %H:%M", time.localtime(ts))
 
 
 class PropertiesDialog(QDialog):
@@ -93,6 +100,32 @@ class PropertiesDialog(QDialog):
             e.setCursorPosition(0)
         body.addWidget(box)
 
+        # -- checksum: add or edit it any time, re-check a complete file
+        box, cl = panel()
+        top = QHBoxLayout()
+        top.addWidget(caption("Checksum"))
+        top.addStretch(1)
+        self.check_pill = pill_label("", "muted")
+        top.addWidget(self.check_pill)
+        cl.addLayout(top)
+        self.checksum = ChecksumEdit(d.checksum, hint="")
+        cl.addLayout(form_row("Expected", self.checksum, width=100))
+        msg = QHBoxLayout()
+        msg.setContentsMargins(108, 0, 0, 0)
+        msg.addWidget(self.checksum.message, 1)
+        cl.addLayout(msg)
+        self.check_result = QLabel()
+        self.verify_btn = QPushButton("Verify now")
+        self.verify_btn.clicked.connect(self._verify_now)
+        self.check_result.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        cl.addLayout(form_row("Result", self.check_result, self.verify_btn, width=100, stretch_last=False))
+        self.checksum.changed.connect(self._show_check)
+        body.addWidget(box)
+        self._show_check()
+        self.check_timer = QTimer(self)
+        self.check_timer.timeout.connect(self._show_check)
+        self.check_timer.start(300)
+
         # -- web page and authorization
         box, wl = panel()
         wl.addWidget(caption("Web page and authorization"))
@@ -116,6 +149,8 @@ class PropertiesDialog(QDialog):
         body.addWidget(box)
 
         result = f"Error: {d.error}" if d.error else fmt.status(d)
+        if d.checksum_result in ("verified", "mismatch"):
+            result += f" · {checksums.title(d.checksum)} {'verified' if d.checksum_result == 'verified' else 'mismatch'}"
         last = form_label(f"Last try: {fmt.date(d.last_try) or 'never'} · Result: {result}")
         body.addWidget(last)
 
@@ -129,6 +164,43 @@ class PropertiesDialog(QDialog):
         footer.addWidget(open_btn)
         footer.addWidget(ok)
         ok.setFocus()
+
+    def _show_check(self) -> None:
+        d = self.d
+        verifying = self.manager.verify_progress(d.id)
+        if verifying is not None:
+            pill, kind, text, tone = "Verifying", "accent", f"Checking… {verifying * 100:.0f}%", "muted"
+        elif d.checksum_result == "verified":
+            pill, kind, tone = "✓ Verified", "ok", "okText"
+            text = f"Matches · checked {_short(d.checksum_checked)} in {d.checksum_seconds:.1f} s"
+        elif d.checksum_result == "mismatch":
+            pill, kind, tone = "Checksum mismatch", "bad", "badText"
+            text = f"Doesn't match · checked {_short(d.checksum_checked)} in {d.checksum_seconds:.1f} s"
+        elif d.checksum_result == "skipped":
+            pill, kind, text, tone = "Not checked", "muted", "Skipped — the file was not checked", "muted"
+        else:
+            pill, kind, tone = ("Not checked", "muted", "muted") if d.checksum else ("Not set", "muted", "muted")
+            text = "Not checked yet" if d.checksum else "No checksum entered"
+        set_pill(self.check_pill, pill, kind)
+        self.check_result.setText(text)
+        if self.check_result.objectName() != tone:
+            self.check_result.setObjectName(tone)
+            self.check_result.style().unpolish(self.check_result)
+            self.check_result.style().polish(self.check_result)
+        try:
+            entered = self.checksum.value()
+        except checksums.ChecksumError:
+            entered = ""
+        self.verify_btn.setEnabled(bool(entered) and verifying is None and d.status == Status.COMPLETE)
+
+    def _verify_now(self) -> None:
+        """Re-hash the file on disk against what the field holds now."""
+        d = self.d
+        value = self.checksum.value()
+        if value != d.checksum:
+            d.checksum, d.checksum_result, d.checksum_actual = value, "", ""
+        self.manager.verify(d.id, manual=True)
+        self._show_check()
 
     def _browse(self):
         path = QFileDialog.getExistingDirectory(self, "Save To", self.save_dir.text())
@@ -156,5 +228,12 @@ class PropertiesDialog(QDialog):
         d.description = self.description.text()
         d.referer = self.referer.text().strip()
         d.username, d.password = self.login.text(), self.password.text()
+        try:
+            value = self.checksum.value()
+        except checksums.ChecksumError as e:
+            QMessageBox.warning(self, "File Properties", str(e))
+            return
+        if value != d.checksum:
+            d.checksum, d.checksum_result, d.checksum_actual, d.checksum_retried = value, "", "", False
         self.manager.update(d)
         super().accept()

@@ -8,6 +8,7 @@ from PySide6.QtCore import QEvent, QPoint, QPointF, QRect, QRectF, QSize, Qt, Si
 from PySide6.QtGui import QColor, QFont, QFontDatabase, QFontMetrics, QIcon, QPainter, QPainterPath, QPalette, QPen, QPixmap
 from PySide6.QtWidgets import (
     QBoxLayout,
+    QComboBox,
     QFrame,
     QGridLayout,
     QHBoxLayout,
@@ -28,6 +29,7 @@ from PySide6.QtWidgets import (
     QWidgetItem,
 )
 
+from ..core import checksum as checksums
 from . import theme
 from .icons import bind, icon
 
@@ -513,11 +515,12 @@ def _box(p: QPainter, r: QRectF, state: Qt.CheckState) -> None:
 
 
 def pill(p: QPainter, rect: QRect, text: str, fg: QColor, bg: QColor, font: QFont, fill: float | None = None,
-         fill_color: QColor | None = None, width: int | None = None) -> None:
-    """A rounded label; with ``fill`` it becomes a progress pill filled from the left."""
+         fill_color: QColor | None = None, width: int | None = None, mark: str = "") -> None:
+    """A rounded label; with ``fill`` it becomes a progress pill filled from the left; ``mark`` is an
+    icon name drawn before the text."""
     fm = QFontMetrics(font)
     h = min(rect.height() - 8, fm.height() + 8)
-    w = width or fm.horizontalAdvance(text) + 20
+    w = width or fm.horizontalAdvance(text) + 20 + (16 if mark else 0)
     w = min(w, rect.width() - 8)
     r = QRectF(rect.x() + 4, rect.y() + (rect.height() - h) / 2, w, h)
     p.save()
@@ -530,9 +533,13 @@ def pill(p: QPainter, rect: QRect, text: str, fg: QColor, bg: QColor, font: QFon
         p.fillRect(QRectF(r.x(), r.y(), r.width() * max(0.0, min(1.0, fill)), r.height()), _alpha(fill_color, 70))
         p.fillRect(QRectF(r.x(), r.y(), 3, r.height()), fill_color)
         p.setClipping(False)
+    left = 10
+    if mark:
+        p.drawPixmap(QPointF(r.x() + 8, r.center().y() - 6), icon(mark).pixmap(12, 12))
+        left += 16
     p.setFont(font)
     p.setPen(fg)
-    p.drawText(r.adjusted(10, 0, -6, 0), Qt.AlignVCenter | Qt.AlignLeft, text)
+    p.drawText(r.adjusted(left, 0, -6, 0), Qt.AlignVCenter | Qt.AlignLeft, text)
     p.restore()
 
 
@@ -620,6 +627,88 @@ def cross_pixmap(size: int, color: QColor, ratio: float = 1.0) -> QPixmap:
     p.drawLine(QPointF(17.5 * k, 6.5 * k), QPointF(6.5 * k, 17.5 * k))
     p.end()
     return pm
+
+
+class ChecksumEdit(QWidget):
+    """Algorithm drop-down and a monospaced hash field that shows the detected type as a pill;
+    ``message`` (placed by the dialog, under the field) holds the hint or the reason it is invalid."""
+
+    changed = Signal()
+    HINT = "Optional — LID checks the file when the download finishes."
+
+    def __init__(self, value: str = "", hint: str = HINT, parent=None):
+        super().__init__(parent)
+        self.hint = hint
+        lay = QHBoxLayout(self)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(8)
+        self.algorithm = QComboBox()
+        self.algorithm.addItem("Auto-detect", "auto")
+        for key, title in checksums.TITLES.items():
+            self.algorithm.addItem(title, key)
+        self.algorithm.setFixedWidth(124)
+        self.edit = QLineEdit()
+        self.edit.setFont(mono_font(self.edit.font()))
+        self.edit.setPlaceholderText("Paste a hash (optional)")
+        self.pill = pill_label("", "accent")
+        self.pill.setParent(self.edit)
+        self.pill.hide()
+        self.edit.installEventFilter(self)
+        lay.addWidget(self.algorithm)
+        lay.addWidget(self.edit, 1)
+        self.message = QLabel(hint)
+        self.message.setObjectName("faint")
+        self.message.setWordWrap(True)
+        self.algorithm.currentIndexChanged.connect(self._update)
+        self.edit.textChanged.connect(self._update)
+        self.setValue(value)
+
+    def setValue(self, value: str) -> None:
+        """Show a stored "sha256:<hex>"."""
+        self.algorithm.setCurrentIndex(0)  # auto-detect finds the stored type again from the length
+        self.edit.setText(checksums.split(value)[1] if value else "")
+        self.edit.setCursorPosition(0)  # show the start of a long hash
+        self._update()
+
+    def value(self) -> str:
+        """The checksum to store, "" for an empty field; raises ChecksumError while it is invalid."""
+        return checksums.parse(self.edit.text(), self.algorithm.currentData())
+
+    def isValid(self) -> bool:
+        try:
+            self.value()
+        except checksums.ChecksumError:
+            return False
+        return True
+
+    def _update(self) -> None:
+        try:
+            v = self.value()
+            error = ""
+        except checksums.ChecksumError as e:
+            v, error = "", str(e)
+        self.pill.setText(checksums.title(v))
+        self.pill.setVisible(bool(v))
+        self.pill.adjustSize()
+        self._place_pill()
+        self.edit.setProperty("invalid", bool(error))
+        self.edit.style().unpolish(self.edit)
+        self.edit.style().polish(self.edit)
+        self.message.setText(error or self.hint)
+        self.message.setVisible(bool(error or self.hint))
+        self.message.setObjectName("errorText" if error else "faint")
+        self.message.style().unpolish(self.message)
+        self.message.style().polish(self.message)
+        self.changed.emit()
+
+    def _place_pill(self) -> None:
+        self.edit.setTextMargins(0, 0, (self.pill.width() + 8) if self.pill.isVisible() else 0, 0)
+        self.pill.move(self.edit.width() - self.pill.width() - 5, (self.edit.height() - self.pill.height()) // 2)
+
+    def eventFilter(self, obj, e):
+        if obj is self.edit and e.type() == QEvent.Resize:
+            self._place_pill()
+        return super().eventFilter(obj, e)
 
 
 def check_pixmap(size: int, color: QColor, ratio: float = 1.0) -> QPixmap:
@@ -836,6 +925,10 @@ class ListDelegate(QStyledItemDelegate):
             pill(p, rect, text, _c("tx"), _c("track"), mono_font(f), progress, col, width=150)
         elif kind == "done":
             pill(p, rect, "✓ " + text, _c("ok"), _alpha(_c("ok"), 34), f)
+        elif kind == "verified":
+            pill(p, rect, text, _c("ok"), _alpha(_c("ok"), 34), f, mark="shield-check")
+        elif kind == "mismatch":
+            pill(p, rect, text, _c("bad"), _alpha(_c("bad"), 30), f, mark="shield-alert")
         elif kind == "error":
             pill(p, rect, "! " + text, _c("bad"), _alpha(_c("bad"), 30), f)
         elif kind == "queue":

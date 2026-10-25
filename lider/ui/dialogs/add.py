@@ -36,11 +36,12 @@ from PySide6.QtWidgets import (
 )
 
 from ...core import categories, fmt, media
+from ...core import checksum as checksums
 from ...core.engine import filename_from_url, safe_filename
 from ...core.settings import Settings
 from .. import theme
 from ..icons import bind, category_icon, icon
-from ..widgets import (CheckHeader, TypePillDelegate, caption, form_label, form_row, link_field, mono_font, panel,
+from ..widgets import (ChecksumEdit, CheckHeader, TypePillDelegate, caption, form_label, form_row, link_field, mono_font, panel,
                        pill_label, primary, shell, small_header)
 
 URL_RE = re.compile(r"^(https?|ftp)://\S+$", re.I)
@@ -184,6 +185,7 @@ class FileInfoResult:
     description: str
     queue: str = ""
     variant: media.Variant | None = None
+    checksum: str = ""  # "sha256:<hex>", "" = no check
 
 
 class FileInfoDialog(QDialog):
@@ -241,6 +243,18 @@ class FileInfoDialog(QDialog):
             self.url.setReadOnly(True)
             form.addWidget(self._media_box(media_info))
         form.addLayout(form_row("Description", self.description, width=78))
+        self.checksum = ChecksumEdit()
+        if not media_info:  # a merged YouTube file has no published checksum
+            form.addLayout(form_row("Checksum", self.checksum, width=78))
+            hint = QHBoxLayout()
+            hint.setContentsMargins(88, 0, 0, 0)
+            hint.addWidget(self.checksum.message, 1)
+            form.addLayout(hint)
+            if settings.checksum_from_clipboard:
+                try:
+                    self.checksum.setValue(checksums.parse(QGuiApplication.clipboard().text()))
+                except checksums.ChecksumError:
+                    pass
 
         side = QVBoxLayout()
         side.setContentsMargins(0, 0, 0, 0)
@@ -290,6 +304,8 @@ class FileInfoDialog(QDialog):
         footer.addStretch(1)
         for b in (later, start, cancel):
             footer.addWidget(b)
+        # an invalid checksum holds both until it is fixed or cleared
+        self.checksum.changed.connect(lambda: [b.setEnabled(self.checksum.isValid()) for b in (later, start)])
         start.setFocus()  # once it is in the dialog; Enter starts the download
 
         self.category.currentTextChanged.connect(self._category_changed)
@@ -395,7 +411,13 @@ class FileInfoDialog(QDialog):
         cat = self.settings.category(self.category.currentText())
         if self.remember.isChecked():
             cat.save_dir = os.path.dirname(path)
-        self.result_value = FileInfoResult(action, path, cat.name, self.description.text(), queue, self.variant)
+        try:
+            checksum = self.checksum.value()
+        except checksums.ChecksumError:
+            self.checksum.edit.setFocus()
+            return
+        self.result_value = FileInfoResult(action, path, cat.name, self.description.text(), queue, self.variant,
+                                           checksum)
         self.accept()
 
 

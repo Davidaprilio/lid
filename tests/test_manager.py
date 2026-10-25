@@ -4,7 +4,7 @@ import time
 import unittest
 from datetime import datetime
 
-from lider.core import categories, fmt
+from lider.core import categories, checksum, fmt
 from lider.core import settings as settings_mod
 from lider.core.manager import DownloadManager, QueueSchedule
 from lider.core.models import MAIN_QUEUE, SYNC_QUEUE, Download, Status
@@ -52,6 +52,40 @@ class ManagerTests(unittest.TestCase):
         self.assertTrue(any(e.kind == "complete" and e.download_id == d.id for e in events))
         self.assertTrue(os.path.exists(d.path))
         self.assertTrue(d.path.startswith(self.settings.category("Video").save_dir))
+
+    def test_checksum_is_verified_before_complete(self):
+        d = self.m.add(self.srv.url, "a.iso", checksum="sha256:" + self.srv.sha256, start=True)
+        events = wait_for(self.m, lambda: d.status == Status.COMPLETE and d.checksum_result)
+        self.assertEqual(d.checksum_result, "verified")
+        self.assertEqual(d.checksum_actual, self.srv.sha256)
+        self.assertEqual([e.kind for e in events if e.download_id == d.id and e.kind != "changed"], ["complete"])
+
+    def test_checksum_mismatch_asks_keeps_or_downloads_again_once(self):
+        wrong = "sha256:" + "0" * 64
+        d = self.m.add(self.srv.url, "a.iso", checksum=wrong, start=True)
+        events = wait_for(self.m, lambda: d.checksum_result == "mismatch")
+        self.assertIn(("mismatch", ""), [(e.kind, e.message) for e in events if e.download_id == d.id])
+        self.assertEqual(d.status, Status.COMPLETE)
+        self.assertNotIn("complete", [e.kind for e in events if e.download_id == d.id])
+
+        self.settings.checksum_mismatch = "redownload"
+        requests = len(self.srv.requests)
+        self.m.redownload(d.id, overwrite=True)
+        events = wait_for(self.m, lambda: d.checksum_retried and d.checksum_result == "mismatch")
+        kinds = [e.kind for e in events if e.download_id == d.id and e.kind != "changed"]
+        self.assertEqual(kinds, ["mismatch"])  # downloaded again once by itself, then asked
+        self.assertGreater(len(self.srv.requests), requests + 1)
+
+    def test_skip_check_and_verify_now(self):
+        self.settings.verify_checksum = False
+        d = self.m.add(self.srv.url, "a.iso", checksum="sha256:" + self.srv.sha256, start=True)
+        wait_for(self.m, lambda: d.status == Status.COMPLETE)
+        self.assertEqual(d.checksum_result, "")  # verification turned off in Options
+        self.assertTrue(self.m.verify(d.id, manual=True))
+        events = wait_for(self.m, lambda: d.status == Status.COMPLETE and d.checksum_result)
+        self.assertIn(("checked", "verified"), [(e.kind, e.message) for e in events])
+        self.assertNotIn("complete", [e.kind for e in events])
+        self.assertFalse(self.m.start(d.id) and self.m.is_running(d.id))
 
     def test_queue_runs_items_one_at_a_time_in_order(self):
         ids = [self.m.add(self.srv.url, f"f{i}.zip").id for i in range(3)]
@@ -106,6 +140,28 @@ class SettingsMigrationTests(unittest.TestCase):
         self.assertEqual((s.theme, s.follow_system, s.toolbar_labels), ("ember-dark", False, False))
         s = settings_mod._from_dict({})
         self.assertEqual((s.theme, s.follow_system, s.dark_theme), ("ember", True, "ember-dark"))
+
+
+class ChecksumParseTests(unittest.TestCase):
+    H = "3f9c1e7a5b2d48c6e0a1f7b39d4c2e85a6b0f13d7e9c4a2b58f6d01e3c7a9b42"
+
+    def test_accepted_input(self):
+        self.assertEqual(checksum.parse(""), "")
+        self.assertEqual(checksum.parse(f"  {self.H.upper()}\n"), "sha256:" + self.H)
+        self.assertEqual(checksum.parse(f"SHA-256: {self.H}"), "sha256:" + self.H)
+        self.assertEqual(checksum.parse(f"{self.H} *ubuntu.iso"), "sha256:" + self.H)
+        self.assertEqual(checksum.parse("d41d8cd98f00b204e9800998ecf8427e"), "md5:d41d8cd98f00b204e9800998ecf8427e")
+        self.assertEqual(checksum.parse(self.H, "sha256"), "sha256:" + self.H)
+
+    def test_invalid_input_says_why(self):
+        with self.assertRaisesRegex(checksum.ChecksumError, "expected 64 hex characters, got 62"):
+            checksum.parse(self.H[:-2], "sha256")
+        with self.assertRaisesRegex(checksum.ChecksumError, "got 62"):
+            checksum.parse(self.H[:-2])
+        with self.assertRaisesRegex(checksum.ChecksumError, "“g” is not a hex character"):
+            checksum.parse("g" + self.H[1:])
+        with self.assertRaisesRegex(checksum.ChecksumError, "marked SHA-256 but MD5"):
+            checksum.parse(f"sha256:{self.H}", "md5")
 
 
 class NextStartTests(unittest.TestCase):

@@ -15,6 +15,7 @@ from datetime import datetime, timedelta
 from urllib.parse import urlsplit
 
 from . import categories
+from .checksum import Verifier
 from .engine import DownloadTask, EngineOptions, HttpClient, ProbeResult, SpeedLimiter, request_headers
 from .media_task import MediaTask, remove_parts, reset_streams
 from .models import MAIN_QUEUE, SYNC_QUEUE, Download, Status
@@ -72,7 +73,7 @@ class Queue:
 
 @dataclass
 class Event:
-    kind: str  # complete | error | queue_started | queue_done | changed
+    kind: str  # complete | error | mismatch | checked | queue_started | queue_done | changed
     download_id: int | None = None
     queue: str | None = None
     message: str = ""
@@ -86,8 +87,12 @@ class DownloadManager:
         for d in store.load_downloads():
             if d.status.active:
                 d.status = Status.PAUSED  # the app was closed while downloading
+            elif d.status == Status.VERIFYING:
+                d.status = Status.COMPLETE  # closed while checking: complete, not checked
             self.downloads[d.id] = d
         self.tasks: dict[int, DownloadTask] = {}
+        self.verifiers: dict[int, Verifier] = {}
+        self._verified: queue.Queue[Verifier] = queue.Queue()
         self.queues: dict[str, Queue] = {}
         for name, data in store.load_queues().items():
             self.queues[name] = Queue(name, QueueSchedule(**data.get("schedule", {})))
@@ -132,6 +137,7 @@ class DownloadManager:
         start: bool = False,
         media: dict | None = None,
         headers: dict | None = None,
+        checksum: str = "",
     ) -> Download:
         cat = self.settings.category(category) if category else categories.classify(self.settings, filename, url)
         d = Download(
@@ -149,6 +155,7 @@ class DownloadManager:
             resumable=resumable,
             media=media,
             headers=headers or {},
+            checksum=checksum,
         )
         self._next_id += 1
         self.downloads[d.id] = d
@@ -178,7 +185,7 @@ class DownloadManager:
 
     def start(self, download_id: int) -> DownloadTask | MediaTask | None:
         d = self.downloads.get(download_id)
-        if d is None or self.is_running(download_id) or d.status == Status.COMPLETE:
+        if d is None or self.is_running(download_id) or d.status in (Status.COMPLETE, Status.VERIFYING):
             return self.tasks.get(download_id)
         if d.media:
             s = self.settings
@@ -194,6 +201,59 @@ class DownloadManager:
         t = self.tasks.get(download_id)
         if t:
             t.stop()
+        self.skip_check(download_id)
+
+    # ----------------------------------------------------------------- checksum
+    def verify(self, download_id: int, manual: bool = False) -> bool:
+        """Start reading the finished file to compare it with its checksum; False when there is nothing to check."""
+        d = self.downloads.get(download_id)
+        if (d is None or not d.checksum or download_id in self.verifiers
+                or d.status not in (Status.COMPLETE, Status.VERIFYING) or not os.path.isfile(d.path)):
+            return False
+        d.status = Status.VERIFYING
+        v = Verifier(d.path, d.checksum, manual, self._verified.put, d.id)
+        self.verifiers[d.id] = v
+        v.start()
+        return True
+
+    def skip_check(self, download_id: int) -> None:
+        """"Skip check": the download ends as a plain Complete, unverified."""
+        v = self.verifiers.get(download_id)
+        if v:
+            v.skip()
+
+    def verify_progress(self, download_id: int) -> float | None:
+        v = self.verifiers.get(download_id)
+        return v.progress if v else None
+
+    def _checked(self, v: Verifier) -> list[Event]:
+        """Copy a finished verifier's result to its download and say what happens next."""
+        if self.verifiers.get(v.download_id) is v:
+            del self.verifiers[v.download_id]
+        d = self.downloads.get(v.download_id)
+        if d is None:
+            return []
+        if v.result == "error":
+            d.status, d.error = Status.ERROR, f"Checksum check failed: {v.error}"
+            self.store.save_download(d)
+            return [Event("error", d.id, message=d.error)]
+        d.status = Status.COMPLETE
+        d.checksum_result = v.result
+        if v.result != "skipped":
+            d.checksum_actual, d.checksum_checked, d.checksum_seconds = v.actual, time.time(), v.seconds
+        if v.result == "verified":
+            d.checksum_retried = False
+        self.store.save_download(d)
+        if v.manual:
+            return [Event("checked", d.id, message=v.result)]
+        if v.result != "mismatch":
+            return [Event("complete", d.id)]
+        action = self.settings.checksum_mismatch
+        if action == "redownload" and not d.checksum_retried:
+            d.checksum_retried = True  # a second mismatch always asks
+            self.redownload(d.id, overwrite=True)
+            return [Event("changed", d.id, message="checksum mismatch, downloading again")]
+        return [Event("mismatch", d.id, message="kept" if action == "keep" else "")]
 
     def stop_all(self) -> None:
         for t in list(self.tasks.values()):
@@ -205,6 +265,7 @@ class DownloadManager:
         d = self.downloads[download_id]
         if self.is_running(download_id):
             return
+        self.skip_check(download_id)
         if overwrite and os.path.exists(d.path):
             os.remove(d.path)
         if d.media:
@@ -214,6 +275,7 @@ class DownloadManager:
         else:
             size = -1
         d.status, d.downloaded, d.segments, d.size, d.resumable, d.error = Status.QUEUED, 0, [], size, None, ""
+        d.checksum_result, d.checksum_actual = "", ""
         self.store.save_download(d)
         if start:
             self.start(download_id)
@@ -224,6 +286,10 @@ class DownloadManager:
             if t:
                 t.stop()
                 t.join(5)
+            v = self.verifiers.pop(i, None)
+            if v:
+                v.skip()
+                v.join(5)
             d = self.downloads.pop(i, None)
             if d is None:
                 continue
@@ -373,6 +439,10 @@ class DownloadManager:
                 del self.tasks[d.id]
             if d.id not in self.downloads:
                 continue
+            if d.status == Status.COMPLETE and d.checksum and self.settings.verify_checksum and self.verify(d.id):
+                self.store.save_download(d)
+                events.append(Event("changed", d.id))  # "complete" follows once the checksum is read
+                continue
             self.store.save_download(d)
             if d.status == Status.COMPLETE:
                 events.append(Event("complete", d.id))
@@ -383,6 +453,12 @@ class DownloadManager:
                 events.append(Event("error", d.id, message=d.error))
             else:
                 events.append(Event("changed", d.id))
+        while True:
+            try:
+                v = self._verified.get_nowait()
+            except queue.Empty:
+                break
+            events += self._checked(v)
         for q in self.queues.values():
             events += self._process_queue(q)
         events += self._tick_schedules(now or datetime.now())
@@ -392,6 +468,8 @@ class DownloadManager:
         return events
 
     def shutdown(self) -> None:
+        for v in list(self.verifiers.values()):
+            v.skip()
         for t in list(self.tasks.values()):
             t.stop()
         for t in list(self.tasks.values()):

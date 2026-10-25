@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QSize, Qt, Signal
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QIcon
 from PySide6.QtWidgets import (
     QCheckBox,
     QFrame,
@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..core import checksum as checksums
 from ..core import fmt
 from ..core.manager import DownloadManager
 from ..core.models import Status
@@ -29,6 +30,14 @@ from .dialogs.progress import SegmentBar
 from .icons import bind, category_icon, icon
 from .util import open_folder, open_path
 from .widgets import InfoPillDelegate, ToolButton, mono_font, small_header
+
+
+def _of(part: int, whole: int) -> str:
+    """"2.39 / 5.68 GB": the unit once when both sizes share it."""
+    a, b = fmt.size(part), fmt.size(whole)
+    if a.split()[-1:] == b.split()[-1:]:
+        return f"{a.split()[0]} / {b}"
+    return f"{a} / {b}"
 
 
 def _label(text: str = "", name: str = "", mono: bool = False, scale: float = 1.0, bold: bool = False,
@@ -44,6 +53,7 @@ def _label(text: str = "", name: str = "", mono: bool = False, scale: float = 1.
     return lab
 
 
+SEGMENTS = "Start positions and download progress by connections"
 MIN_WIDTH = 560  # the tabs, the file block and a usable progress column
 WIDE = 960  # from here the transfer rate / time left / ... column fits as well
 
@@ -57,6 +67,7 @@ class DetailsPane(QFrame):
         self.setObjectName("details")
         self.manager = manager
         self.download_id: int | None = None
+        self._action = ""  # what the first button does now
 
         head = QFrame()
         head.setObjectName("detailsTabs")
@@ -169,7 +180,7 @@ class DetailsPane(QFrame):
         left.addLayout(info, 1)
         lw = QWidget()
         lw.setLayout(left)
-        lw.setFixedWidth(290)
+        lw.setFixedWidth(300)
         lay.addWidget(lw)
 
         mid = QVBoxLayout()
@@ -188,7 +199,7 @@ class DetailsPane(QFrame):
         self.bar.setFixedHeight(10)
         mid.addWidget(self.bar)
         self.of.setMinimumWidth(1)
-        caption = _label("Start positions and download progress by connections", "muted", scale=0.96, semibold=True)
+        self.caption = caption = _label(SEGMENTS, "muted", scale=0.96, semibold=True)
         caption.setWordWrap(True)
         mid.addWidget(caption)
         self.segments = SegmentBar()
@@ -201,7 +212,7 @@ class DetailsPane(QFrame):
         grid.setVerticalSpacing(12)
         self.stats = {}
         for i, (key, title) in enumerate((("rate", "Transfer rate"), ("left", "Time left"), ("done", "Downloaded"),
-                                          ("conns", "Connections"), ("resume", "Resume"))):
+                                          ("conns", "Connections"), ("resume", "Resume"), ("checksum", "Checksum"))):
             cell = QVBoxLayout()
             cell.setSpacing(3)
             cell.addWidget(_label(title.upper(), "faint", scale=0.92, semibold=True))
@@ -285,28 +296,71 @@ class DetailsPane(QFrame):
         self.name.setText(self._elide(self.name, d.filename, Qt.ElideRight))
         self.url.setText(self._elide(self.url, d.url.split("://", 1)[-1], Qt.ElideRight))
         self.url.setToolTip(d.url)
+        kind = checksums.title(d.checksum)
+        verifying = self.manager.verify_progress(d.id)
         state = {Status.COMPLETE: "Complete", Status.ERROR: f"Error: {d.error}", Status.PAUSED: "Paused",
-                 Status.ASSEMBLING: "Assembling…", Status.CONNECTING: "Connecting…"}.get(d.status)
+                 Status.ASSEMBLING: "Assembling…", Status.CONNECTING: "Connecting…",
+                 Status.VERIFYING: f"Verifying {kind}…"}.get(d.status)
         if state is None:
             state = "Receiving data…" if running else ("Queued" if not d.downloaded else "Paused")
-        self.state.setText(self._elide(self.state, f"{state} · {d.category}"))
-        if self.pause.text() != ("Pause" if running else "Resume"):
-            self.pause.setText("Pause" if running else "Resume")
-            bind(self.pause, "stop" if running else "resume")
+        if d.status == Status.COMPLETE and d.checksum_result == "verified":
+            line = "Complete · checksum verified"
+        elif d.status == Status.COMPLETE and d.checksum_result == "mismatch":
+            line = f"Checksum mismatch · {d.category}"
+        else:
+            line = f"{state} · {d.category}"
+        self.state.setText(self._elide(self.state, line))
+        # the first button does what fits the state: Pause, Resume, Skip check, Download again or Open
+        if running:
+            action = ("pause", "Pause", "stop")
+        elif d.status == Status.VERIFYING:
+            action = ("skip", "Skip check", "")
+        elif d.status == Status.COMPLETE:
+            action = ("again", "Download again", "") if d.checksum_result == "mismatch" else ("open", "Open", "")
+        else:
+            action = ("resume", "Resume", "resume")
+        if action[0] != self._action:
+            self._action = action[0]
+            self.pause.setText(action[1])
+            if action[2]:
+                bind(self.pause, action[2])
+            else:
+                self.pause.setIcon(QIcon())
             self.pause.updateGeometry()
-        self.pause.setEnabled(d.status != Status.COMPLETE)
-        self.pct.setText(f"{d.progress * 100:.1f}%" if d.size > 0 else fmt.size(d.downloaded))
-        self.of.setText(f"{fmt.size(d.downloaded)} of {fmt.size(d.size)}" if d.size > 0 else "")
-        self.bar.setValue(int(d.progress * 1000))
+        if verifying is not None:
+            self.pct.setText(f"{verifying * 100:.0f}%")
+            self.of.setText(f"{fmt.size(int(d.size * verifying))} of {fmt.size(d.size)} read" if d.size > 0 else "")
+            self.bar.setValue(int(verifying * 1000))
+            self.caption.setText("Checksum progress — reading the merged file")
+        else:
+            self.pct.setText(f"{d.progress * 100:.1f}%" if d.size > 0 else fmt.size(d.downloaded))
+            self.of.setText(f"{fmt.size(d.downloaded)} of {fmt.size(d.size)}" if d.size > 0 else "")
+            self.bar.setValue(int(d.progress * 1000))
+            self.caption.setText(SEGMENTS)
         self.segments.set_segments(d.size, snap["segments"])
         conns = snap["connections"]
         alive = sum(1 for c in conns if c[3])
         finished = sum(1 for s in snap["segments"] if s.end >= 0 and s.pos >= s.end)
         self.stats["rate"].setText(fmt.rate(snap["rate"]) if running else "—")
         self.stats["left"].setText(fmt.duration(snap["time_left"]) if running and snap["time_left"] >= 0 else "—")
-        self.stats["done"].setText(f"{fmt.size(d.downloaded)} / {fmt.size(d.size)}" if d.size > 0 else fmt.size(d.downloaded))
+        self.stats["done"].setText(_of(d.downloaded, d.size) if d.size > 0 else fmt.size(d.downloaded))
         self.stats["conns"].setText(f"{alive} active · {finished} done" if conns or finished else "—")
         self.stats["resume"].setText({True: "Yes", False: "No"}.get(d.resumable, "Unknown"))
+        if not d.checksum:
+            check, tone = "—", ""
+        elif verifying is not None:
+            check, tone = f"{kind} · {verifying * 100:.0f}%", ""
+        elif d.status == Status.COMPLETE and d.checksum_result in ("verified", "mismatch", "skipped"):
+            check = f"{kind} · {d.checksum_result}"
+            tone = {"verified": "okText", "mismatch": "badText"}.get(d.checksum_result, "")
+        else:
+            check, tone = f"{kind} · pending", ""
+        cell = self.stats["checksum"]
+        cell.setText(check)
+        if cell.objectName() != tone:
+            cell.setObjectName(tone)
+            cell.style().unpolish(cell)
+            cell.style().polish(cell)
         while self.conns.topLevelItemCount() > len(conns):
             self.conns.takeTopLevelItem(self.conns.topLevelItemCount() - 1)
         for i, (n, received, info, is_alive, conn_rate) in enumerate(conns):
@@ -322,12 +376,19 @@ class DetailsPane(QFrame):
         return label.fontMetrics().elidedText(text, mode, width)
 
     def _pause_resume(self) -> None:
-        if self.download_id is None:
+        i = self.download_id
+        if i is None:
             return
-        if self.manager.is_running(self.download_id):
-            self.manager.stop(self.download_id)
+        if self._action == "pause":
+            self.manager.stop(i)
+        elif self._action == "skip":
+            self.manager.skip_check(i)
+        elif self._action == "again":
+            self.manager.redownload(i, overwrite=True)
+        elif self._action == "open":
+            open_path(self.manager.downloads[i].path)
         else:
-            self.manager.start(self.download_id)
+            self.manager.start(i)
         self.refresh()
 
     def _open_folder(self) -> None:

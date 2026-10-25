@@ -138,7 +138,16 @@ class DownloadModel(QAbstractTableModel):
     def status_info(self, d: Download) -> tuple[str, float, str]:
         """What the Status pill shows: (kind, progress, text)."""
         running = self.manager.is_running(d.id)
+        pending = (d.status == Status.COMPLETE and d.checksum and not d.checksum_result and d.id in self.manager.tasks
+                   and self.manager.settings.verify_checksum)  # finished, the manager starts the check next poll
+        if d.status == Status.VERIFYING or pending:
+            p = self.manager.verify_progress(d.id) or 0.0
+            return "run", p, f"Verifying {p * 100:.0f}%"
         if d.status == Status.COMPLETE:
+            if d.checksum_result == "verified":
+                return "verified", 1.0, "Verified"
+            if d.checksum_result == "mismatch":
+                return "mismatch", 1.0, "Checksum mismatch"
             return "done", 1.0, "Complete"
         if d.status == Status.ERROR:
             code = re.match(r"HTTP (\d{3})", d.error or "")

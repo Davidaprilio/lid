@@ -7,7 +7,7 @@ import shlex
 import subprocess
 
 from PySide6.QtCore import QRectF, QSize, Qt, QTimer
-from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath
+from PySide6.QtGui import QColor, QFont, QIcon, QPainter, QPainterPath
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ...core import checksum as checksums
 from ...core import fmt
 from ...core.manager import DownloadManager
 from ...core.models import Download, Segment, Status
@@ -256,7 +257,9 @@ class ProgressDialog(QDialog):
             self.d.speed_limit_kbps = kbps
 
     def _pause_resume(self) -> None:
-        if self.manager.is_running(self.id):
+        if self.d.status == Status.VERIFYING:
+            self.manager.skip_check(self.id)
+        elif self.manager.is_running(self.id):
             self.manager.stop(self.id)
         else:
             self.manager.start(self.id)
@@ -279,7 +282,10 @@ class ProgressDialog(QDialog):
         self.progress.setValue(int(d.progress * 1000))
         self.percent.setText(f"{pct:.1f}%" if d.size > 0 else fmt.size(d.downloaded))
         detail = getattr(task, "status_text", "") if running else ""
-        if detail:
+        verifying = self.manager.verify_progress(self.id)
+        if verifying is not None:
+            set_pill(self.status, f"Verifying {verifying * 100:.0f}%", "accent")
+        elif detail:
             set_pill(self.status, detail, "accent")
         elif d.status == Status.ERROR:
             set_pill(self.status, f"Error: {d.error}", "bad")
@@ -302,9 +308,13 @@ class ProgressDialog(QDialog):
             set_pill(self.resume, "(unknown)", "muted")
         else:
             set_pill(self.resume, "✓ Yes" if d.resumable else "No", "ok" if d.resumable else "muted")
-        if self.pause_btn.text() != ("Pause" if running else "Resume"):
-            self.pause_btn.setText("Pause" if running else "Resume")
-            bind(self.pause_btn, "stop" if running else "resume")
+        label = "Skip check" if verifying is not None else ("Pause" if running else "Resume")
+        if self.pause_btn.text() != label:
+            self.pause_btn.setText(label)
+            if verifying is not None:
+                self.pause_btn.setIcon(QIcon())
+            else:
+                bind(self.pause_btn, "stop" if running else "resume")
         self.pause_btn.setEnabled(d.status != Status.COMPLETE)
         self.bar.set_segments(d.size, snap["segments"])
         conns = snap["connections"]
@@ -343,7 +353,10 @@ class CompleteDialog(QDialog):
         bl.setContentsMargins(0, 0, 0, 0)
         mark = QLabel()
         mark.setAlignment(Qt.AlignCenter)
-        mark.setPixmap(check_pixmap(22, QColor(theme.colors()["ok"]), self.devicePixelRatioF()))
+        if d.checksum_result == "verified":
+            mark.setPixmap(icon("shield-check").pixmap(22, 22))
+        else:
+            mark.setPixmap(check_pixmap(22, QColor(theme.colors()["ok"]), self.devicePixelRatioF()))
         bl.addWidget(mark)
         head.addWidget(badge, 0, Qt.AlignTop)
         text = QVBoxLayout()
@@ -359,6 +372,9 @@ class CompleteDialog(QDialog):
         text.addWidget(title)
         text.addWidget(sub)
         head.addLayout(text, 1)
+        verified = d.checksum_result == "verified"
+        if verified:
+            head.addWidget(pill_label(f"{checksums.title(d.checksum)} verified", "ok"), 0, Qt.AlignTop)
         body.addLayout(head)
 
         addr = QLineEdit(d.url)
@@ -374,6 +390,17 @@ class CompleteDialog(QDialog):
         body.addSpacing(4)
         body.addWidget(caption("The file saved as"))
         body.addWidget(saved)
+        if verified:
+            value = QLineEdit(checksums.split(d.checksum)[1])
+            value.setReadOnly(True)
+            value.setFont(mono_font(value.font()))
+            value.setCursorPosition(0)
+            value.setFocusPolicy(Qt.ClickFocus)
+            value.addAction(QIcon(check_pixmap(14, QColor(theme.colors()["ok"]), self.devicePixelRatioF())),
+                            QLineEdit.TrailingPosition)
+            body.addSpacing(4)
+            body.addWidget(caption(f"Checksum ({checksums.title(d.checksum)}) · matches"))
+            body.addWidget(value)
 
         self.dont_show = QCheckBox("Don't show this dialog again")
         footer.addWidget(self.dont_show)
@@ -399,6 +426,73 @@ class CompleteDialog(QDialog):
 
     def _folder(self):
         open_folder(self.path)
+        self.accept()
+
+
+class MismatchDialog(QDialog):
+    """"The file doesn't match its checksum": expected and actual hash, then Delete file,
+    Download again or Keep file. ``choice`` is "delete", "again" or "keep"."""
+
+    def __init__(self, d: Download, parent=None):
+        super().__init__(parent)
+        self.choice = "keep"
+        self.setWindowTitle("Checksum mismatch")
+        self.setMinimumWidth(640)
+        body, footer = shell(self, "shield-alert", "The file doesn't match its checksum",
+                             f"{d.filename} · {fmt.size(d.size)}. It may be corrupt or changed on the server.",
+                             spacing=8, badge="bad")
+        box = QFrame()
+        box.setObjectName("mismatchBox")
+        bl = QGridLayout(box)
+        bl.setContentsMargins(14, 12, 14, 12)
+        bl.setHorizontalSpacing(16)
+        bl.setVerticalSpacing(6)
+        for row, (name, value, bad) in enumerate((("Expected", checksums.split(d.checksum)[1], False),
+                                                   ("Actual", d.checksum_actual, True))):
+            cap = caption(name)
+            val = _mono(QLabel(value))
+            val.setTextInteractionFlags(Qt.TextSelectableByMouse)
+            val.setMinimumWidth(1)
+            if bad:
+                val.setObjectName("badText")
+            bl.addWidget(cap, row, 0)
+            bl.addWidget(val, row, 1)
+        why = QLabel(f"{checksums.title(d.checksum)}. Expected is the value you entered; Actual is computed from "
+                     "the downloaded file after its parts were merged.")
+        why.setObjectName("muted")
+        why.setWordWrap(True)
+        bl.addWidget(why, 2, 0, 1, 2)
+        bl.setColumnStretch(1, 1)
+        body.addWidget(box)
+        body.addSpacing(4)
+        body.addWidget(caption("The file saved as"))
+        saved = QLineEdit(d.path)
+        saved.setReadOnly(True)
+        saved.setFont(mono_font(saved.font()))
+        saved.setCursorPosition(0)
+        saved.setFocusPolicy(Qt.ClickFocus)
+        bind(saved.addAction(icon(category_icon(d.category)), QLineEdit.LeadingPosition), category_icon(d.category))
+        body.addWidget(saved)
+
+        delete = QPushButton("Delete file")
+        delete.setObjectName("dangerBtn")
+        bind(delete, "delete")
+        again = primary(QPushButton("Download again"))
+        again.setIcon(icon("add-white"))
+        keep = QPushButton("Keep file")
+        for b in (delete, again):
+            b.setIconSize(QSize(14, 14))
+        again.setDefault(True)
+        delete.clicked.connect(lambda: self._done("delete"))
+        again.clicked.connect(lambda: self._done("again"))
+        keep.clicked.connect(lambda: self._done("keep"))
+        footer.addWidget(delete)  # apart from the safe actions
+        footer.addStretch(1)
+        footer.addWidget(again)
+        footer.addWidget(keep)
+
+    def _done(self, choice: str) -> None:
+        self.choice = choice
         self.accept()
 
 

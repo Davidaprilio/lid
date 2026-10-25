@@ -240,6 +240,35 @@ class MainWindowTests(unittest.TestCase):
         self.w.view.clearSelection()
         self.assertFalse(self.w.details.isVisible())
 
+    def test_checksum_states_and_mismatch_choices(self):
+        from unittest import mock
+
+        from lider.core.manager import Event
+        from lider.ui.dialogs.progress import MismatchDialog
+
+        h = "ab" * 32
+        d = self.m.add("https://example.com/a.iso", "a.iso", checksum="sha256:" + h)
+        d.status, d.checksum_result, d.checksum_actual = Status.COMPLETE, "verified", h
+        self.assertEqual(self.w.model.status_info(d)[:3:2], ("verified", "Verified"))
+        d.checksum_result = "mismatch"
+        self.assertEqual(self.w.model.status_info(d)[:3:2], ("mismatch", "Checksum mismatch"))
+
+        def dialog():
+            app.processEvents()
+            return next(x for x in app.topLevelWidgets() if isinstance(x, MismatchDialog) and x.isVisible())
+
+        with mock.patch.object(self.m, "redownload") as again:
+            self.w.handle_events([Event("mismatch", d.id)])
+            dialog()._done("again")
+            again.assert_called_once_with(d.id, overwrite=True)
+        os.makedirs(d.save_dir, exist_ok=True)
+        open(d.path, "wb").close()
+        with mock.patch("lider.ui.main_window.QFile.moveToTrash") as trash:
+            self.w.handle_events([Event("mismatch", d.id)])
+            dialog()._done("delete")
+            trash.assert_called_once_with(d.path)
+        self.assertNotIn(d.id, self.m.downloads)
+
     def test_sidebar_widens_and_its_width_is_kept(self):
         self.w.resize(1320, 860)
         self.w.show()
@@ -250,6 +279,29 @@ class MainWindowTests(unittest.TestCase):
         self.assertEqual(self.w.settings.sidebar_width, 560)
         self.w.splitter.moveSplitter(5000, 1)  # the details pane keeps its own minimum
         self.assertGreaterEqual(self.w.splitter.sizes()[1], 560)
+
+
+class ChecksumFieldTests(unittest.TestCase):
+    def test_invalid_checksum_holds_start_until_fixed(self):
+        from PySide6.QtWidgets import QPushButton
+
+        from lider.ui.dialogs.add import FileInfoDialog
+
+        h = "3f9c1e7a5b2d48c6e0a1f7b39d4c2e85a6b0f13d7e9c4a2b58f6d01e3c7a9b42"
+        with tempfile.TemporaryDirectory() as tmp:
+            s = Settings(temp_dir=tmp)
+            dlg = FileInfoDialog(s, "https://example.com/a.iso", "a.iso", 100, [MAIN_QUEUE], "", None)
+            start = next(b for b in dlg.findChildren(QPushButton) if b.text() == "&Start Download")
+            dlg.checksum.edit.setText(h[:-2])
+            self.assertFalse(start.isEnabled())
+            self.assertIn("got 62", dlg.checksum.message.text())
+            dlg.checksum.edit.setText(f"{h}  a.iso")  # a SHA256SUMS line
+            self.assertTrue(start.isEnabled())
+            self.assertEqual(dlg.checksum.pill.text(), "SHA-256")
+            dlg.save_as.setCurrentText(os.path.join(tmp, "a.iso"))
+            start.click()
+            self.assertEqual(dlg.result_value.checksum, "sha256:" + h)
+            dlg.deleteLater()
 
 
 class TagInputTests(unittest.TestCase):

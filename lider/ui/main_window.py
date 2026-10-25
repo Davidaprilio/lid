@@ -7,7 +7,7 @@ import subprocess
 from functools import partial
 from urllib.parse import urlsplit
 
-from PySide6.QtCore import QByteArray, QItemSelectionModel, QPoint, QSize, Qt, QTimer
+from PySide6.QtCore import QByteArray, QFile, QItemSelectionModel, QPoint, QSize, Qt, QTimer
 from PySide6.QtGui import QAction, QActionGroup, QFont, QGuiApplication, QKeySequence
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -53,7 +53,7 @@ from .dialogs.add import (
 )
 from .dialogs.find import FindDialog, SearchBar
 from .dialogs.options import CategoryDialog, ColumnsDialog, OptionsDialog, SpeedLimiterDialog
-from .dialogs.progress import CompleteDialog, ProgressDialog
+from .dialogs.progress import CompleteDialog, MismatchDialog, ProgressDialog
 from .dialogs.properties import PropertiesDialog
 from .dialogs.scheduler import SchedulerDialog
 from .details import MIN_WIDTH as DETAILS_MIN_WIDTH, DetailsPane
@@ -462,9 +462,11 @@ class MainWindow(QMainWindow):
 
         rate = sum(t.meter.rate() for t in self.manager.tasks.values() if getattr(t, "meter", None))
         self.sb_speed.setText(f"↓ {fmt.rate(rate) or '0 B/s'}")
-        queued = sum(1 for d in self.manager.downloads.values() if d.queue and d.status != Status.COMPLETE
-                     and not self.manager.is_running(d.id))
-        self.sb_counts.setText(f"{len(self.manager.tasks)} downloading · {queued} in queue")
+        queued = sum(1 for d in self.manager.downloads.values() if d.queue
+                     and d.status not in (Status.COMPLETE, Status.VERIFYING) and not self.manager.is_running(d.id))
+        verifying = len(self.manager.verifiers)
+        self.sb_counts.setText(f"{len(self.manager.tasks)} downloading · "
+                               + (f"{verifying} verifying · " if verifying else "") + f"{queued} in queue")
         self.sb_limiter.setText(f"Speed Limiter: {'on' if self.settings.speed_limiter_on else 'off'}")
         self.sb_clip.setText(f"Clipboard: {'on' if self.settings.monitor_clipboard else 'off'}")
         if not hasattr(self, "_browser_ok"):
@@ -701,9 +703,11 @@ class MainWindow(QMainWindow):
         self._chip_action.setVisible(n > 0)
         self.header.viewport().update()
         running = [d for d in ds if self.manager.is_running(d.id)]
-        resumable = [d for d in ds if not self.manager.is_running(d.id) and d.status != Status.COMPLETE]
+        resumable = [d for d in ds if not self.manager.is_running(d.id)
+                     and d.status not in (Status.COMPLETE, Status.VERIFYING)]
+        verifying = [d for d in ds if d.status == Status.VERIFYING]  # Stop skips the check
         self.a_resume.setEnabled(bool(resumable))
-        self.a_stop.setEnabled(bool(running))
+        self.a_stop.setEnabled(bool(running or verifying))
         self.a_remove.setEnabled(bool(ds))
         self.a_redownload.setEnabled(bool(ds) and not running)
         self.a_stop_all.setEnabled(bool(self.manager.tasks))
@@ -873,7 +877,7 @@ class MainWindow(QMainWindow):
 
     def _confirm_and_add(self, url, name, size, resumable, referer, description, parent_page,
                          username, password, replace: Download | None, headers: dict | None = None):
-        start, queue_name = not self.settings.only_add_to_queue, ""
+        start, queue_name, checksum = not self.settings.only_add_to_queue, "", ""
         cat = categories.classify(self.settings, name, url)
         save_dir, category = cat.save_dir, cat.name
         if replace is None:
@@ -885,6 +889,7 @@ class MainWindow(QMainWindow):
                 return
             r = dlg.result_value
             save_dir, name, category, description = os.path.dirname(r.path), os.path.basename(r.path), r.category, r.description
+            checksum = r.checksum
             if r.action == "later":
                 start, queue_name = False, r.queue
             else:
@@ -895,7 +900,7 @@ class MainWindow(QMainWindow):
                 os.remove(replace.path)
             self.manager.remove([replace.id])
         d = self.manager.add(url, name, save_dir, category, description, referer, parent_page, username, password,
-                             size, resumable, queue_name, start, headers=headers)
+                             size, resumable, queue_name, start, headers=headers, checksum=checksum)
         self.refresh_rows()
         if start:
             self.show_progress(d.id)
@@ -1348,6 +1353,11 @@ class MainWindow(QMainWindow):
                 elif self.tray and e.download_id in self.manager.downloads:
                     d = self.manager.downloads[e.download_id]
                     self.tray.showMessage("Download failed", f"{d.filename}\n{e.message}", QSystemTrayIcon.Warning)
+            elif e.kind == "mismatch":
+                self._checksum_mismatch(e.download_id, ask=e.message != "kept")
+            elif e.kind == "changed" and e.message and self.tray and e.download_id in self.manager.downloads:
+                self.tray.showMessage("Checksum mismatch", f"{self.manager.downloads[e.download_id].filename}\n"
+                                      "Downloading it again.", QSystemTrayIcon.Warning, 4000)
             elif e.kind == "queue_done" and e.queue in self.manager.queues:
                 self._queue_done(e.queue)
         if events:
@@ -1374,6 +1384,36 @@ class MainWindow(QMainWindow):
             self.shutdown_computer()
         elif opts["exit"]:
             self.quit_app()
+
+    def _checksum_mismatch(self, download_id: int, ask: bool = True):
+        d = self.manager.downloads.get(download_id)
+        if d is None:
+            return
+        dlg = self.progress_dialogs.pop(download_id, None)
+        if dlg is not None:
+            dlg.close()
+        if not ask:  # Options: keep the file, mark it "Checksum mismatch"
+            if self.tray:
+                self.tray.showMessage("Checksum mismatch", f"{d.filename}\nThe file was kept.", QSystemTrayIcon.Warning, 4000)
+            return
+        box = MismatchDialog(d, None)
+        box.setAttribute(Qt.WA_DeleteOnClose)
+        box.accepted.connect(lambda: self._mismatch_choice(download_id, box.choice))
+        box.show()
+
+    def _mismatch_choice(self, download_id: int, choice: str):
+        d = self.manager.downloads.get(download_id)
+        if d is None:
+            return
+        if choice == "again":
+            self.manager.redownload(download_id, overwrite=True)
+            self.show_progress(download_id)
+        elif choice == "delete":
+            if os.path.exists(d.path):
+                QFile.moveToTrash(d.path)
+            self.manager.remove([download_id])
+            self.model.set_checked([download_id], False)
+        self.refresh_rows()
 
     def _complete_closed(self, dlg: CompleteDialog):
         if dlg.dont_show.isChecked():

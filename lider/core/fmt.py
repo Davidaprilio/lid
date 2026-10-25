@@ -48,6 +48,8 @@ def status(d: Download) -> str:
         return "Connecting..."
     if d.status == Status.ASSEMBLING:
         return "Assembling..."
+    if d.status == Status.VERIFYING:
+        return "Verifying..."
     if d.status == Status.QUEUED and d.downloaded == 0:
         return ""
     if d.size > 0:

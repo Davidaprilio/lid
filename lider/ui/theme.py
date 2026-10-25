@@ -292,6 +292,14 @@ QToolButton#roundBtn {{ background: {c['btn']}; border: 1px solid {c['line2']}; 
 QToolButton#roundBtn:hover {{ border-color: {c['ac']}; }}
 QFrame#nextRun {{ background: {c['acsel']}; border-radius: 9px; }}
 QFrame#nextRun QLabel {{ color: {c['actx']}; background: transparent; }}
+QLineEdit[invalid="true"] {{ border: 1px solid {c['bad']}; }}
+QLabel#errorText {{ color: {c['bad']}; }}
+QFrame#badBadge {{ background: {_rgba(c['bad'], 0.12)}; border-radius: 21px; }}
+QFrame#mismatchBox {{ background: {_rgba(c['bad'], 0.07)}; border: 1px solid {_rgba(c['bad'], 0.35)}; border-radius: 10px; }}
+QFrame#mismatchBox QLabel {{ background: transparent; }}
+QLabel#badText {{ color: {c['bad']}; }}
+QPushButton#dangerBtn {{ color: {c['bad']}; }}
+QPushButton#dangerBtn:hover {{ border-color: {c['bad']}; }}
 QFrame#accentBadge {{ background: {c['acsel']}; border-radius: 21px; }}
 QFrame#tagInput {{ background: {c['input']}; border: 1px solid {c['line2']}; border-radius: 9px; }}
 QFrame#tagInput[focused="true"] {{ border: 1px solid {c['ac']}; }}

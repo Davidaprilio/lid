@@ -17,6 +17,7 @@ class Status(str, Enum):
     DOWNLOADING = "downloading"
     PAUSED = "paused"  # stopped by the user; the list shows the percentage
     ASSEMBLING = "assembling"
+    VERIFYING = "verifying"  # the file is complete on disk and its checksum is being read
     COMPLETE = "complete"
     ERROR = "error"
 
@@ -71,6 +72,13 @@ class Download:
     queue_order: int = 0
     headers: dict[str, str] = field(default_factory=dict)  # extra request headers
     media: dict | None = None  # set for YouTube downloads: chosen variant and per-stream state
+    # Optional checksum the user entered, as "sha256:<lower-case hex>"; "" = no check.
+    checksum: str = ""
+    checksum_result: str = ""  # "" (not checked) | verified | mismatch | skipped
+    checksum_actual: str = ""  # the hex read from the file at the last check
+    checksum_checked: float = 0.0  # when, and how long it took
+    checksum_seconds: float = 0.0
+    checksum_retried: bool = False  # the automatic download-again after a mismatch happens once
 
     @property
     def path(self) -> str:

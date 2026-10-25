@@ -121,6 +121,9 @@ class Settings:
     only_add_to_queue: bool = False
     show_complete_dialog: bool = True
     duplicate_action: str = "ask"  # ask | number | overwrite | complete
+    verify_checksum: bool = True  # when a download has a checksum, check it once the file is complete
+    checksum_from_clipboard: bool = False  # fill the File Info checksum field from a hash on the clipboard
+    checksum_mismatch: str = "ask"  # ask | keep | redownload
     user_agent: str = DEFAULT_USER_AGENT
     # Options -> Connection
     max_connections: int = 8
