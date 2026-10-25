@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QDate, Qt, QTime
+from datetime import datetime, timedelta
+
+from PySide6.QtCore import QDate, QSize, Qt, QTime, Signal
 from PySide6.QtGui import QFont
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -11,8 +13,10 @@ from PySide6.QtWidgets import (
     QDateEdit,
     QDialog,
     QFileDialog,
+    QFrame,
     QGridLayout,
     QHBoxLayout,
+    QHeaderView,
     QInputDialog,
     QLabel,
     QLineEdit,
@@ -20,7 +24,7 @@ from PySide6.QtWidgets import (
     QPushButton,
     QRadioButton,
     QSpinBox,
-    QTabWidget,
+    QStackedWidget,
     QTimeEdit,
     QToolButton,
     QTreeWidget,
@@ -32,33 +36,51 @@ from PySide6.QtWidgets import (
 from ...core import fmt
 from ...core.manager import DownloadManager, QueueSchedule
 from ...core.models import MAIN_QUEUE, SYNC_QUEUE
-from ..icons import file_icon, icon
-from ..util import dlu, separator
-from ..widgets import primary
+from ..icons import bind, category_icon, icon
+from ..util import separator
+from ..widgets import (COUNT_ROLE, PillDelegate, TreeDelegate, caption, form_label, mono_font, pill_label, primary,
+                       set_pill, shell, small_header, tab_strip)
 
 DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
 
 
+def _right(left: QWidget, right: QWidget | None = None, indent: int = 0) -> QHBoxLayout:
+    """A schedule line: a check box or radio button, its editor pushed to the right edge."""
+    row = QHBoxLayout()
+    row.setContentsMargins(indent, 0, 0, 0)
+    row.addWidget(left)
+    row.addStretch(1)
+    if right is not None:
+        row.addWidget(right)
+    return row
+
+
 class ScheduleTab(QWidget):
+    changed = Signal()
+
     def __init__(self, parent=None):
         super().__init__(parent)
-        g = QGridLayout(self)
+        lay = QVBoxLayout(self)
+        lay.setContentsMargins(16, 14, 16, 14)
+        lay.setSpacing(10)
         self.one_time = QRadioButton("One-time downloading")
         self.periodic = QRadioButton("Periodic synchronization")
         mode = QButtonGroup(self)
         mode.addButton(self.one_time)
         mode.addButton(self.periodic)
-        g.addWidget(self.one_time, 0, 0, 1, 2)
-        g.addWidget(self.periodic, 0, 2, 1, 2)
-        g.addWidget(separator(), 1, 0, 1, 4)
-        self.on_startup = QCheckBox("Start download on LID startup")
-        g.addWidget(self.on_startup, 2, 0, 1, 4)
-        self.start_enabled = QCheckBox("Start download at")
-        self.start_time = QTimeEdit()
-        self.start_time.setDisplayFormat("HH:mm")
-        g.addWidget(self.start_enabled, 3, 0)
-        g.addWidget(self.start_time, 3, 1)
+        row = QHBoxLayout()
+        row.setSpacing(24)
+        row.addWidget(self.one_time)
+        row.addWidget(self.periodic)
+        row.addStretch(1)
+        lay.addLayout(row)
+        lay.addWidget(separator())
 
+        self.on_startup = QCheckBox("Start download on LID startup")
+        lay.addWidget(self.on_startup)
+        self.start_enabled = QCheckBox("Start download at")
+        self.start_time = self._time_edit()
+        lay.addLayout(_right(self.start_enabled, self.start_time))
         self.once = QRadioButton("Once at")
         self.daily = QRadioButton("Daily")
         when = QButtonGroup(self)
@@ -67,62 +89,97 @@ class ScheduleTab(QWidget):
         self.once_date = QDateEdit()
         self.once_date.setCalendarPopup(True)
         self.once_date.setDisplayFormat("yyyy-MM-dd")
-        g.addWidget(self.once, 4, 0)
-        g.addWidget(self.once_date, 4, 1)
-        g.addWidget(self.daily, 5, 0, Qt.AlignTop)
+        self.once_date.setFont(mono_font(self.once_date.font()))
+        self.once_date.setFixedWidth(130)
+        lay.addLayout(_right(self.once, self.once_date, indent=26))
+        lay.addLayout(_right(self.daily, indent=26))
         days = QGridLayout()
+        days.setContentsMargins(52, 0, 0, 0)
+        days.setHorizontalSpacing(24)
+        days.setVerticalSpacing(8)
         self.day_boxes = []
         for i, name in enumerate(DAYS):
             cb = QCheckBox(name)
             self.day_boxes.append(cb)
             days.addWidget(cb, i % 3, i // 3)
-        g.addLayout(days, 5, 1, 1, 3)
+        days.setColumnStretch(3, 1)
+        lay.addLayout(days)
 
+        self.every = QWidget()
+        er = QHBoxLayout(self.every)
+        er.setContentsMargins(0, 0, 0, 0)
         self.every_label = QLabel("Start again every")
         self.every_h = QSpinBox()
         self.every_h.setRange(0, 999)
         self.every_m = QSpinBox()
         self.every_m.setRange(0, 59)
-        row = QHBoxLayout()
-        row.addWidget(self.every_h)
-        row.addWidget(QLabel("hours"))
-        row.addWidget(self.every_m)
-        row.addWidget(QLabel("min"))
-        row.addStretch(1)
-        g.addWidget(self.every_label, 6, 0)
-        g.addLayout(row, 6, 1, 1, 3)
+        er.addWidget(self.every_label)
+        er.addStretch(1)
+        for sb, unit in ((self.every_h, "hours"), (self.every_m, "min")):
+            sb.setFont(mono_font(sb.font()))
+            sb.setFixedWidth(70)
+            er.addWidget(sb)
+            er.addWidget(form_label(unit))
+        lay.addWidget(self.every)
 
-        g.addWidget(separator(), 7, 0, 1, 4)
+        lay.addWidget(separator())
         self.stop_enabled = QCheckBox("Stop download at")
-        self.stop_time = QTimeEdit()
-        self.stop_time.setDisplayFormat("HH:mm")
-        g.addWidget(self.stop_enabled, 8, 0)
-        g.addWidget(self.stop_time, 8, 1)
-        self.retries_enabled = QCheckBox("Number of retries for each file if downloading failed :")
+        self.stop_time = self._time_edit()
+        lay.addLayout(_right(self.stop_enabled, self.stop_time))
+        self.retries_enabled = QCheckBox("Number of retries for each file if downloading failed")
         self.retries = QSpinBox()
         self.retries.setRange(0, 999)
-        g.addWidget(self.retries_enabled, 9, 0, 1, 3)
-        g.addWidget(self.retries, 9, 3)
-        g.addWidget(separator(), 10, 0, 1, 4)
+        self.retries.setButtonSymbols(QSpinBox.NoButtons)
+        self.retries.setFont(mono_font(self.retries.font()))
+        self.retries.setFixedWidth(70)
+        lay.addLayout(_right(self.retries_enabled, self.retries))
+        lay.addWidget(separator())
         self.open_enabled = QCheckBox("Open the following file when done:")
         self.open_file = QLineEdit()
+        self.open_file.setFont(mono_font(self.open_file.font()))
         browse = QPushButton("...")
         browse.setObjectName("small")
         browse.setFixedWidth(34)
         browse.clicked.connect(self._browse)
-        g.addWidget(self.open_enabled, 11, 0, 1, 4)
-        g.addWidget(self.open_file, 12, 0, 1, 3)
-        g.addWidget(browse, 12, 3)
+        lay.addWidget(self.open_enabled)
+        self.open_row = QWidget()
+        orow = QHBoxLayout(self.open_row)
+        orow.setContentsMargins(26, 0, 0, 0)
+        orow.addWidget(self.open_file, 1)
+        orow.addWidget(browse)
+        lay.addWidget(self.open_row)
         self.exit_done = QCheckBox("Exit LID when done")
         self.shutdown_done = QCheckBox("Turn off computer when done")
-        g.addWidget(self.exit_done, 13, 0, 1, 4)
-        g.addWidget(self.shutdown_done, 14, 0, 1, 4)
-        g.setRowStretch(15, 1)
-        g.setColumnStretch(3, 1)
+        lay.addWidget(self.exit_done)
+        lay.addWidget(self.shutdown_done)
+        lay.addStretch(1)
+        self.next_run_box = QFrame()
+        self.next_run_box.setObjectName("nextRun")
+        nl = QHBoxLayout(self.next_run_box)
+        nl.setContentsMargins(12, 9, 12, 9)
+        nl.setSpacing(8)
+        clock = QLabel()
+        clock.setPixmap(icon("clock").pixmap(14, 14))
+        self.next_run = QLabel()
+        nl.addWidget(clock)
+        nl.addWidget(self.next_run, 1)
+        lay.addWidget(self.next_run_box)
 
         self.periodic.toggled.connect(self._mode)
         self.daily.toggled.connect(self._mode)
         self.start_enabled.toggled.connect(self._mode)
+        self.open_enabled.toggled.connect(self._mode)
+        for w in (self.start_enabled, self.once, self.daily, *self.day_boxes):
+            w.toggled.connect(self.changed)
+        self.start_time.timeChanged.connect(self.changed)
+        self.once_date.dateChanged.connect(self.changed)
+
+    def _time_edit(self) -> QTimeEdit:
+        t = QTimeEdit()
+        t.setDisplayFormat("HH:mm")
+        t.setFont(mono_font(t.font()))
+        t.setFixedWidth(92)
+        return t
 
     def _browse(self):
         path, _ = QFileDialog.getOpenFileName(self, "Open the following file when done", self.open_file.text())
@@ -131,10 +188,8 @@ class ScheduleTab(QWidget):
             self.open_enabled.setChecked(True)
 
     def _mode(self):
-        periodic = self.periodic.isChecked()
-        self.every_label.setEnabled(periodic)
-        self.every_h.setEnabled(periodic)
-        self.every_m.setEnabled(periodic)
+        self.every.setVisible(self.periodic.isChecked())
+        self.open_row.setVisible(self.open_enabled.isChecked())
         on = self.start_enabled.isChecked()
         self.start_time.setEnabled(on)
         self.once.setEnabled(on)
@@ -188,26 +243,40 @@ class FilesTab(QWidget):
         self.manager = manager
         self.queue = ""
         lay = QVBoxLayout(self)
+        lay.setContentsMargins(16, 14, 16, 14)
+        lay.setSpacing(12)
         row = QHBoxLayout()
         self.parallel = QSpinBox()
         self.parallel.setRange(1, 64)
+        self.parallel.setFont(mono_font(self.parallel.font()))
+        self.parallel.setFixedWidth(64)
         row.addWidget(QLabel("Download"))
         row.addWidget(self.parallel)
         row.addWidget(QLabel("files at the same time"))
         row.addStretch(1)
         lay.addLayout(row)
         self.list = QTreeWidget()
-        self.list.setHeaderLabels(["File Name", "Size", "Status", "Time left"])
+        self.list.setHeaderLabels(["FILE NAME", "SIZE", "STATUS"])
         self.list.setRootIsDecorated(False)
+        self.list.setAlternatingRowColors(True)
         self.list.setSelectionMode(QAbstractItemView.SingleSelection)
-        self.list.setColumnWidth(0, 220)
+        self.list.setItemDelegateForColumn(2, PillDelegate({"Queued": ("muted", "Queued")}, self.list))
+        self.list.header().setStretchLastSection(False)
+        self.list.header().setSectionResizeMode(0, QHeaderView.Stretch)
+        self.list.setColumnWidth(1, 90)
+        self.list.setColumnWidth(2, 110)
+        small_header(self.list)
         lay.addWidget(self.list, 1)
         buttons = QHBoxLayout()
+        buttons.setSpacing(6)
         for name, tip, slot in (("up", "Move up", lambda: self._move(-1)),
                                 ("down-arrow", "Move down", lambda: self._move(1)),
                                 ("remove", "Delete from queue", self._remove)):
             b = QToolButton()
-            b.setIcon(icon(name))
+            b.setObjectName("roundBtn")
+            bind(b, name)
+            b.setIconSize(QSize(14, 14))
+            b.setFixedSize(30, 30)
             b.setToolTip(tip)
             b.clicked.connect(slot)
             buttons.addWidget(b)
@@ -221,9 +290,11 @@ class FilesTab(QWidget):
 
     def fill(self, select_id: int | None = None):
         self.list.clear()
+        mono = mono_font(self.list.font())
         for d in self.manager.queue_items(self.queue):
-            item = QTreeWidgetItem([d.filename, fmt.size(d.size), fmt.status(d), ""])
-            item.setIcon(0, file_icon(d.filename))
+            item = QTreeWidgetItem([d.filename, fmt.size(d.size), fmt.status(d) or "Queued"])
+            item.setIcon(0, icon(category_icon(d.category)))
+            item.setFont(1, mono)
             item.setData(0, Qt.UserRole, d.id)
             self.list.addTopLevelItem(item)
             if d.id == select_id:
@@ -253,63 +324,104 @@ class SchedulerDialog(QDialog):
         self.on_events = on_events
         self.current = ""
         self.setWindowTitle("Scheduler")
-        self.resize(dlu(434, 286))
+        self.resize(820, 720)
+        body, footer = shell(self, spacing=0)
 
         left = QVBoxLayout()
-        head = QHBoxLayout()
-        pic = QLabel()
-        pic.setPixmap(icon("queue").pixmap(24, 24))
-        head.addWidget(pic)
-        head.addWidget(QLabel("Queues"))
-        head.addStretch(1)
-        left.addLayout(head)
+        left.setSpacing(8)
+        left.addWidget(caption("Queues"))
         self.tree = QTreeWidget()
+        self.tree.setObjectName("queues")
+        self.tree.setItemDelegate(TreeDelegate(self.tree))
         self.tree.setHeaderHidden(True)
         self.tree.setRootIsDecorated(False)
+        self.tree.setIndentation(0)
         left.addWidget(self.tree, 1)
-
-        right = QVBoxLayout()
-        self.title = QLabel()
-        f = QFont(self.title.font())
-        f.setBold(True)
-        self.title.setFont(f)
-        right.addWidget(self.title)
-        self.tabs = QTabWidget()
-        self.schedule_tab = ScheduleTab()
-        self.files_tab = FilesTab(manager)
-        self.tabs.addTab(self.schedule_tab, "Schedule")
-        self.tabs.addTab(self.files_tab, "Files in the queue")
-        right.addWidget(self.tabs, 1)
-
-        body = QHBoxLayout()
-        lw = QWidget()
-        lw.setLayout(left)
-        lw.setFixedWidth(dlu(122, 0).width())
-        body.addWidget(lw)
-        body.addLayout(right, 1)
-
-        buttons = QHBoxLayout()
+        qb = QHBoxLayout()
+        qb.setSpacing(6)
         for text, slot in (("&New queue", self._new), ("&Delete", self._delete)):
             b = QPushButton(text)
             b.clicked.connect(slot)
-            buttons.addWidget(b)
-        buttons.addSpacing(20)
-        for text, slot in (("&Start now", self._start), ("S&top", self._stop)):
-            b = primary(QPushButton(text)) if slot == self._start else QPushButton(text)
-            b.clicked.connect(slot)
-            buttons.addWidget(b)
-        buttons.addStretch(1)
+            qb.addWidget(b)
+        qb.addStretch(1)
+        left.addLayout(qb)
+        lw = QWidget()
+        lw.setLayout(left)
+        lw.setFixedWidth(210)
+        left.setContentsMargins(0, 0, 0, 0)
+
+        right = QVBoxLayout()
+        right.setSpacing(10)
+        head = QHBoxLayout()
+        head.setSpacing(10)
+        self.title = QLabel()
+        f = QFont(self.title.font())
+        f.setPointSizeF(f.pointSizeF() * 14 / 12)
+        f.setBold(True)
+        self.title.setFont(f)
+        self.state = pill_label("Stopped", "muted")
+        head.addWidget(self.title)
+        head.addWidget(self.state)
+        head.addStretch(1)
+        right.addLayout(head)
+        card = QFrame()
+        card.setObjectName("panel")
+        cl = QVBoxLayout(card)
+        cl.setContentsMargins(0, 0, 0, 0)
+        cl.setSpacing(0)
+        strip, self.tabs = tab_strip(["Schedule", "Files in the queue"])
+        self.schedule_tab = ScheduleTab()
+        self.files_tab = FilesTab(manager)
+        self.pages = QStackedWidget()
+        self.pages.addWidget(self.schedule_tab)
+        self.pages.addWidget(self.files_tab)
+        self.tabs.currentChanged.connect(self.pages.setCurrentIndex)
+        cl.addWidget(strip)
+        cl.addWidget(self.pages, 1)
+        right.addWidget(card, 1)
+
+        cols = QHBoxLayout()
+        cols.setSpacing(14)
+        cols.addWidget(lw)
+        cols.addLayout(right, 1)
+        body.addLayout(cols, 1)
+
+        start = primary(QPushButton("&Start now"))
+        start.setIcon(icon("play-white"))
+        start.setIconSize(QSize(13, 13))
+        start.clicked.connect(self._start)
+        stop = QPushButton("S&top")
+        stop.clicked.connect(self._stop)
+        footer.addWidget(start)
+        footer.addWidget(stop)
+        footer.addStretch(1)
         for text, slot in (("&Apply", self._apply), ("&Close", self._close)):
             b = QPushButton(text)
             b.clicked.connect(slot)
-            buttons.addWidget(b)
-
-        lay = QVBoxLayout(self)
-        lay.addLayout(body, 1)
-        lay.addLayout(buttons)
+            footer.addWidget(b)
 
         self.tree.currentItemChanged.connect(self._selected)
+        self.schedule_tab.changed.connect(self._show_next_run)
         self._fill(select)
+
+    def _show_next_run(self) -> None:
+        tab = self.schedule_tab
+        sched = QueueSchedule()
+        tab.store(sched)
+        now = datetime.now()
+        t = sched.next_start(now)
+        tab.next_run_box.setVisible(t is not None)
+        if t is None:
+            return
+        mins = max(0, int((t - now).total_seconds() + 59) // 60)
+        h, m = divmod(mins, 60)
+        if t.date() == now.date():
+            day = "tonight" if t.hour >= 18 else "today"
+        elif t.date() == (now + timedelta(days=1)).date():
+            day = "tomorrow"
+        else:
+            day = t.strftime("%a %d %b")
+        tab.next_run.setText(f"Next run {day} at {t:%H:%M} · in {f'{h} h ' if h else ''}{m} m")
 
     def _fill(self, select: str):
         self.tree.blockSignals(True)
@@ -317,6 +429,7 @@ class SchedulerDialog(QDialog):
         for name in self._ordered():
             item = QTreeWidgetItem([name])
             item.setIcon(0, icon("queue-sync" if name == SYNC_QUEUE else "queue"))
+            item.setData(0, COUNT_ROLE, len(self.manager.queue_items(name)))
             self.tree.addTopLevelItem(item)
         self.tree.blockSignals(False)
         names = self._ordered()
@@ -334,10 +447,14 @@ class SchedulerDialog(QDialog):
             return
         self.current = item.text(0)
         q = self.manager.queues[self.current]
-        state = "running" if q.running else "stopped"
-        self.title.setText(f"{self.current}  ({state})")
+        self.title.setText(self.current)
+        self._show_state(q.running)
         self.schedule_tab.load(q.schedule)
         self.files_tab.load(self.current)
+        self._show_next_run()
+
+    def _show_state(self, running: bool) -> None:
+        set_pill(self.state, "Running" if running else "Stopped", "accent" if running else "muted")
 
     def _apply(self):
         if not self.current or self.current not in self.manager.queues:
@@ -371,11 +488,11 @@ class SchedulerDialog(QDialog):
         events = self.manager.start_queue(self.current)
         if self.on_events:
             self.on_events(events)
-        self.title.setText(f"{self.current}  (running)")
+        self._show_state(True)
 
     def _stop(self):
         self.manager.stop_queue(self.current)
-        self.title.setText(f"{self.current}  (stopped)")
+        self._show_state(False)
 
     def _close(self):
         self._apply()

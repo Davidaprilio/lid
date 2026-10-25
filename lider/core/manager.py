@@ -11,7 +11,7 @@ import os
 import queue
 import time
 from dataclasses import asdict, dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import urlsplit
 
 from . import categories
@@ -43,6 +43,21 @@ class QueueSchedule:
     open_when_done: str = ""
     exit_when_done: bool = False
     shutdown_when_done: bool = False
+
+    def next_start(self, now: datetime) -> datetime | None:
+        """When "Start download at" fires next, to the minute, the way the scheduler checks it; None when it won't."""
+        if not self.start_enabled:
+            return None
+        h, m = (int(x) for x in self.start_time.split(":"))
+        now = now.replace(second=0, microsecond=0)
+        today = now.replace(hour=h, minute=m)
+        if self.daily:
+            return next((t for t in (today + timedelta(days=i) for i in range(8))
+                         if t >= now and t.weekday() in self.days), None)
+        if self.once_date:
+            t = datetime.strptime(self.once_date, "%Y-%m-%d").replace(hour=h, minute=m)
+            return t if t >= now else None
+        return today if today >= now else today + timedelta(days=1)
 
 
 @dataclass

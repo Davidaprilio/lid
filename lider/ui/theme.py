@@ -285,6 +285,13 @@ QTabWidget#optionsTabs::tab-bar {{ left: 14px; }}
 QFrame#themeCard {{ background: {c['pane']}; border: 1px solid {c['line']}; border-radius: 10px; }}
 QFrame#themeCard[selected="true"] {{ background: {c['acsel']}; border: 2px solid {c['ac']}; }}
 QFrame#themeCard QRadioButton {{ background: transparent; font-weight: 600; }}
+QTreeWidget#queues {{ padding: 6px; }}
+QTreeWidget#queues::item {{ border-radius: 6px; padding: 4px 4px; }}
+QTreeWidget#queues::item:selected {{ background: {c['acsel']}; color: {c['actx']}; }}
+QToolButton#roundBtn {{ background: {c['btn']}; border: 1px solid {c['line2']}; border-radius: 15px; padding: 0; }}
+QToolButton#roundBtn:hover {{ border-color: {c['ac']}; }}
+QFrame#nextRun {{ background: {c['acsel']}; border-radius: 9px; }}
+QFrame#nextRun QLabel {{ color: {c['actx']}; background: transparent; }}
 QFrame#accentBadge {{ background: {c['acsel']}; border-radius: 21px; }}
 QFrame#tagInput {{ background: {c['input']}; border: 1px solid {c['line2']}; border-radius: 9px; }}
 QFrame#tagInput[focused="true"] {{ border: 1px solid {c['ac']}; }}

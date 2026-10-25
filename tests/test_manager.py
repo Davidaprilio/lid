@@ -6,7 +6,7 @@ from datetime import datetime
 
 from lider.core import categories, fmt
 from lider.core import settings as settings_mod
-from lider.core.manager import DownloadManager
+from lider.core.manager import DownloadManager, QueueSchedule
 from lider.core.models import MAIN_QUEUE, SYNC_QUEUE, Download, Status
 from lider.core.settings import Settings
 from lider.core.store import Store
@@ -106,6 +106,22 @@ class SettingsMigrationTests(unittest.TestCase):
         self.assertEqual((s.theme, s.follow_system, s.toolbar_labels), ("ember-dark", False, False))
         s = settings_mod._from_dict({})
         self.assertEqual((s.theme, s.follow_system, s.dark_theme), ("ember", True, "ember-dark"))
+
+
+class NextStartTests(unittest.TestCase):
+    def test_once_daily_and_off(self):
+        now = datetime(2026, 10, 25, 9, 41, 30)  # a Sunday
+        s = QueueSchedule(start_enabled=True, start_time="01:00")
+        self.assertEqual(s.next_start(now), datetime(2026, 10, 26, 1, 0))  # no date: the next 01:00
+        s.start_time = "09:41"
+        self.assertEqual(s.next_start(now), datetime(2026, 10, 25, 9, 41))  # this minute still counts
+        s.once_date = "2026-10-24"
+        self.assertIsNone(s.next_start(now))  # the day has passed
+        s = QueueSchedule(start_enabled=True, start_time="08:00", daily=True, days=[0, 2])
+        self.assertEqual(s.next_start(now), datetime(2026, 10, 26, 8, 0))  # Monday
+        s.days = []
+        self.assertIsNone(s.next_start(now))
+        self.assertIsNone(QueueSchedule(start_enabled=False).next_start(now))
 
 
 class CategoryAndFormatTests(unittest.TestCase):
