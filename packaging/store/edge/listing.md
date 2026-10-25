@@ -108,7 +108,7 @@ The extension talks only to the LID app on your computer, through native messagi
 | Large promotional tile (1400 × 560) | `assets/tile-large-1400x560.png` |
 | Screenshots (1280 × 800) | `assets/screenshot-1.png`, `assets/screenshot-2.png`, `assets/screenshot-3.png` |
 
-Screenshot 3 shows the popup connected to "LID 1.2.0"; it is an illustration and stays as it is.
+Screenshot 3 shows the popup connected to LID 1.2.0, the release that carries the Edge id.
 
 ### Search terms
 
@@ -142,5 +142,5 @@ Test on any x86_64 Linux (for example Ubuntu 22.04 or later):
 The extension sends no data off the computer. Source code: https://github.com/Davidaprilio/lid (folder lider/browser_extension).
 ```
 
-Replace `<VERSION>` with the LID release that lists the Edge id (step 0): **1.1.2**. The extension
-in that release is version **1.0.0** (`EXTENSION_VERSION`); the LID app is 1.1.2.
+Replace `<VERSION>` with the LID release that lists the Edge id (step 0): **1.2.0**. The extension
+in that release is version **1.0.0** (`EXTENSION_VERSION`); the LID app is 1.2.0.
