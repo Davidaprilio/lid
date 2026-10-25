@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lider"
-version = "1.0"
+dynamic = ["version"]
 description = "LID, Linux Internet Downloader: multi-connection download manager for Linux"
 readme = "README.md"
 license = {text = "MIT"}
@@ -16,6 +16,9 @@ youtube = ["yt-dlp>=2026.8.19"]
 
 [project.scripts]
 lider = "lider.app:main"
+
+[tool.setuptools.dynamic]
+version = {attr = "lider.__version__"}  # one place for the version: lider/__init__.py
 
 [tool.setuptools.packages.find]
 include = ["lider*"]
