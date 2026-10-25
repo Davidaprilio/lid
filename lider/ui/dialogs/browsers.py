@@ -7,19 +7,18 @@ from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import (
     QApplication,
     QDialog,
-    QDialogButtonBox,
     QHBoxLayout,
+    QHeaderView,
     QLabel,
     QLineEdit,
     QPushButton,
     QTreeWidget,
     QTreeWidgetItem,
-    QVBoxLayout,
 )
 
 from ... import browser
-from ..util import dlu, open_path, page_header, separator
-from ..widgets import add_header, primary
+from ..util import open_path
+from ..widgets import CheckHeader, PillDelegate, caption, form_label, mono_font, panel, primary, shell, small_header
 
 STEPS = {
     "chromium": "<b>Chrome, Chromium, Brave, Edge, Vivaldi, Opera:</b> open <code>chrome://extensions</code>, "
@@ -34,16 +33,27 @@ class BrowserIntegrationDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Browser integration")
-        self.resize(dlu(330, 260))
-        lay = QVBoxLayout(self)
-        lay.addWidget(page_header("general", "Capture downloads from the following browsers:"))
-        lay.addWidget(separator())
+        self.setMinimumWidth(680)
+        lay, footer = shell(self, "connection", "Browser integration",
+                            "LID talks to its extension through native messaging — no network port is opened.", spacing=12)
 
         self.tree = QTreeWidget()
-        self.tree.setHeaderLabels(["Browser", "LID helper"])
+        self.header = CheckHeader(self._check_state, self.tree)
+        self.header.toggled.connect(self._toggle_all)
+        self.tree.setHeader(self.header)
+        self.tree.setHeaderLabels(["", "BROWSER", "LID HELPER"])
+        self.header.setDefaultAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        self.header.setSectionResizeMode(0, QHeaderView.Fixed)
+        self.header.setStretchLastSection(True)
+        self.tree.setColumnWidth(0, 34)
+        self.tree.setColumnWidth(1, 260)
         self.tree.setRootIsDecorated(False)
-        self.tree.setColumnWidth(0, 220)
-        self.tree.setMinimumHeight(dlu(0, 112).height())
+        self.tree.setAlternatingRowColors(True)
+        self.tree.setItemDelegateForColumn(2, PillDelegate(
+            {"installed": ("ok", "Installed"), "not installed": ("muted", "Not installed")}, self.tree))
+        self.tree.itemChanged.connect(lambda *_: self.header.viewport().update())
+        small_header(self.tree)
+        self.tree.setMinimumHeight(28 + 5 * 27 + 2)
         lay.addWidget(self.tree, 1)
         row = QHBoxLayout()
         install = primary(QPushButton("Install for checked browsers"))
@@ -54,18 +64,21 @@ class BrowserIntegrationDialog(QDialog):
         row.addWidget(remove)
         row.addStretch(1)
         lay.addLayout(row)
-        lay.addWidget(separator())
 
-        lay.addWidget(QLabel("Then add the LID extension to the browser:"))
+        box, bl = panel()
+        bl.addWidget(caption("Then add the LID extension to the browser"))
         self.folders = {}
         for family in ("chromium", "firefox"):
             text = QLabel(STEPS[family])
             text.setWordWrap(True)
             text.setTextFormat(Qt.RichText)
-            lay.addWidget(text)
+            text.setObjectName("muted")
+            bl.addWidget(text)
             frow = QHBoxLayout()
             edit = QLineEdit()
             edit.setReadOnly(True)
+            edit.setFont(mono_font(edit.font()))
+            edit.setPlaceholderText("Install for a browser first")
             copy = QPushButton("Copy")
             copy.clicked.connect(lambda _=False, e=edit: QApplication.clipboard().setText(e.text()))
             show = QPushButton("Open folder")
@@ -73,12 +86,12 @@ class BrowserIntegrationDialog(QDialog):
             frow.addWidget(edit, 1)
             frow.addWidget(copy)
             frow.addWidget(show)
-            lay.addLayout(frow)
+            bl.addLayout(frow)
             self.folders[family] = edit
+        lay.addWidget(box)
 
-        lay.addWidget(separator())
         get = QHBoxLayout()
-        get.addWidget(QLabel("Get the extension:"))
+        get.addWidget(form_label("Get the extension:"))
         links = []
         if browser.CHROME_WEB_STORE_URL:
             links.append(("Chrome Web Store", browser.CHROME_WEB_STORE_URL))
@@ -97,12 +110,26 @@ class BrowserIntegrationDialog(QDialog):
         get.addStretch(1)
         lay.addLayout(get)
 
-        bb = QDialogButtonBox(QDialogButtonBox.Close)
-        bb.rejected.connect(self.reject)
-        bb.accepted.connect(self.accept)
-        lay.addWidget(bb)
+        close = QPushButton("Close")
+        close.setDefault(True)
+        close.clicked.connect(self.reject)
+        footer.addStretch(1)
+        footer.addWidget(close)
         self._fill()
-        add_header(self, "connection", "Browser integration", "LID talks to its extension through native messaging; no network port is opened.")
+
+    def _check_state(self) -> Qt.CheckState:
+        items = [self.tree.topLevelItem(i) for i in range(self.tree.topLevelItemCount())]
+        states = {i.checkState(0) for i in items if not i.isDisabled()}
+        if states == {Qt.Checked}:
+            return Qt.Checked
+        return Qt.PartiallyChecked if Qt.Checked in states else Qt.Unchecked
+
+    def _toggle_all(self) -> None:
+        on = self._check_state() != Qt.Checked
+        for i in range(self.tree.topLevelItemCount()):
+            item = self.tree.topLevelItem(i)
+            if not item.isDisabled():
+                item.setCheckState(0, Qt.Checked if on else Qt.Unchecked)
 
     def _fill(self):
         self.tree.clear()
@@ -110,7 +137,7 @@ class BrowserIntegrationDialog(QDialog):
         for b in browser.BROWSERS:
             installed = browser.is_installed(b)
             state = "installed" if installed else ("not installed" if b in found else "browser not found")
-            item = QTreeWidgetItem([b.name, state])
+            item = QTreeWidgetItem(["", b.name, state])
             item.setData(0, Qt.UserRole, b)
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
             item.setCheckState(0, Qt.Checked if b in found else Qt.Unchecked)

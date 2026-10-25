@@ -278,6 +278,10 @@ QFrame#tabStrip {{ background: transparent; border: none; border-bottom: 1px sol
 QFrame#tabStrip QTabBar::tab {{ padding: 8px 12px 6px 12px; margin: 0; border-bottom: 2px solid transparent; }}
 QFrame#tabStrip QTabBar::tab:selected {{ border-bottom-color: {c['ac']}; }}
 QFrame#okBadge {{ background: {_rgba(c['ok'], 0.13)}; border-radius: 21px; }}
+QListWidget#checkList {{ padding: 6px; }}
+QListWidget#checkList::item {{ border-radius: 7px; padding: 0 6px; }}
+QListWidget#checkList::item:selected {{ background: {c['acsel']}; color: {c['tx']}; }}
+QFrame#accentBadge {{ background: {c['acsel']}; border-radius: 21px; }}
 QFrame#tagInput {{ background: {c['input']}; border: 1px solid {c['line2']}; border-radius: 9px; }}
 QFrame#tagInput[focused="true"] {{ border: 1px solid {c['ac']}; }}
 QFrame#tagInput QLineEdit {{ border: none; background: transparent; padding: 2px; }}

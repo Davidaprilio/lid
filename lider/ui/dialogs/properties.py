@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import mimetypes
 import os
 import shutil
 
@@ -9,21 +10,22 @@ from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
     QDialog,
     QFileDialog,
-    QGridLayout,
+    QFrame,
     QHBoxLayout,
     QLabel,
     QLineEdit,
     QMessageBox,
     QPushButton,
+    QSizePolicy,
     QVBoxLayout,
 )
 
 from ...core import fmt
 from ...core.manager import DownloadManager
 from ...core.models import Status
-from ..icons import file_icon
-from ..util import dlu, open_path, separator
-from ..widgets import primary
+from ..icons import category_icon, icon
+from ..util import open_path
+from ..widgets import caption, form_label, form_row, mono_font, panel, pill_label, primary, shell
 
 
 class PropertiesDialog(QDialog):
@@ -32,80 +34,101 @@ class PropertiesDialog(QDialog):
         self.manager = manager
         self.d = d = manager.downloads[download_id]
         self.setWindowTitle("File Properties")
-        self.resize(dlu(318, 246).width(), 0)
-        lay = QVBoxLayout(self)
+        self.setMinimumWidth(660)
+        body, footer = shell(self, spacing=12)
 
+        # -- file tile, editable name, status and category pills
         head = QHBoxLayout()
+        head.setSpacing(14)
+        tile = QFrame()
+        tile.setObjectName("tile")
+        tile.setFixedSize(52, 52)
+        tl = QVBoxLayout(tile)
+        tl.setContentsMargins(0, 0, 0, 0)
         pic = QLabel()
-        pic.setPixmap(file_icon(d.filename).pixmap(32, 32))
+        pic.setAlignment(Qt.AlignCenter)
+        pic.setPixmap(icon(category_icon(d.category)).pixmap(30, 30))
+        tl.addWidget(pic)
+        head.addWidget(tile, 0, Qt.AlignTop)
+        name_col = QVBoxLayout()
+        name_col.setSpacing(8)
         self.name = QLineEdit(d.filename)
-        head.addWidget(pic)
-        head.addWidget(self.name, 1)
-        lay.addLayout(head)
-        lay.addWidget(separator())
+        name_col.addWidget(self.name)
+        pills = QHBoxLayout()
+        pills.setSpacing(6)
+        status = fmt.status(d) or "Queued"
+        if d.status == Status.ERROR:
+            pills.addWidget(pill_label(f"! Error: {d.error}" if d.error else "! Error", "bad"))
+        elif d.status == Status.COMPLETE:
+            pills.addWidget(pill_label("✓ Complete", "ok"))
+        else:
+            pills.addWidget(pill_label(status, "accent" if self.manager.is_running(d.id) else "muted"))
+        pills.addWidget(pill_label(d.category, "muted"))
+        pills.addStretch(1)
+        name_col.addLayout(pills)
+        head.addLayout(name_col, 1)
+        body.addLayout(head)
 
-        g = QGridLayout()
-        mime = os.path.splitext(d.filename)[1].lstrip(".").upper() or "File"
-        rows = [("Type:", QLabel(f"{mime} file  ({d.category})")),
-                ("Status:", QLabel(fmt.status(d) or "Queued" if d.status != Status.ERROR else f"Error: {d.error}")),
-                ("Size:", QLabel(f"{fmt.size(d.size)} ({d.size:,} Bytes)" if d.size >= 0 else "(unknown)"))]
+        # -- file
+        box, fl = panel()
+        mime = mimetypes.guess_type(d.filename)[0] or (os.path.splitext(d.filename)[1].lstrip(".").upper() or "Unknown")
+        fl.addLayout(form_row("Type", QLabel(f"{mime} file ({d.category})"), width=100))
+        size = QLabel(f"{fmt.size(d.size)} ({d.size:,} Bytes)" if d.size >= 0 else "(unknown)")
+        size.setFont(mono_font(size.font()))
+        fl.addLayout(form_row("Size", size, width=100))
         if d.media:
-            rows.append(("YouTube:", QLabel(d.media["variant"]["label"])))
-        for r, (t, w) in enumerate(rows):
-            g.addWidget(QLabel(t), r, 0)
-            g.addWidget(w, r, 1, 1, 2)
-        r = len(rows)
+            fl.addLayout(form_row("YouTube", QLabel(d.media["variant"]["label"]), width=100))
         self.save_dir = QLineEdit(d.save_dir)
         browse = QPushButton("&Browse...")
         browse.clicked.connect(self._browse)
-        g.addWidget(QLabel("Save To:"), r, 0)
-        g.addWidget(self.save_dir, r, 1)
-        g.addWidget(browse, r, 2)
+        fl.addLayout(form_row("Save To", self.save_dir, browse, width=100, stretch_last=False))
+        self.save_dir.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
         self.address = QLineEdit(d.url)
         self.address.setReadOnly(bool(d.media))
         self.description = QLineEdit(d.description)
-        g.addWidget(QLabel("Address:"), r + 1, 0)
-        g.addWidget(self.address, r + 1, 1, 1, 2)
-        g.addWidget(QLabel("Description:"), r + 2, 0)
-        g.addWidget(self.description, r + 2, 1, 1, 2)
-        g.setColumnStretch(1, 1)
-        lay.addLayout(g)
-        lay.addWidget(separator())
-        lay.addWidget(QLabel("The web page from which this file was obtained:"))
-        page = QLabel(d.parent_page or "Unknown")
-        page.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        lay.addWidget(page)
-        lay.addWidget(separator())
+        fl.addLayout(form_row("Address", self.address, width=100))
+        fl.addLayout(form_row("Description", self.description, width=100))
+        for e in (self.save_dir, self.address):
+            e.setFont(mono_font(e.font()))
+            e.setCursorPosition(0)
+        body.addWidget(box)
 
-        g2 = QGridLayout()
+        # -- web page and authorization
+        box, wl = panel()
+        wl.addWidget(caption("Web page and authorization"))
+        page = QLabel(d.parent_page or "Unknown")
+        page.setObjectName("link" if d.parent_page else "muted")
+        page.setFont(mono_font(page.font()))
+        page.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        page.setMinimumWidth(1)
+        wl.addLayout(form_row("Parent page", page, width=100))
         self.referer = QLineEdit(d.referer)
+        self.referer.setFont(mono_font(self.referer.font()))
+        wl.addLayout(form_row("Referer", self.referer, width=100))
         self.login = QLineEdit(d.username)
         self.password = QLineEdit(d.password)
         self.password.setEchoMode(QLineEdit.Password)
-        g2.addWidget(QLabel("Referer:"), 0, 0)
-        g2.addWidget(self.referer, 0, 1, 1, 2)
-        g2.addWidget(QLabel("Login"), 1, 0)
-        g2.addWidget(self.login, 1, 1)
-        g2.addWidget(QLabel("Password"), 2, 0)
-        g2.addWidget(self.password, 2, 1)
-        g2.setColumnStretch(2, 1)
-        lay.addLayout(g2)
-        lay.addWidget(separator())
+        auth = form_row("Login", self.login, width=100)
+        auth.addSpacing(10)
+        auth.addWidget(form_label("Password"))
+        auth.addWidget(self.password, 1)
+        wl.addLayout(auth)
+        body.addWidget(box)
 
-        bottom = QHBoxLayout()
-        info = QVBoxLayout()
-        info.addWidget(QLabel(f"Last try: {fmt.date(d.last_try) or 'never'}"))
-        info.addWidget(QLabel(f"Result: {'Error: ' + d.error if d.error else fmt.status(d)}"))
-        bottom.addLayout(info, 1)
+        result = f"Error: {d.error}" if d.error else fmt.status(d)
+        last = form_label(f"Last try: {fmt.date(d.last_try) or 'never'} · Result: {result}")
+        body.addWidget(last)
+
         open_btn = QPushButton("Open")
         open_btn.setEnabled(d.status == Status.COMPLETE)
         open_btn.clicked.connect(lambda: open_path(d.path))
         ok = primary(QPushButton("OK"))
         ok.setDefault(True)
         ok.clicked.connect(self.accept)
-        bottom.addWidget(open_btn)
-        bottom.addWidget(ok)
-        lay.addLayout(bottom)
+        footer.addStretch(1)
+        footer.addWidget(open_btn)
+        footer.addWidget(ok)
+        ok.setFocus()
 
     def _browse(self):
         path = QFileDialog.getExistingDirectory(self, "Save To", self.save_dir.text())

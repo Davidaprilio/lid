@@ -53,19 +53,19 @@ def _alpha(col: QColor, a: int) -> QColor:
 
 
 # ---------------------------------------------------------------- dialog header
-def dialog_header(icon_name: str, title: str, subtitle: str = "", tile: bool = False) -> QWidget:
-    """Icon (bare, or 22 px on a 40 px tile), bold title and a muted line under it; sits at the top
-    of a dialog. The icon label is ``header.pic``."""
+def dialog_header(icon_name: str, title: str, subtitle: str = "", tile: bool = False, badge: str = "") -> QWidget:
+    """Icon (bare, 22 px on a 40 px tile, or 22 px on a 42 px ``badge`` circle: "accent" or "ok"),
+    bold title and a muted line under it; sits at the top of a dialog. The icon label is ``header.pic``."""
     w = QWidget()
     lay = QHBoxLayout(w)
     lay.setContentsMargins(0, 0, 0, 2)
     lay.setSpacing(12)
     pic = QLabel()
     pic.setAlignment(Qt.AlignCenter)
-    if tile:
+    if tile or badge:
         box = QFrame()
-        box.setObjectName("tileSmall")
-        box.setFixedSize(40, 40)
+        box.setObjectName(f"{badge}Badge" if badge else "tileSmall")
+        box.setFixedSize(42, 42) if badge else box.setFixedSize(40, 40)
         bl = QVBoxLayout(box)
         bl.setContentsMargins(0, 0, 0, 0)
         bl.addWidget(pic)
@@ -95,7 +95,7 @@ def dialog_header(icon_name: str, title: str, subtitle: str = "", tile: bool = F
 
 # ---------------------------------------------------------------- dialog building blocks
 def shell(dialog: QWidget, icon_name: str | None = None, title: str = "", subtitle: str = "",
-          spacing: int = 10, tile: bool = False) -> tuple[QVBoxLayout, QHBoxLayout]:
+          spacing: int = 10, tile: bool = False, badge: str = "") -> tuple[QVBoxLayout, QHBoxLayout]:
     """The frame of every dialog: optional header, padded body and a footer bar. Returns (body, footer);
     the header's icon label is ``dialog.header_icon``."""
     outer = QVBoxLayout(dialog)
@@ -106,7 +106,7 @@ def shell(dialog: QWidget, icon_name: str | None = None, title: str = "", subtit
     body.setContentsMargins(18, 16, 18, 14)
     body.setSpacing(spacing)
     if icon_name:
-        header = dialog_header(icon_name, title, subtitle, tile)
+        header = dialog_header(icon_name, title, subtitle, tile, badge)
         dialog.header_icon = header.pic
         body.addWidget(header)
     outer.addWidget(content, 1)
@@ -743,8 +743,13 @@ class TypePillDelegate(QStyledItemDelegate):
         painter.restore()
 
 
-class InfoPillDelegate(QStyledItemDelegate):
-    """Connection lists: "Finished" becomes a teal pill, other text is muted; rows are 27 px."""
+class PillDelegate(QStyledItemDelegate):
+    """Shows the texts in ``pills`` (text -> (kind, label)) as pills — ok pills get a check mark —
+    and any other text muted; rows are 27 px."""
+
+    def __init__(self, pills: dict[str, tuple[str, str]], parent=None):
+        super().__init__(parent)
+        self.pills = pills
 
     def sizeHint(self, option, index):
         return QSize(super().sizeHint(option, index).width(), 27)
@@ -758,27 +763,36 @@ class InfoPillDelegate(QStyledItemDelegate):
         if not text:
             return
         painter.save()
-        if text == "Finished":
+        if text in self.pills:
+            kind, label = self.pills[text]
+            ok = kind == "ok"
+            fg, bg = (_c("ok"), _alpha(_c("ok"), 31)) if ok else (_c("mu"), _c("track"))
             f = QFont(option.font)
             f.setPointSizeF(f.pointSizeF() * 11.5 / 12)
             f.setWeight(QFont.DemiBold)
             fm = QFontMetrics(f)
-            h = 22
+            h, mark = 22, 17 if ok else 0
             r = QRectF(option.rect.x() + 6, option.rect.y() + (option.rect.height() - h) / 2,
-                       fm.horizontalAdvance(text) + 37, h)
+                       fm.horizontalAdvance(label) + 20 + mark, h)
             painter.setRenderHint(QPainter.Antialiasing)
             path = QPainterPath()
             path.addRoundedRect(r, h / 2, h / 2)
-            painter.fillPath(path, _alpha(_c("ok"), 31))
-            painter.drawPixmap(QPointF(r.x() + 10, r.y() + 5), check_pixmap(12, _c("ok"), painter.device().devicePixelRatioF()))
+            painter.fillPath(path, bg)
+            if ok:
+                painter.drawPixmap(QPointF(r.x() + 10, r.y() + 5), check_pixmap(12, fg, painter.device().devicePixelRatioF()))
             painter.setFont(f)
-            painter.setPen(_c("ok"))
-            painter.drawText(r.adjusted(27, 0, 0, 0), Qt.AlignVCenter | Qt.AlignLeft, text)
+            painter.setPen(fg)
+            painter.drawText(r.adjusted(10 + mark, 0, 0, 0), Qt.AlignVCenter | Qt.AlignLeft, label)
         else:
             painter.setPen(_c("mu"))
             painter.drawText(option.rect.adjusted(10, 0, -4, 0), Qt.AlignVCenter | Qt.AlignLeft,
                              option.fontMetrics.elidedText(text, Qt.ElideRight, option.rect.width() - 14))
         painter.restore()
+
+
+def InfoPillDelegate(parent=None) -> PillDelegate:
+    """Connection lists: "Finished" is a teal pill."""
+    return PillDelegate({"Finished": ("ok", "Finished")}, parent)
 
 
 class ListDelegate(QStyledItemDelegate):

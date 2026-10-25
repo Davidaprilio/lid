@@ -5,7 +5,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath
 from PySide6.QtWidgets import (
     QAbstractItemView,
@@ -39,8 +39,9 @@ from PySide6.QtWidgets import (
 from ...core.settings import CONNECTION_CHOICES, DEFAULT_COLUMNS, DEFAULT_FILE_TYPES, Category, Settings
 from .. import theme
 from ..icons import category_icon
-from ..util import dlu, page_header, separator
-from ..widgets import TagInput, add_header, dialog_header, extension_tag, primary, site_tag
+from ..util import page_header, separator
+from ..widgets import (TagInput, extension_tag, form_label, form_row, mono_font, note,
+                       primary, shell, site_tag)
 
 AUTOSTART = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "autostart" / "lider.desktop"
 
@@ -62,24 +63,30 @@ def _browse_dir(parent: QWidget, edit: QLineEdit) -> None:
         edit.setText(path)
 
 
+def _ok_cancel(dialog: QDialog, footer: QHBoxLayout) -> None:
+    ok, cancel = primary(QPushButton("OK")), QPushButton("Cancel")
+    ok.setDefault(True)
+    ok.clicked.connect(dialog.accept)
+    cancel.clicked.connect(dialog.reject)
+    footer.addStretch(1)
+    footer.addWidget(cancel)
+    footer.addWidget(ok)
+
+
 class CategoryDialog(QDialog):
     """Category editor: file types and sites are removable badges."""
 
     def __init__(self, cat: Category | None, parent=None):
         super().__init__(parent)
         self.setWindowTitle("LID categories")
-        self.resize(640, 0)
+        self.setMinimumWidth(640)
         new = cat is None
         cat = cat or Category("", [], os.path.join(str(Path.home() / "Downloads"), "New"))
-        lay = QVBoxLayout(self)
-        lay.setSpacing(9)
-        lay.addWidget(dialog_header(category_icon(cat.name) if cat.name else "folder", "LID categories",
-                                    "New category" if new else f"Edit the {cat.name} category"))
-        row = QHBoxLayout()
-        row.addWidget(QLabel("Category name"))
+        lay, footer = shell(self, category_icon(cat.name) if cat.name else "folder", "LID categories",
+                            "New category" if new else f"Edit the {cat.name} category", spacing=9, tile=True)
         self.name = QLineEdit(cat.name)
-        row.addWidget(self.name, 1)
-        lay.addLayout(row)
+        lay.addLayout(form_row("Category name", self.name, width=110))
+        lay.addSpacing(2)
         lay.addWidget(QLabel("Automatically put in this category the following file types:"))
         self.exts = TagInput(cat.extensions, "Add a type, e.g. mkv", extension_tag, "types")
         lay.addWidget(self.exts)
@@ -94,6 +101,7 @@ class CategoryDialog(QDialog):
         lay.addWidget(QLabel("Save future downloads of this category to:"))
         row = QHBoxLayout()
         self.folder = QLineEdit(cat.save_dir)
+        self.folder.setFont(mono_font(self.folder.font()))
         browse = QPushButton("Browse...")
         browse.clicked.connect(lambda: _browse_dir(self, self.folder))
         row.addWidget(self.folder, 1)
@@ -102,12 +110,7 @@ class CategoryDialog(QDialog):
         self.remember = QCheckBox("Remember last save path")
         self.remember.setChecked(cat.remember_last)
         lay.addWidget(self.remember)
-        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        primary(bb.button(QDialogButtonBox.Ok))
-        bb.accepted.connect(self.accept)
-        bb.rejected.connect(self.reject)
-        lay.addSpacing(4)
-        lay.addWidget(bb)
+        _ok_cancel(self, footer)
         if cat.name == "General":
             self.name.setReadOnly(True)
 
@@ -131,21 +134,21 @@ class ServerLimitDialog(QDialog):
     def __init__(self, pattern: str = "", n: int = 2, parent=None):
         super().__init__(parent)
         self.setWindowTitle("Max. connections number for a server")
-        g = QGridLayout(self)
+        self.setMinimumWidth(480)
+        body, footer = shell(self, spacing=8)
         self.server = QLineEdit(pattern)
+        self.server.setFont(mono_font(self.server.font()))
         self.conns = QComboBox()
         self.conns.addItems([str(c) for c in CONNECTION_CHOICES])
         self.conns.setCurrentText(str(n))
-        g.addWidget(QLabel("Server"), 0, 0)
-        g.addWidget(self.server, 0, 1)
-        g.addWidget(QLabel("You may use asterisk as a wildcard pattern"), 1, 1)
-        g.addWidget(QLabel("Max. connections number"), 2, 0)
-        g.addWidget(self.conns, 2, 1)
-        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        primary(bb.button(QDialogButtonBox.Ok))
-        bb.accepted.connect(self.accept)
-        bb.rejected.connect(self.reject)
-        g.addWidget(bb, 3, 0, 1, 2)
+        self.conns.setFixedWidth(90)
+        body.addLayout(form_row("Server", self.server, width=170))
+        hint = QLabel("You may use an asterisk as a wildcard.")
+        hint.setObjectName("faint")
+        hint.setContentsMargins(180, 0, 0, 4)
+        body.addWidget(hint)
+        body.addLayout(form_row("Max. connections number", self.conns, QWidget(), width=170))
+        _ok_cancel(self, footer)
 
     def value(self) -> tuple[str, int]:
         return self.server.text().strip(), int(self.conns.currentText())
@@ -158,26 +161,20 @@ class SpeedLimiterDialog(QDialog):
         super().__init__(parent)
         self.settings = settings
         self.setWindowTitle("Speed Limiter settings")
-        g = QGridLayout(self)
+        self.setMinimumWidth(520)
+        body, footer = shell(self, "speed", "Speed Limiter settings", "Applies to all downloads while the limiter is on",
+                             spacing=12, badge="accent")
         self.kbps = QSpinBox()
         self.kbps.setRange(1, 10_000_000)
         self.kbps.setValue(settings.speed_limit_kbps)
-        note = QLabel("Note: Internet servers may break connection when the speed is very low. "
-                      "Please don't set the speed limit too low.")
-        note.setWordWrap(True)
+        self.kbps.setFont(mono_font(self.kbps.font()))
+        self.kbps.setFixedWidth(120)
+        body.addLayout(form_row("Maximum speed", self.kbps, form_label("KBytes/sec"), QWidget(), width=110))
+        body.addWidget(note("Note: servers may close the connection when the speed is very low.", boxed=True))
         self.on_startup = QCheckBox("Always turn on Speed Limiter on LID startup")
         self.on_startup.setChecked(settings.speed_limiter_on_startup)
-        g.addWidget(QLabel("Maximum download speed for one file"), 0, 0)
-        g.addWidget(self.kbps, 0, 1)
-        g.addWidget(QLabel("KBytes/sec"), 0, 2)
-        g.addWidget(note, 1, 0, 1, 3)
-        g.addWidget(self.on_startup, 2, 0, 1, 3)
-        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        primary(bb.button(QDialogButtonBox.Ok))
-        bb.accepted.connect(self.accept)
-        bb.rejected.connect(self.reject)
-        g.addWidget(bb, 3, 0, 1, 3)
-        add_header(self, "options", "Speed Limiter settings", "Applies to all downloads while the limiter is on.")
+        body.addWidget(self.on_startup)
+        _ok_cancel(self, footer)
 
     def accept(self):
         self.settings.speed_limit_kbps = self.kbps.value()
@@ -192,52 +189,55 @@ class ColumnsDialog(QDialog):
         super().__init__(parent)
         self.settings = settings
         self.setWindowTitle("Columns")
+        self.setMinimumWidth(440)
         titles = {k: t for k, t, _, _ in DEFAULT_COLUMNS}
-        lay = QVBoxLayout(self)
-        intro = QLabel("Check the columns that you would like visible in this list. Use the Move Up and Move Down "
-                       "buttons to reorder the columns however you like.")
+        lay, footer = shell(self, spacing=12)
+        intro = QLabel("Check the columns to show. Drag or use the buttons to change the order.")
+        intro.setObjectName("muted")
         intro.setWordWrap(True)
         lay.addWidget(intro)
         row = QHBoxLayout()
+        row.setSpacing(10)
         self.list = QListWidget()
+        self.list.setObjectName("checkList")
+        self.list.setDragDropMode(QAbstractItemView.InternalMove)
+        self.list.setDefaultDropAction(Qt.MoveAction)
         for key, visible, width in settings.columns:
             item = QListWidgetItem(titles.get(key, key))
             item.setData(Qt.UserRole, [key, width])
             item.setFlags(item.flags() | Qt.ItemIsUserCheckable)
             item.setCheckState(Qt.Checked if visible else Qt.Unchecked)
+            item.setSizeHint(QSize(0, 30))
             self.list.addItem(item)
+        self.list.setMinimumHeight(12 * 30 + 16)
         row.addWidget(self.list, 1)
         side = QVBoxLayout()
-        for text, slot in (("Move Up", lambda: self._move(-1)), ("Move Down", lambda: self._move(1)),
-                           ("Show", lambda: self._check(True)), ("Hide", lambda: self._check(False)),
-                           ("Reset", self._reset)):
+        side.setSpacing(6)
+        for text, slot in (("Move up", lambda: self._move(-1)), ("Move down", lambda: self._move(1))):
             b = QPushButton(text)
             b.clicked.connect(slot)
             side.addWidget(b)
         side.addStretch(1)
+        reset = QPushButton("Reset")
+        reset.setObjectName("ghostBtn")
+        reset.setToolTip("Back to the default columns")
+        reset.clicked.connect(self._reset)
+        side.addWidget(reset)
         row.addLayout(side)
         lay.addLayout(row)
-        w = QHBoxLayout()
-        self.width = QSpinBox()
-        self.width.setRange(10, 2000)
-        w.addWidget(QLabel("The selected column should be"))
-        w.addWidget(self.width)
-        w.addWidget(QLabel("pixels wide"))
-        w.addStretch(1)
-        lay.addLayout(w)
-        lay.addWidget(separator())
-        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        primary(bb.button(QDialogButtonBox.Ok))
-        bb.accepted.connect(self.accept)
-        bb.rejected.connect(self.reject)
-        lay.addWidget(bb)
+        self.column_width = QSpinBox()
+        self.column_width.setRange(10, 2000)
+        self.column_width.setFont(mono_font(self.column_width.font()))
+        self.column_width.setFixedWidth(90)
+        lay.addLayout(form_row("Selected column width", self.column_width, form_label("px"), QWidget(), width=150))
+        _ok_cancel(self, footer)
         self.list.currentItemChanged.connect(self._selected)
-        self.width.valueChanged.connect(self._width_changed)
+        self.column_width.valueChanged.connect(self._width_changed)
         self.list.setCurrentRow(0)
 
     def _selected(self, item, _prev):
         if item:
-            self.width.setValue(item.data(Qt.UserRole)[1])
+            self.column_width.setValue(item.data(Qt.UserRole)[1])
 
     def _width_changed(self, v):
         item = self.list.currentItem()

@@ -17,9 +17,8 @@ from PySide6.QtWidgets import (
 )
 
 from ...core.search import SearchFlags, SearchSettings, SearchSettingsError
-from ..icons import bind
-from ..util import separator
-from ..widgets import primary
+from ..icons import bind, icon
+from ..widgets import caption, panel, primary, shell
 
 
 class FindDialog(QDialog):
@@ -29,14 +28,17 @@ class FindDialog(QDialog):
         super().__init__(parent)
         self.settings = settings
         self.setWindowTitle(title)
-        lay = QVBoxLayout(self)
+        self.setMinimumWidth(460)
+        body, footer = shell(self, spacing=10)
         self.query = QLineEdit(settings.query)
+        bind(self.query.addAction(icon("search"), QLineEdit.LeadingPosition), "search")
         if show_query:
-            lay.addWidget(QLabel("Find:"))
-            lay.addWidget(self.query)
+            body.addWidget(caption("Find"))
+            body.addWidget(self.query)
+            body.addSpacing(2)
         self.name = QCheckBox("File name or part of the name")
         self.desc = QCheckBox("Description or part of the description")
-        self.links = QCheckBox("Site name/Download link/Parent web page/Referer")
+        self.links = QCheckBox("Site name / download link / parent web page / referer")
         self.case = QCheckBox("Match case")
         self.whole = QCheckBox("Match whole string only")
         f = settings.flags
@@ -45,25 +47,29 @@ class FindDialog(QDialog):
         self.links.setChecked(SearchFlags.TARGET_LINKS in f)
         self.case.setChecked(SearchFlags.MATCH_CASE in f)
         self.whole.setChecked(SearchFlags.WHOLE_STRING in f)
+        box, lay = panel()
+        lay.addWidget(caption("Look in"))
         for c in (self.name, self.desc, self.links):
             lay.addWidget(c)
-        lay.addWidget(separator())
-        for c in (self.case, self.whole):
-            row = QHBoxLayout()
-            row.addSpacing(12)
-            row.addWidget(c)
-            lay.addLayout(row)
-        buttons = QHBoxLayout()
+        body.addWidget(box)
+        match = QHBoxLayout()
+        match.setSpacing(16)
+        match.addWidget(self.case)
+        match.addWidget(self.whole)
+        match.addStretch(1)
+        body.addLayout(match)
         find = primary(QPushButton("Find" if show_query else "OK"))
         cancel = QPushButton("Cancel")
         find.setDefault(True)
         find.clicked.connect(self.accept)
         cancel.clicked.connect(self.reject)
-        buttons.addStretch(1)
-        buttons.addWidget(find)
-        buttons.addWidget(cancel)
-        buttons.addStretch(1)
-        lay.addLayout(buttons)
+        if show_query:
+            hint = QLabel("Ctrl+F · F3 finds next")
+            hint.setObjectName("faint")
+            footer.addWidget(hint)
+        footer.addStretch(1)
+        footer.addWidget(cancel)
+        footer.addWidget(find)
         self.query.selectAll()
 
     def accept(self):
