@@ -269,6 +269,49 @@ class MainWindowTests(unittest.TestCase):
             trash.assert_called_once_with(d.path)
         self.assertNotIn(d.id, self.m.downloads)
 
+    def test_closing_with_running_downloads_asks_first(self):
+        from unittest import mock
+
+        from PySide6.QtGui import QCloseEvent
+
+        from lider.ui.dialogs.closing import CloseWhileDownloadingDialog
+
+        self.w.settings.tray_icon = False
+        self.w.show()
+        d = self.m.add("https://example.com/a.iso", "a.iso")
+        answers = []
+
+        def answer(dlg):
+            answers.append(dlg)
+            dlg.choice = choice
+            return 0
+
+        with mock.patch.object(self.m, "is_running", side_effect=lambda i: i == d.id), \
+                mock.patch.object(CloseWhileDownloadingDialog, "exec", answer), \
+                mock.patch.object(self.m, "shutdown") as shutdown, \
+                mock.patch("lider.ui.main_window.QApplication.quit"):
+            choice = "keep"
+            e = QCloseEvent()
+            self.w.closeEvent(e)
+            self.assertFalse(e.isAccepted())
+            self.assertTrue(self.w.isVisible())
+            choice = "background"
+            e = QCloseEvent()
+            self.w.closeEvent(e)
+            self.assertFalse(e.isAccepted())
+            self.assertTrue(self.w.settings.tray_icon)  # the tray icon is turned on to keep going
+            self.assertTrue(self.w.isHidden() or self.w.isMinimized())
+            shutdown.assert_not_called()
+            if self.w.tray:
+                self.w.tray.hide()
+                self.w.tray = None
+            choice = "stop"
+            e = QCloseEvent()
+            self.w.closeEvent(e)
+            self.assertTrue(e.isAccepted())
+            shutdown.assert_called_once()
+        self.assertEqual(len(answers), 3)
+
     def test_sidebar_widens_and_its_width_is_kept(self):
         self.w.resize(1320, 860)
         self.w.show()

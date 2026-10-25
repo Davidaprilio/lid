@@ -54,6 +54,7 @@ from .dialogs.add import (
 from .dialogs.find import FindDialog, SearchBar
 from .dialogs.options import CategoryDialog, ColumnsDialog, OptionsDialog, SpeedLimiterDialog
 from .dialogs.checkhash import CheckHashDialog, can_check
+from .dialogs.closing import CloseWhileDownloadingDialog
 from .dialogs.progress import CompleteDialog, MismatchDialog, ProgressDialog
 from .dialogs.properties import PropertiesDialog
 from .dialogs.scheduler import SchedulerDialog
@@ -1512,6 +1513,15 @@ class MainWindow(QMainWindow):
             self.hide()
             e.ignore()
             return
+        choice = self._confirm_close()
+        self.really_quit = False
+        if choice == "keep":
+            e.ignore()
+            return
+        if choice == "background":
+            self._to_background()
+            e.ignore()
+            return
         self.save_settings()
         for dlg in list(self.progress_dialogs.values()):
             dlg.close()
@@ -1522,6 +1532,35 @@ class MainWindow(QMainWindow):
     def quit_app(self):
         self.really_quit = True
         self.close()
+
+    def _confirm_close(self) -> str:
+        """"stop" when nothing is running or the user agrees to stop, else "keep" or "background"."""
+        running = [d for d in self.manager.downloads.values()
+                   if self.manager.is_running(d.id) or d.id in self.manager.verifiers]
+        if not running:
+            return "stop"
+        exiting = self.really_quit
+        # LID can keep going behind a tray icon (turned on if needed); Exit chosen from the
+        # tray itself only asks to stop or stay.
+        background = not (exiting and self.tray is not None)
+        dlg = CloseWhileDownloadingDialog(running, background=background, exiting=exiting,
+                                          parent=self if self.isVisible() else None)
+        dlg.exec()
+        return dlg.choice
+
+    def _to_background(self):
+        """"Continue in background": turn the tray icon on and hide the window into it."""
+        self.settings.tray_icon = True
+        if self.tray is None:
+            self._build_tray()
+        self.save_settings()
+        if self.tray is None:  # no system tray on this desktop: the taskbar is the next best place
+            self.showMinimized()
+            return
+        self.hide()
+        self.tray.showMessage("LID keeps downloading",
+                              "Open LID from this icon. Turn the icon off again in Options → Appearance.",
+                              QSystemTrayIcon.Information, 5000)
 
 
 def _iter_items(tree: QTreeWidget):
