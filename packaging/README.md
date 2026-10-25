@@ -145,6 +145,13 @@ add-on. The code is not minified or bundled, so AMO needs no separate source upl
 
 ### Chrome Web Store / Edge Add-ons
 
+For Edge Add-ons everything Partner Center asks for is ready in
+[`store/edge/listing.md`](store/edge/listing.md): texts to paste, permission justifications,
+certification notes, the [privacy policy](store/edge/privacy.md) and the images in
+[`store/edge/assets/`](store/edge/assets). Start with its step 0: the store id has to be in a LID
+release before the extension is submitted.
+
+
 1. Register at <https://chrome.google.com/webstore/devconsole> (one-time fee) or
    <https://partner.microsoft.com/dashboard/microsoftedge/> (free).
 2. Upload `lid-extension-chromium-store.zip`. Under *Privacy*, explain the permissions:

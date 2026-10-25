@@ -210,6 +210,7 @@ class FileInfoDialog(QDialog):
 
         self.url = QLineEdit(url)
         self.url.setFont(mono_font(self.url.font()))
+        self.url.setCursorPosition(0)  # show where the address starts
         self.category = QComboBox()
         for c in settings.categories:
             self.category.addItem(icon(category_icon(c.name)), c.name)
