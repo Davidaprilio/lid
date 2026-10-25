@@ -41,7 +41,7 @@ from ...core.settings import Settings
 from .. import theme
 from ..icons import bind, category_icon, icon
 from ..widgets import (CheckHeader, TypePillDelegate, caption, form_label, form_row, link_field, mono_font, panel,
-                       pill_label, primary, shell)
+                       pill_label, primary, shell, small_header)
 
 URL_RE = re.compile(r"^(https?|ftp)://\S+$", re.I)
 
@@ -633,6 +633,7 @@ class LinksDialog(QDialog):
         self.header.setSectionResizeMode(3, QHeaderView.Stretch)
         self.tree.setColumnWidth(0, 34)
         self.tree.setColumnWidth(2, 70)
+        small_header(self.tree)
         self.tree.itemChanged.connect(lambda *_: self._count())
         body.addWidget(self.tree, 1)
 

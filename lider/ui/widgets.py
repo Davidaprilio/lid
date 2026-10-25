@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QStyle,
     QStyledItemDelegate,
+    QTabBar,
     QStyleOptionToolButton,
     QStyleOptionViewItem,
     QStylePainter,
@@ -182,6 +183,41 @@ def pill_label(text: str, kind: str = "muted") -> QLabel:
     f.setWeight(QFont.DemiBold)
     lab.setFont(f)
     return lab
+
+
+def set_pill(label: QLabel, text: str, kind: str) -> None:
+    """Change a ``pill_label``'s text and kind (ok, bad, accent, muted) in place."""
+    name = {"ok": "pillOk", "bad": "pillBad", "accent": "pillAccent"}.get(kind, "pillMuted")
+    label.setText(text)
+    if label.objectName() != name:
+        label.setObjectName(name)
+        label.style().unpolish(label)
+        label.style().polish(label)
+
+
+def tab_strip(names: list[str]) -> tuple[QFrame, QTabBar]:
+    """Underlined tabs on a strip with a bottom rule, for dialogs whose pages sit below them."""
+    strip = QFrame()
+    strip.setObjectName("tabStrip")
+    lay = QHBoxLayout(strip)
+    lay.setContentsMargins(14, 0, 14, 0)
+    tabs = QTabBar()
+    tabs.setDrawBase(False)
+    tabs.setExpanding(False)
+    for n in names:
+        tabs.addTab(n)
+    lay.addWidget(tabs)
+    lay.addStretch(1)
+    return strip, tabs
+
+
+def small_header(view):
+    """The lighter header of lists inside dialogs: smaller semibold captions, no column rules."""
+    view.setProperty("smallHeader", True)
+    f = QFont(view.header().font())
+    f.setPointSizeF(f.pointSizeF() * 10.5 / 12)
+    view.header().setFont(f)
+    return view
 
 
 def primary(button):
@@ -586,6 +622,23 @@ def cross_pixmap(size: int, color: QColor, ratio: float = 1.0) -> QPixmap:
     return pm
 
 
+def check_pixmap(size: int, color: QColor, ratio: float = 1.0) -> QPixmap:
+    pm = QPixmap(round(size * ratio), round(size * ratio))
+    pm.setDevicePixelRatio(ratio)
+    pm.fill(Qt.transparent)
+    p = QPainter(pm)
+    p.setRenderHint(QPainter.Antialiasing)
+    k = size / 24
+    p.setPen(QPen(color, 2.2 * k, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+    path = QPainterPath()
+    path.moveTo(5.5 * k, 12.5 * k)
+    path.lineTo(10 * k, 17 * k)
+    path.lineTo(18.5 * k, 7.5 * k)
+    p.drawPath(path)
+    p.end()
+    return pm
+
+
 class CheckChip(QFrame):
     """'3 checked ✕' in the toolbar: how many rows the toolbar acts on; ✕ clears the checks."""
 
@@ -687,6 +740,44 @@ class TypePillDelegate(QStyledItemDelegate):
         painter.setFont(f)
         painter.setPen(_c("mu"))
         painter.drawText(r, Qt.AlignCenter, text)
+        painter.restore()
+
+
+class InfoPillDelegate(QStyledItemDelegate):
+    """Connection lists: "Finished" becomes a teal pill, other text is muted; rows are 27 px."""
+
+    def sizeHint(self, option, index):
+        return QSize(super().sizeHint(option, index).width(), 27)
+
+    def paint(self, painter, option, index):
+        opt = QStyleOptionViewItem(option)
+        self.initStyleOption(opt, index)
+        text = opt.text
+        opt.text = ""
+        opt.widget.style().drawControl(QStyle.CE_ItemViewItem, opt, painter, opt.widget)
+        if not text:
+            return
+        painter.save()
+        if text == "Finished":
+            f = QFont(option.font)
+            f.setPointSizeF(f.pointSizeF() * 11.5 / 12)
+            f.setWeight(QFont.DemiBold)
+            fm = QFontMetrics(f)
+            h = 22
+            r = QRectF(option.rect.x() + 6, option.rect.y() + (option.rect.height() - h) / 2,
+                       fm.horizontalAdvance(text) + 37, h)
+            painter.setRenderHint(QPainter.Antialiasing)
+            path = QPainterPath()
+            path.addRoundedRect(r, h / 2, h / 2)
+            painter.fillPath(path, _alpha(_c("ok"), 31))
+            painter.drawPixmap(QPointF(r.x() + 10, r.y() + 5), check_pixmap(12, _c("ok"), painter.device().devicePixelRatioF()))
+            painter.setFont(f)
+            painter.setPen(_c("ok"))
+            painter.drawText(r.adjusted(27, 0, 0, 0), Qt.AlignVCenter | Qt.AlignLeft, text)
+        else:
+            painter.setPen(_c("mu"))
+            painter.drawText(option.rect.adjusted(10, 0, -4, 0), Qt.AlignVCenter | Qt.AlignLeft,
+                             option.fontMetrics.elidedText(text, Qt.ElideRight, option.rect.width() - 14))
         painter.restore()
 
 

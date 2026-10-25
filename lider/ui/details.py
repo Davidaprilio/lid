@@ -28,7 +28,7 @@ from ..core.models import Status
 from .dialogs.progress import SegmentBar
 from .icons import bind, category_icon, icon
 from .util import open_folder, open_path
-from .widgets import ToolButton, mono_font
+from .widgets import InfoPillDelegate, ToolButton, mono_font, small_header
 
 
 def _label(text: str = "", name: str = "", mono: bool = False, scale: float = 1.0, bold: bool = False,
@@ -226,6 +226,8 @@ class DetailsPane(QFrame):
         self.conns.setAlternatingRowColors(True)
         for col, width in ((0, 50), (1, 120), (2, 110)):
             self.conns.setColumnWidth(col, width)
+        self.conns.setItemDelegateForColumn(3, InfoPillDelegate(self.conns))
+        small_header(self.conns)
         lay.addWidget(self.conns)
         return w
 

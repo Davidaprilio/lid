@@ -223,6 +223,7 @@ QTreeView::branch:open:has-children:!has-siblings, QTreeView::branch:open:has-ch
 QHeaderView {{ background: {c['hdr']}; border: none; }}
 QHeaderView::section {{ background: {c['hdr']}; color: {c['mu']}; border: none; border-right: 1px solid {c['line']};
     border-bottom: 1px solid {c['line']}; padding: 6px 8px; font-weight: 700; }}
+[smallHeader="true"] QHeaderView::section {{ font-weight: 600; border-right: none; padding: 0 10px; min-height: 27px; }}
 QHeaderView::down-arrow {{ image: url({a}/down.svg); width: 10px; }}
 QHeaderView::up-arrow {{ image: url({a}/up.svg); width: 10px; }}
 
@@ -273,6 +274,10 @@ QFrame#detailsTabs {{ background: {c['hdr']}; border: none; border-bottom: 1px s
 QFrame#detailsTabs QTabBar::tab {{ padding: 6px 12px 5px 12px; margin: 0; border-bottom: 2px solid transparent; }}
 QFrame#detailsTabs QTabBar::tab:selected {{ border-bottom-color: {c['ac']}; }}
 QLabel#okText {{ color: {c['ok']}; }}
+QFrame#tabStrip {{ background: transparent; border: none; border-bottom: 1px solid {c['line']}; }}
+QFrame#tabStrip QTabBar::tab {{ padding: 8px 12px 6px 12px; margin: 0; border-bottom: 2px solid transparent; }}
+QFrame#tabStrip QTabBar::tab:selected {{ border-bottom-color: {c['ac']}; }}
+QFrame#okBadge {{ background: {_rgba(c['ok'], 0.13)}; border-radius: 21px; }}
 QFrame#tagInput {{ background: {c['input']}; border: 1px solid {c['line2']}; border-radius: 9px; }}
 QFrame#tagInput[focused="true"] {{ border: 1px solid {c['ac']}; }}
 QFrame#tagInput QLineEdit {{ border: none; background: transparent; padding: 2px; }}

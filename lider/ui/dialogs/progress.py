@@ -6,12 +6,13 @@ import os
 import shlex
 import subprocess
 
-from PySide6.QtCore import QRectF, Qt, QTimer
-from PySide6.QtGui import QColor, QPainter, QPainterPath
+from PySide6.QtCore import QRectF, QSize, Qt, QTimer
+from PySide6.QtGui import QColor, QFont, QPainter, QPainterPath
 from PySide6.QtWidgets import (
     QCheckBox,
     QDialog,
     QFileDialog,
+    QFrame,
     QGridLayout,
     QHBoxLayout,
     QInputDialog,
@@ -20,7 +21,7 @@ from PySide6.QtWidgets import (
     QProgressBar,
     QPushButton,
     QSpinBox,
-    QTabWidget,
+    QStackedWidget,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -30,34 +31,34 @@ from PySide6.QtWidgets import (
 from ...core import fmt
 from ...core.manager import DownloadManager
 from ...core.models import Download, Segment, Status
-from ..icons import file_icon
-from ..util import dlu, open_folder, open_path, separator
-from ..widgets import primary
+from .. import theme
+from ..icons import bind, category_icon, icon
+from ..util import open_folder, open_path
+from ..widgets import (InfoPillDelegate, caption, check_pixmap, form_label, form_row, mono_font, panel, pill_label,
+                       primary, set_pill, shell, small_header, tab_strip)
 
 
 class SegmentBar(QWidget):
     """Draws each connection's segment: downloaded part filled, the rest empty."""
 
-    def __init__(self, parent=None):
+    def __init__(self, parent=None, gap: str = "pane"):
         super().__init__(parent)
         self.size_total = 0
         self.segments: list[Segment] = []
-        self.setMinimumHeight(12)
-        self.setMaximumHeight(14)
+        self.gap = gap  # the colour behind the bar, drawn between segments
+        self.setFixedHeight(12)
 
     def set_segments(self, size: int, segments: list[Segment]) -> None:
         self.size_total, self.segments = size, segments
         self.update()
 
     def paintEvent(self, _event):
-        from .. import theme
-
         c = theme.colors()
         p = QPainter(self)
         p.setRenderHint(QPainter.Antialiasing)
         r = QRectF(self.rect()).adjusted(0.5, 0.5, -0.5, -0.5)
         clip = QPainterPath()
-        clip.addRoundedRect(r, 4, 4)
+        clip.addRoundedRect(r, 5, 5)
         p.fillPath(clip, QColor(c["track"]))
         p.setClipPath(clip)
         if self.size_total > 0:
@@ -67,9 +68,17 @@ class SegmentBar(QWidget):
                 done = s.end >= 0 and s.pos >= s.end
                 p.fillRect(QRectF(r.left() + s.start * scale, r.top(), max(1.0, (end - s.start) * scale), r.height()),
                            QColor(c["ok"] if done else c["ac"]))
-            gap = QColor(c["pane"])
+            gap = QColor(c[self.gap])
             for s in self.segments[1:]:
                 p.fillRect(QRectF(r.left() + s.start * scale - 1, r.top(), 2, r.height()), gap)
+
+
+def _mono(lab: QLabel, scale: float = 1.0, bold: bool = False) -> QLabel:
+    f = mono_font(lab.font())
+    f.setPointSizeF(lab.font().pointSizeF() * scale)
+    f.setBold(bold)
+    lab.setFont(f)
+    return lab
 
 
 class ProgressDialog(QDialog):
@@ -79,90 +88,100 @@ class ProgressDialog(QDialog):
         self.id = download_id
         self.setAttribute(Qt.WA_DeleteOnClose)
         self.setWindowFlag(Qt.WindowMinimizeButtonHint, True)
-        self.resize(dlu(353, 250).width(), 0)
+        self.setMinimumWidth(600)
         d = self.d
 
-        # -- Download status tab (363)
-        status_tab = QWidget()
-        g = QGridLayout(status_tab)
+        # -- Download status tab
+        status_tab, sl = panel()
         variant = (d.media or {}).get("variant")
-        self.url_label = QLabel(f"{d.url}   ({variant['quality']} {variant['ext'].upper()})" if variant else d.url)
+        self.url_label = _mono(QLabel(f"{d.url}   ({variant['quality']} {variant['ext'].upper()})" if variant else d.url))
+        self.url_label.setObjectName("link")
         self.url_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         self.url_label.setMinimumWidth(1)
-        self.status = QLabel("Connecting...")
-        self.file_size = QLabel("(unknown)")
-        self.downloaded = QLabel("0 Bytes")
-        self.rate = QLabel("")
-        self.time_left = QLabel("(unknown)")
-        self.resume = QLabel("(unknown)")
-        g.addWidget(self.url_label, 0, 0, 1, 2)
+        sl.addWidget(self.url_label)
+        self.status = pill_label("Connecting…", "accent")
+        self.file_size = _mono(QLabel("(unknown)"))
+        self.downloaded = _mono(QLabel("0 Bytes"))
+        self.rate = _mono(QLabel(""))
+        self.time_left = _mono(QLabel("(unknown)"))
+        self.resume = pill_label("(unknown)", "muted")
+        g = QGridLayout()
+        g.setHorizontalSpacing(0)
+        g.setVerticalSpacing(9)
         for row, (title, lab) in enumerate((("Status", self.status), ("File size", self.file_size),
                                             ("Downloaded", self.downloaded), ("Transfer rate", self.rate),
-                                            ("Time left", self.time_left), ("Resume capability", self.resume)), 1):
-            g.addWidget(QLabel(title), row, 0)
-            g.addWidget(lab, row, 1)
+                                            ("Time left", self.time_left), ("Resume capability", self.resume))):
+            g.addWidget(form_label(title, 150), row, 0)
+            g.addWidget(lab, row, 1, Qt.AlignLeft)
         g.setColumnStretch(1, 1)
+        sl.addLayout(g)
 
-        # -- Speed Limiter tab (365)
-        limit_tab = QWidget()
-        lg = QGridLayout(limit_tab)
-        self.rate2 = QLabel("")
+        # -- Speed Limiter tab
+        limit_tab, ll = panel()
+        self.rate2 = _mono(QLabel(""))
         self.use_limit = QCheckBox("Use Speed Limiter")
         self.use_limit.setChecked(d.speed_limit_kbps > 0)
         self.limit = QSpinBox()
         self.limit.setRange(1, 10_000_000)
         self.limit.setValue(d.speed_limit_kbps or self.manager.settings.speed_limit_kbps)
-        self.remember_limit = QCheckBox("Remember Speed Limiter settings for this file\non download start")
+        self.limit.setFont(mono_font(self.limit.font()))
+        self.limit.setFixedWidth(110)
+        self.remember_limit = QCheckBox("Remember Speed Limiter settings for this file on download start")
         self.remember_limit.setChecked(True)
-        lg.addWidget(QLabel("Transfer rate"), 0, 0)
-        lg.addWidget(self.rate2, 0, 1)
-        lg.addWidget(self.use_limit, 1, 0, 1, 2)
-        lg.addWidget(QLabel("Maximum download speed:"), 2, 0, 1, 2)
-        row = QHBoxLayout()
-        row.addWidget(self.limit)
-        row.addWidget(QLabel("KBytes/sec"))
-        row.addStretch(1)
-        lg.addLayout(row, 3, 0, 1, 2)
-        lg.addWidget(self.remember_limit, 4, 0, 1, 2)
-        lg.setColumnStretch(1, 1)
+        ll.addLayout(form_row("Transfer rate", self.rate2, width=130))
+        ll.addWidget(self.use_limit)
+        unit = form_label("KBytes/sec")
+        ll.addLayout(form_row("Maximum speed", self.limit, unit, QWidget(), width=130))
+        ll.addWidget(self.remember_limit)
+        ll.addStretch(1)
         self.use_limit.toggled.connect(self._apply_limit)
         self.limit.valueChanged.connect(self._apply_limit)
 
-        # -- Options on completion tab (364)
-        done_tab = QWidget()
-        dg = QVBoxLayout(done_tab)
+        # -- Options on completion tab
+        done_tab, dg = panel()
         self.save_to = QLineEdit(d.path)
         self.save_to.setReadOnly(True)
+        self.save_to.setFont(mono_font(self.save_to.font()))
         self.save_to.setCursorPosition(0)
         self.show_complete = QCheckBox("Show download complete dialog")
         self.show_complete.setChecked(self.manager.settings.show_complete_dialog)
         self.exit_when_done = QCheckBox("Exit LID when done")
         self.shutdown_when_done = QCheckBox("Turn off computer when done")
-        dg.addWidget(QLabel("Save To:"))
-        dg.addWidget(self.save_to)
         dg.addWidget(self.show_complete)
-        dg.addWidget(separator())
-        dg.addWidget(QLabel("Power options"))
+        dg.addLayout(form_row("Save To", self.save_to, width=72))
+        dg.addWidget(caption("Power options"))
         dg.addWidget(self.exit_when_done)
         dg.addWidget(self.shutdown_when_done)
         dg.addStretch(1)
 
-        self.tabs = QTabWidget()
-        self.tabs.addTab(status_tab, "Download status")
-        self.tabs.addTab(limit_tab, "Speed Limiter")
-        self.tabs.addTab(done_tab, "Options on completion")
+        strip, self.tabs = tab_strip(["Download status", "Speed Limiter", "Options on completion"])
+        self.pages = QStackedWidget()
+        for page in (status_tab, limit_tab, done_tab):
+            self.pages.addWidget(page)
+        self.tabs.currentChanged.connect(self.pages.setCurrentIndex)
 
+        self.percent = _mono(QLabel("0.0%"), 20 / 12, True)
         self.progress = QProgressBar()
         self.progress.setRange(0, 1000)
         self.progress.setTextVisible(False)
+        self.progress.setFixedHeight(10)
+        prow = QHBoxLayout()
+        prow.setSpacing(10)
+        prow.addWidget(self.percent)
+        prow.addWidget(self.progress, 1)
 
         self.details_btn = QPushButton("<< Hide details")
+        self.details_btn.setObjectName("ghostBtn")
         self.pause_btn = QPushButton("Pause")
+        self.pause_btn.setIconSize(QSize(14, 14))
         cancel = QPushButton("Cancel")
+        for b in (self.pause_btn, cancel):
+            b.setMinimumWidth(96)
         self.details_btn.clicked.connect(self._toggle_details)
         self.pause_btn.clicked.connect(self._pause_resume)
         cancel.clicked.connect(self._cancel)
         buttons = QHBoxLayout()
+        buttons.setSpacing(8)
         buttons.addWidget(self.details_btn)
         buttons.addStretch(1)
         buttons.addWidget(self.pause_btn)
@@ -172,23 +191,39 @@ class ProgressDialog(QDialog):
         self.details = QWidget()
         dl = QVBoxLayout(self.details)
         dl.setContentsMargins(0, 0, 0, 0)
-        dl.addWidget(QLabel("Start positions and download progress by connections"))
-        self.bar = SegmentBar()
+        dl.setSpacing(12)
+        title = QLabel("Start positions and download progress by connections")
+        title.setObjectName("muted")
+        f = title.font()
+        f.setWeight(QFont.DemiBold)
+        title.setFont(f)
+        dl.addWidget(title)
+        self.bar = SegmentBar(gap="win")
         dl.addWidget(self.bar)
         self.conns = QTreeWidget()
-        self.conns.setHeaderLabels(["N.", "Downloaded", "Speed", "Info"])
+        self.conns.setHeaderLabels(["N.", "DOWNLOADED", "SPEED", "INFO"])
         self.conns.setRootIsDecorated(False)
-        self.conns.setColumnWidth(0, 40)
+        self.conns.setAlternatingRowColors(True)
+        self.conns.setItemDelegateForColumn(3, InfoPillDelegate(self.conns))
+        self.conns.setColumnWidth(0, 50)
         self.conns.setColumnWidth(1, 110)
-        self.conns.setColumnWidth(2, 110)
-        self.conns.setMinimumHeight(dlu(0, 79).height())
+        self.conns.setColumnWidth(2, 100)
+        self.conns.setMinimumHeight(136)
+        small_header(self.conns)
         dl.addWidget(self.conns)
 
         lay = QVBoxLayout(self)
-        lay.addWidget(self.tabs)
-        lay.addWidget(self.progress)
-        lay.addLayout(buttons)
-        lay.addWidget(self.details, 1)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+        lay.addWidget(strip)
+        body = QVBoxLayout()
+        body.setContentsMargins(18, 14, 18, 14)
+        body.setSpacing(12)
+        body.addWidget(self.pages)
+        body.addLayout(prow)
+        body.addLayout(buttons)
+        body.addWidget(self.details, 1)
+        lay.addLayout(body, 1)
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.refresh)
@@ -242,35 +277,46 @@ class ProgressDialog(QDialog):
         pct = d.progress * 100
         self.setWindowTitle(f"{pct:.0f}% {d.filename}")
         self.progress.setValue(int(d.progress * 1000))
+        self.percent.setText(f"{pct:.1f}%" if d.size > 0 else fmt.size(d.downloaded))
         detail = getattr(task, "status_text", "") if running else ""
         if detail:
-            self.status.setText(detail)
+            set_pill(self.status, detail, "accent")
         elif d.status == Status.ERROR:
-            self.status.setText(f"Error: {d.error}")
+            set_pill(self.status, f"Error: {d.error}", "bad")
         elif d.status == Status.PAUSED:
-            self.status.setText("Paused")
+            set_pill(self.status, "Paused", "muted")
         elif d.status in (Status.DOWNLOADING, Status.ASSEMBLING):
-            self.status.setText("Receiving data..." if d.status == Status.DOWNLOADING else "Assembling...")
+            set_pill(self.status, "⤓ Receiving data…" if d.status == Status.DOWNLOADING else "Assembling…", "accent")
         elif d.status == Status.COMPLETE:
-            self.status.setText("Complete")
+            set_pill(self.status, "✓ Complete", "ok")
         else:
-            self.status.setText("Connecting...")
+            set_pill(self.status, "Connecting…", "accent")
         self.file_size.setText(fmt.size(d.size) or "(unknown)")
-        tail = f" ( {pct:.3f} % )" if d.size > 0 else ""
+        tail = f" ({pct:.1f} %)" if d.size > 0 else ""
         self.downloaded.setText(fmt.size(d.downloaded) + tail)
         rate = fmt.rate(snap["rate"]) if running else ""
         self.rate.setText(rate)
         self.rate2.setText(rate)
         self.time_left.setText(fmt.duration(snap["time_left"]) if running and snap["time_left"] >= 0 else "(unknown)")
-        self.resume.setText({True: "Yes", False: "No"}.get(d.resumable, "(unknown)"))
-        self.pause_btn.setText("Pause" if running else "Resume")
+        if d.resumable is None:
+            set_pill(self.resume, "(unknown)", "muted")
+        else:
+            set_pill(self.resume, "✓ Yes" if d.resumable else "No", "ok" if d.resumable else "muted")
+        if self.pause_btn.text() != ("Pause" if running else "Resume"):
+            self.pause_btn.setText("Pause" if running else "Resume")
+            bind(self.pause_btn, "stop" if running else "resume")
         self.pause_btn.setEnabled(d.status != Status.COMPLETE)
         self.bar.set_segments(d.size, snap["segments"])
         conns = snap["connections"]
         while self.conns.topLevelItemCount() > len(conns):
             self.conns.takeTopLevelItem(self.conns.topLevelItemCount() - 1)
+        mono = mono_font(self.conns.font())
         for i, (n, received, info, alive, conn_rate) in enumerate(conns):
-            item = self.conns.topLevelItem(i) or QTreeWidgetItem(self.conns)
+            item = self.conns.topLevelItem(i)
+            if item is None:
+                item = QTreeWidgetItem(self.conns)
+                for col in range(3):
+                    item.setFont(col, mono)
             item.setText(0, str(n))
             item.setText(1, fmt.size(received))
             item.setText(2, fmt.rate(conn_rate) if alive and running else "")
@@ -285,36 +331,61 @@ class CompleteDialog(QDialog):
         self.path = d.path
         self.setWindowTitle("Download complete")
         self.setAttribute(Qt.WA_DeleteOnClose)
-        self.resize(dlu(303, 132).width(), 0)
-        lay = QVBoxLayout(self)
-        top = QHBoxLayout()
-        pic = QLabel()
-        pic.setPixmap(file_icon(d.filename).pixmap(32, 32))
-        top.addWidget(pic, 0, Qt.AlignTop)
-        info = QLabel(f"<b>Download complete</b><br>Downloaded {fmt.size(d.size)} ({d.size:,} Bytes)")
-        top.addWidget(info, 1)
-        lay.addLayout(top)
-        lay.addWidget(QLabel("Address"))
+        self.setMinimumWidth(640)
+        body, footer = shell(self, spacing=8)
+        head = QHBoxLayout()
+        head.setContentsMargins(0, 0, 0, 4)
+        head.setSpacing(12)
+        badge = QFrame()
+        badge.setObjectName("okBadge")
+        badge.setFixedSize(42, 42)
+        bl = QVBoxLayout(badge)
+        bl.setContentsMargins(0, 0, 0, 0)
+        mark = QLabel()
+        mark.setAlignment(Qt.AlignCenter)
+        mark.setPixmap(check_pixmap(22, QColor(theme.colors()["ok"]), self.devicePixelRatioF()))
+        bl.addWidget(mark)
+        head.addWidget(badge, 0, Qt.AlignTop)
+        text = QVBoxLayout()
+        text.setSpacing(2)
+        title = QLabel("Download complete")
+        title.setObjectName("dialogTitle")
+        f = title.font()
+        f.setPointSizeF(f.pointSizeF() * 1.25)
+        f.setBold(True)
+        title.setFont(f)
+        sub = QLabel(f"Downloaded {fmt.size(d.size)} ({d.size:,} Bytes)")
+        sub.setObjectName("muted")
+        text.addWidget(title)
+        text.addWidget(sub)
+        head.addLayout(text, 1)
+        body.addLayout(head)
+
         addr = QLineEdit(d.url)
-        addr.setReadOnly(True)
-        lay.addWidget(addr)
-        lay.addWidget(QLabel("The file saved as"))
         saved = QLineEdit(d.path)
-        saved.setReadOnly(True)
-        lay.addWidget(saved)
-        row = QHBoxLayout()
+        for e in (addr, saved):
+            e.setReadOnly(True)
+            e.setFont(mono_font(e.font()))
+            e.setCursorPosition(0)
+            e.setFocusPolicy(Qt.ClickFocus)
+        bind(saved.addAction(icon(category_icon(d.category)), QLineEdit.LeadingPosition), category_icon(d.category))
+        body.addWidget(caption("Address"))
+        body.addWidget(addr)
+        body.addSpacing(4)
+        body.addWidget(caption("The file saved as"))
+        body.addWidget(saved)
+
+        self.dont_show = QCheckBox("Don't show this dialog again")
+        footer.addWidget(self.dont_show)
+        footer.addStretch(1)
         for text, slot in (("Open", self._open), ("Open with...", self._open_with), ("Open folder", self._folder)):
             b = primary(QPushButton(text)) if slot == self._open else QPushButton(text)
             b.clicked.connect(slot)
-            row.addWidget(b)
-        row.addStretch(1)
+            footer.addWidget(b)
         close = QPushButton("Close")
         close.setDefault(True)
         close.clicked.connect(self.accept)
-        row.addWidget(close)
-        lay.addLayout(row)
-        self.dont_show = QCheckBox("Don't show this dialog again")
-        lay.addWidget(self.dont_show)
+        footer.addWidget(close)
 
     def _open(self):
         open_path(self.path)
