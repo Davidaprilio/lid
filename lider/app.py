@@ -11,7 +11,7 @@ from typing import Callable
 from PySide6.QtCore import QSocketNotifier, QTimer
 from PySide6.QtWidgets import QApplication
 
-from . import APP_LONG_NAME, APP_NAME
+from . import APP_LONG_NAME, APP_NAME, desktop
 from .ipc import SOCKET_NAME, send_lines
 from .core import settings as settings_mod
 from .core.manager import DownloadManager
@@ -90,6 +90,10 @@ def main(argv: list[str] | None = None) -> int:
 
     settings_mod.migrate_legacy_dirs()
     settings = settings_mod.load()
+    try:
+        desktop.refresh()  # an AppImage that moved or was updated: menu, autostart and browser helper follow
+    except OSError:
+        pass
     store = Store()
     manager = DownloadManager(settings, store)
     win = MainWindow(manager)
@@ -117,6 +121,10 @@ def main(argv: list[str] | None = None) -> int:
 
     if not ((args.minimized or settings.start_minimized) and win.tray):
         win.show()
+        from .ui.dialogs.menu import offer, should_offer
+
+        if should_offer(settings):
+            QTimer.singleShot(0, lambda: offer(win, settings))
     for url in args.urls:
         QTimer.singleShot(0, lambda u=url: win.add_url(u, ask_address=False))
     rc = app.exec()

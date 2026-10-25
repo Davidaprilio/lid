@@ -67,6 +67,10 @@ sudo apt install ./lider_1.0-1_amd64.deb         # Debian 12+, Ubuntu 22.04+
 chmod +x Lider-1.0-x86_64.AppImage && ./Lider-1.0-x86_64.AppImage   # any distro
 ```
 
+The AppImage asks on its first start whether to add LID to the application menu (later: **Options →
+General → Show LID in the application menu**). The entry, autostart and browser helper follow the
+AppImage you start, so moving it or replacing it with a newer release keeps them working.
+
 ## Browser integration
 
 LID talks to its browser extension through native messaging, so no network port is opened.

@@ -111,6 +111,7 @@ def default_categories() -> list[Category]:
 class Settings:
     # Options -> General
     launch_on_startup: bool = False
+    menu_offered: bool = False  # an AppImage offered once to add itself to the application menu
     monitor_clipboard: bool = True
     browser_capture: bool = True  # take over browser downloads through the LID extension
     # Options -> File types

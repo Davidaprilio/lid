@@ -19,6 +19,7 @@ from pathlib import Path
 
 from . import __version__
 from .core.settings import data_dir
+from .desktop import appimage, launch_command
 
 HOST_NAME = "io.github.davidaprilio.lid"
 # The extension's own version, apart from LID's __version__: the store listings start at 1.0.0.
@@ -124,19 +125,14 @@ def host_manifest(family: str, host_path: str) -> dict:
 
 def wrapper_script() -> str:
     """Shell script the browser runs; it knows how this copy of LID is started."""
-    appimage = os.environ.get("APPIMAGE")
-    if appimage:
-        run = f"exec {shlex.quote(appimage)} --native-host"
-        launch = shlex.join([appimage, "--minimized"])
+    if appimage():
+        run = f"exec {shlex.quote(appimage())} --native-host"
     else:
         pkg_parent = str(Path(__file__).resolve().parent.parent)
         run = f"PYTHONPATH={shlex.quote(pkg_parent)} exec {shlex.quote(sys.executable)} -m lider.native_host"
-        installed = shutil.which("lider")
-        launch = shlex.join([installed, "--minimized"] if installed else
-                            ["env", f"PYTHONPATH={pkg_parent}", sys.executable, "-m", "lider", "--minimized"])
     return ("#!/bin/sh\n"
             "# Native messaging host for the LID browser extension. Written by LID; safe to delete.\n"
-            f"export LIDER_LAUNCH={shlex.quote(launch)}\n"
+            f"export LIDER_LAUNCH={shlex.quote(launch_command('--minimized'))}\n"
             f'{run} "$@"\n')
 
 

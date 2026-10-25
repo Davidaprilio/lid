@@ -30,6 +30,7 @@ You can set these in the environment:
 | PySide6 | bundled (6.11.1) | bundled (6.11.1) | from the distribution |
 | yt-dlp | bundled (2026.8.19) | bundled (2026.8.19); a `pip install --user` copy wins | `optdepends` |
 | ffmpeg, node/deno/bun | from the system | `Recommends: ffmpeg, nodejs \| deno` | `optdepends` |
+| Application menu | offered on first start, written to `~/.local/share/applications` | installed | installed |
 | Size | ~90 MB | ~65 MB | ~230 KB |
 
 ffmpeg and a JavaScript runtime are only needed for YouTube. Without ffmpeg, LID offers

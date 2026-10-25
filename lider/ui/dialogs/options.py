@@ -37,25 +37,11 @@ from PySide6.QtWidgets import (
 
 from ...core.settings import CONNECTION_CHOICES, DEFAULT_COLUMNS, DEFAULT_FILE_TYPES, Category, Settings
 from .. import theme
-from ... import browser
+from ... import browser, desktop
 from ..icons import category_icon, icon
 from ..util import page_header, separator
 from ..widgets import (TagInput, caption, extension_tag, form_label, form_row, mono_font, note, panel, pill_label,
                        primary, shell, site_tag, small_header)
-
-AUTOSTART = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "autostart" / "lider.desktop"
-
-
-def set_autostart(on: bool) -> None:
-    if on:
-        AUTOSTART.parent.mkdir(parents=True, exist_ok=True)
-        AUTOSTART.write_text(
-            "[Desktop Entry]\nType=Application\nName=LID\nExec=python3 -m lider --minimized\n"
-            "X-GNOME-Autostart-enabled=true\n"
-        )
-    elif AUTOSTART.exists():
-        AUTOSTART.unlink()
-
 
 def _browse_dir(parent: QWidget, edit: QLineEdit) -> None:
     path = QFileDialog.getExistingDirectory(parent, "Select a Folder", edit.text())
@@ -326,10 +312,18 @@ class OptionsDialog(QDialog):
         w, lay = self._page("general", "Desktop Integration")
         s = self.settings
         self.launch = QCheckBox("Launch LID on startup")
-        self.launch.setChecked(s.launch_on_startup or AUTOSTART.exists())
+        self.launch.setChecked(desktop.autostart_enabled())
+        self.menu = QCheckBox("Show LID in the application menu")
+        if desktop.system_installed():  # the package's own entry
+            self.menu.setChecked(True)
+            self.menu.setEnabled(False)
+            self.menu.setToolTip("Added by the installed LID package")
+        else:
+            self.menu.setChecked(desktop.in_menu())
         self.clipboard = QCheckBox("Automatically start downloading of URLs placed to clipboard")
         self.clipboard.setChecked(s.monitor_clipboard)
         lay.addWidget(self.launch)
+        lay.addWidget(self.menu)
         lay.addWidget(self.clipboard)
         box, b = self._group("Browser integration")
         self.browser_capture = QCheckBox("Capture downloads from browsers (needs the LID extension)")
@@ -708,7 +702,15 @@ class OptionsDialog(QDialog):
         self._store_category()
         s = self.settings
         s.launch_on_startup = self.launch.isChecked()
-        set_autostart(s.launch_on_startup)
+        try:  # only what changed: the files are left alone otherwise
+            if s.launch_on_startup != desktop.autostart_enabled():
+                desktop.set_autostart(s.launch_on_startup)
+            if self.menu.isEnabled() and self.menu.isChecked() and not desktop.in_menu():
+                desktop.add_to_menu()
+            elif self.menu.isEnabled() and not self.menu.isChecked() and desktop.in_menu():
+                desktop.remove_from_menu()
+        except OSError:
+            pass
         s.monitor_clipboard = self.clipboard.isChecked()
         s.browser_capture = self.browser_capture.isChecked()
         s.auto_capture_types = self.types.text()
