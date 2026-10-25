@@ -281,6 +281,10 @@ QFrame#okBadge {{ background: {_rgba(c['ok'], 0.13)}; border-radius: 21px; }}
 QListWidget#checkList {{ padding: 6px; }}
 QListWidget#checkList::item {{ border-radius: 7px; padding: 0 6px; }}
 QListWidget#checkList::item:selected {{ background: {c['acsel']}; color: {c['tx']}; }}
+QTabWidget#optionsTabs::tab-bar {{ left: 14px; }}
+QFrame#themeCard {{ background: {c['pane']}; border: 1px solid {c['line']}; border-radius: 10px; }}
+QFrame#themeCard[selected="true"] {{ background: {c['acsel']}; border: 2px solid {c['ac']}; }}
+QFrame#themeCard QRadioButton {{ background: transparent; font-weight: 600; }}
 QFrame#accentBadge {{ background: {c['acsel']}; border-radius: 21px; }}
 QFrame#tagInput {{ background: {c['input']}; border: 1px solid {c['line2']}; border-radius: 9px; }}
 QFrame#tagInput[focused="true"] {{ border: 1px solid {c['ac']}; }}

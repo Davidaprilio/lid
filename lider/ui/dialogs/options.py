@@ -17,10 +17,8 @@ from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
     QDialog,
-    QDialogButtonBox,
     QFileDialog,
     QGridLayout,
-    QGroupBox,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -28,6 +26,7 @@ from PySide6.QtWidgets import (
     QListWidgetItem,
     QPlainTextEdit,
     QPushButton,
+    QSizePolicy,
     QSpinBox,
     QTabWidget,
     QTreeWidget,
@@ -38,10 +37,11 @@ from PySide6.QtWidgets import (
 
 from ...core.settings import CONNECTION_CHOICES, DEFAULT_COLUMNS, DEFAULT_FILE_TYPES, Category, Settings
 from .. import theme
-from ..icons import category_icon
+from ... import browser
+from ..icons import category_icon, icon
 from ..util import page_header, separator
-from ..widgets import (TagInput, extension_tag, form_label, form_row, mono_font, note,
-                       primary, shell, site_tag)
+from ..widgets import (TagInput, caption, extension_tag, form_label, form_row, mono_font, note, panel, pill_label,
+                       primary, shell, site_tag, small_header)
 
 AUTOSTART = Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "autostart" / "lider.desktop"
 
@@ -283,8 +283,9 @@ class OptionsDialog(QDialog):
                            for c in settings.categories]
         self.server_limits = dict(settings.server_limits)
         self.setWindowTitle("LID options")
-        self.resize(720, 640)
+        self.resize(720, 712)
         self.tabs = QTabWidget()
+        self.tabs.setObjectName("optionsTabs")
         self.tabs.addTab(self._general(), "General")
         self.tabs.addTab(self._file_types(), "File types")
         self.tabs.addTab(self._save_to(), "Save to")
@@ -293,20 +294,33 @@ class OptionsDialog(QDialog):
         self.tabs.addTab(self._proxy(), "Proxy / Socks")
         self.tabs.addTab(self._appearance(), "Appearance")
         lay = QVBoxLayout(self)
-        lay.addWidget(self.tabs)
-        bb = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        primary(bb.button(QDialogButtonBox.Ok))
-        bb.accepted.connect(self.accept)
-        bb.rejected.connect(self.reject)
-        lay.addWidget(bb)
+        lay.setContentsMargins(0, 0, 0, 0)
+        lay.setSpacing(0)
+        lay.addWidget(self.tabs, 1)
+        bar = QFrame()
+        bar.setObjectName("footer")
+        footer = QHBoxLayout(bar)
+        footer.setContentsMargins(16, 12, 16, 12)
+        footer.setSpacing(8)
+        _ok_cancel(self, footer)
+        lay.addWidget(bar)
 
     # -- pages
     def _page(self, icon_name: str, title: str) -> tuple[QWidget, QVBoxLayout]:
         w = QWidget()
         lay = QVBoxLayout(w)
+        lay.setContentsMargins(18, 14, 18, 14)
+        lay.setSpacing(10)
         lay.addWidget(page_header(icon_name, title))
         lay.addWidget(separator())
+        lay.addSpacing(4)
         return w, lay
+
+    @staticmethod
+    def _group(title: str) -> tuple[QFrame, QVBoxLayout]:
+        box, lay = panel()
+        lay.addWidget(caption(title))
+        return box, lay
 
     def _general(self):
         w, lay = self._page("general", "Desktop Integration")
@@ -317,22 +331,22 @@ class OptionsDialog(QDialog):
         self.clipboard.setChecked(s.monitor_clipboard)
         lay.addWidget(self.launch)
         lay.addWidget(self.clipboard)
-        box = QGroupBox("Browser integration")
-        b = QVBoxLayout(box)
+        box, b = self._group("Browser integration")
         self.browser_capture = QCheckBox("Capture downloads from browsers (needs the LID extension)")
         self.browser_capture.setChecked(s.browser_capture)
         b.addWidget(self.browser_capture)
-        note = QLabel("The extension takes over downloads of the file types on the File types tab, and adds "
-                      "\"Download with LID\", \"Download all links with LID\" and a YouTube button.")
-        note.setWordWrap(True)
-        b.addWidget(note)
+        b.addWidget(note("The extension takes over downloads of the file types on the File types tab, and adds "
+                         "\u201cDownload with LID\u201d, \u201cDownload all links with LID\u201d and a YouTube button."))
         row = QHBoxLayout()
+        row.setSpacing(8)
         setup = QPushButton("Set up browsers...")
         setup.clicked.connect(self._browsers)
         row.addWidget(setup)
+        connected = sum(1 for br in browser.BROWSERS if browser.is_installed(br))
+        row.addWidget(pill_label(f"✓ {connected} browser{'s' if connected != 1 else ''} connected", "ok") if connected
+                      else pill_label("Not set up yet", "muted"))
         row.addStretch(1)
         b.addLayout(row)
-        lay.addSpacing(8)
         lay.addWidget(box)
         lay.addStretch(1)
         return w
@@ -347,12 +361,12 @@ class OptionsDialog(QDialog):
         lay.addWidget(QLabel("Automatically start downloading the following file types:"))
         self.types = TagInput(self.settings.auto_capture_types, "Add a file type…", extension_tag, "types")
         lay.addWidget(self.types)
-        meta = self.types.meta_row()
+        lay.addWidget(self.types.meta_row())
         default = QPushButton("Default")
+        default.setToolTip("Back to the default file types")
         default.clicked.connect(lambda: self.types.set_values(DEFAULT_FILE_TYPES))
-        meta.layout().addWidget(default)
-        lay.addWidget(meta)
-        lay.addSpacing(6)
+        lay.addWidget(default, 0, Qt.AlignRight)
+        lay.addSpacing(4)
         lay.addWidget(QLabel("Don't start downloading automatically from the following sites:"))
         self.no_sites = TagInput(self.settings.no_auto_sites, "Add a site, e.g. *.example.com", site_tag, "sites")
         lay.addWidget(self.no_sites)
@@ -361,40 +375,41 @@ class OptionsDialog(QDialog):
 
     def _save_to(self):
         w, lay = self._page("saveto", "Categories, file types, folders")
-        box = QGroupBox("Save To...")
-        g = QGridLayout(box)
+        box, g = self._group("Save to...")
         self.cat_combo = QComboBox()
         new, edit = QPushButton("New"), QPushButton("Edit...")
         new.clicked.connect(self._new_category)
         edit.clicked.connect(self._edit_category)
-        self.cat_types_label = QLabel()
+        g.addLayout(form_row("Category", self.cat_combo, new, edit, width=64, stretch_last=False))
+        self.cat_combo.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+        self.cat_types_label = form_label("")
         self.cat_types = TagInput([], "Add a type…", extension_tag, "types")
-        self.cat_dir_label = QLabel()
+        self.cat_dir_label = form_label("")
         self.cat_dir = QLineEdit()
+        self.cat_dir.setFont(mono_font(self.cat_dir.font()))
         browse = QPushButton("Browse")
         browse.clicked.connect(lambda: _browse_dir(self, self.cat_dir))
-        g.addWidget(QLabel("Category"), 0, 0)
-        g.addWidget(self.cat_combo, 1, 0)
-        g.addWidget(new, 0, 1)
-        g.addWidget(edit, 1, 1)
-        g.addWidget(self.cat_types_label, 2, 0, 1, 2)
-        g.addWidget(self.cat_types, 3, 0, 1, 2)
-        g.addWidget(self.cat_dir_label, 4, 0, 1, 2)
-        g.addWidget(self.cat_dir, 5, 0)
-        g.addWidget(browse, 5, 1)
-        g.setColumnStretch(0, 1)
+        g.addWidget(self.cat_types_label)
+        g.addWidget(self.cat_types)
+        g.addWidget(self.cat_dir_label)
+        row = QHBoxLayout()
+        row.addWidget(self.cat_dir, 1)
+        row.addWidget(browse)
+        g.addLayout(row)
         lay.addWidget(box)
-        tmp = QGroupBox("Temporary directory")
-        t = QGridLayout(tmp)
+        tmp, t = self._group("Temporary directory")
         self.temp_dir = QLineEdit(self.settings.temp_dir)
+        self.temp_dir.setFont(mono_font(self.temp_dir.font()))
         tb = QPushButton("Browse")
         tb.clicked.connect(lambda: _browse_dir(self, self.temp_dir))
-        t.addWidget(self.temp_dir, 0, 0)
-        t.addWidget(tb, 0, 1)
-        note = QLabel("Temporary directory is required for storing file parts during downloading. "
-                      "The completed file is moved to its category folder.")
-        note.setWordWrap(True)
-        t.addWidget(note, 1, 0, 1, 2)
+        row = QHBoxLayout()
+        row.addWidget(self.temp_dir, 1)
+        row.addWidget(tb)
+        t.addLayout(row)
+        hint = QLabel("Parts are stored here while downloading. The finished file moves to its category folder.")
+        hint.setObjectName("faint")
+        hint.setWordWrap(True)
+        t.addWidget(hint)
         lay.addWidget(tmp)
         lay.addStretch(1)
         self._cat_index = -1
@@ -405,7 +420,8 @@ class OptionsDialog(QDialog):
     def _reload_categories(self, select: str | None = None):
         self.cat_combo.blockSignals(True)
         self.cat_combo.clear()
-        self.cat_combo.addItems([c.name for c in self.categories])
+        for c in self.categories:
+            self.cat_combo.addItem(icon(category_icon(c.name)), c.name)
         self.cat_combo.blockSignals(False)
         self._cat_index = -1
         idx = self.cat_combo.findText(select) if select else 0
@@ -424,9 +440,9 @@ class OptionsDialog(QDialog):
         if index < 0:
             return
         c = self.categories[index]
-        self.cat_types_label.setText(f'Automatically put in "{c.name}" category the following file types:')
+        self.cat_types_label.setText(f'Automatically put in \u201c{c.name}\u201d the following file types:')
         self.cat_types.set_values(c.extensions)
-        self.cat_dir_label.setText(f'Default download directory for "{c.name}" category')
+        self.cat_dir_label.setText(f'Default download directory for \u201c{c.name}\u201d')
         self.cat_dir.setText(c.save_dir)
 
     def _new_category(self):
@@ -464,20 +480,21 @@ class OptionsDialog(QDialog):
         self.duplicate.addItem("If existing file is complete, show download complete dialog; otherwise resume it",
                                "complete")
         self.duplicate.setCurrentIndex(max(0, self.duplicate.findData(s.duplicate_action)))
+        self.duplicate.setSizeAdjustPolicy(QComboBox.AdjustToMinimumContentsLengthWithIcon)
+        self.duplicate.setMinimumContentsLength(24)
         self.user_agent = QLineEdit(s.user_agent)
+        self.user_agent.setFont(mono_font(self.user_agent.font()))
+        self.user_agent.setCursorPosition(0)
         lay.addWidget(self.show_progress)
         lay.addWidget(self.show_start)
         ind = QHBoxLayout()
-        ind.addSpacing(20)
+        ind.addSpacing(24)
         ind.addWidget(self.only_queue)
         lay.addLayout(ind)
         lay.addWidget(self.show_complete)
-        lay.addWidget(separator())
-        lay.addWidget(QLabel("If a duplicate download link is added:"))
-        lay.addWidget(self.duplicate)
-        lay.addWidget(separator())
-        lay.addWidget(QLabel("User-Agent for manually added downloads:"))
-        lay.addWidget(self.user_agent)
+        lay.addSpacing(6)
+        lay.addLayout(form_row("If a duplicate download link is added", self.duplicate, width=240))
+        lay.addLayout(form_row("User-Agent for manual downloads", self.user_agent, width=240))
         lay.addStretch(1)
         self.show_start.toggled.connect(self.only_queue.setEnabled)
         self.only_queue.setEnabled(s.show_start_dialog)
@@ -485,44 +502,51 @@ class OptionsDialog(QDialog):
 
     def _connection(self):
         w, lay = self._page("connection", "Connections and Limits")
-        box = QGroupBox("Max. connections number")
-        g = QGridLayout(box)
+        box, g = self._group("Max. connections number")
         self.max_conn = QComboBox()
         self.max_conn.addItems([str(c) for c in CONNECTION_CHOICES])
         self.max_conn.setCurrentText(str(self.settings.max_connections))
-        g.addWidget(QLabel("Default max. conn. number"), 0, 0)
-        g.addWidget(self.max_conn, 0, 1)
-        g.addWidget(separator(), 1, 0, 1, 2)
-        g.addWidget(QLabel("Exceptions:"), 2, 0, 1, 2)
+        self.max_conn.setFixedWidth(80)
+        g.addLayout(form_row("Default max. conn. number", self.max_conn, QWidget(), width=180))
+        g.addWidget(form_label("Exceptions"))
         self.exceptions = QTreeWidget()
-        self.exceptions.setHeaderLabels(["Server", "Max. connections"])
+        self.exceptions.setHeaderLabels(["SERVER", "MAX. CONNECTIONS"])
         self.exceptions.setRootIsDecorated(False)
+        self.exceptions.setAlternatingRowColors(True)
         self.exceptions.setSelectionMode(QAbstractItemView.SingleSelection)
-        g.addWidget(self.exceptions, 3, 0)
+        self.exceptions.setColumnWidth(0, 220)
+        small_header(self.exceptions)
+        ex = QHBoxLayout()
+        ex.setSpacing(8)
+        ex.addWidget(self.exceptions, 1)
         side = QVBoxLayout()
+        side.setSpacing(6)
         for text, slot in (("New", self._new_limit), ("Delete", self._delete_limit), ("Edit", self._edit_limit)):
             b = QPushButton(text)
+            b.setMinimumWidth(56)
             b.clicked.connect(slot)
             side.addWidget(b)
         side.addStretch(1)
-        g.addLayout(side, 3, 1)
+        ex.addLayout(side)
+        g.addLayout(ex)
         lay.addWidget(box)
-        retry = QHBoxLayout()
         self.retries = QSpinBox()
         self.retries.setRange(0, 100)
         self.retries.setValue(self.settings.retries)
-        retry.addWidget(QLabel("Number of reconnection attempts for each connection"))
-        retry.addWidget(self.retries)
-        retry.addStretch(1)
-        lay.addLayout(retry)
+        self.retries.setFont(mono_font(self.retries.font()))
+        self.retries.setFixedWidth(70)
+        lay.addLayout(form_row("Reconnection attempts for each connection", self.retries, QWidget(), width=270))
         lay.addStretch(1)
         self._fill_limits()
         return w
 
     def _fill_limits(self):
         self.exceptions.clear()
+        mono = mono_font(self.exceptions.font())
         for pattern, n in sorted(self.server_limits.items()):
-            QTreeWidgetItem(self.exceptions, [pattern, str(n)])
+            item = QTreeWidgetItem(self.exceptions, [pattern, str(n)])
+            for col in (0, 1):
+                item.setFont(col, mono)
 
     def _new_limit(self):
         dlg = ServerLimitDialog(parent=self)
@@ -555,21 +579,21 @@ class OptionsDialog(QDialog):
         self.use_proxy = QCheckBox("Use proxy")
         self.use_proxy.setChecked(bool(self.settings.proxy))
         self.proxy = QLineEdit(self.settings.proxy or "http://127.0.0.1:8080")
+        self.proxy.setFont(mono_font(self.proxy.font()))
         self.proxy.setEnabled(self.use_proxy.isChecked())
         self.use_proxy.toggled.connect(self.proxy.setEnabled)
         lay.addWidget(self.use_proxy)
-        row = QHBoxLayout()
-        row.addWidget(QLabel("Proxy address"))
-        row.addWidget(self.proxy, 1)
-        lay.addLayout(row)
-        lay.addWidget(QLabel("Format: http://[user:password@]host:port   (used for HTTP and HTTPS)"))
+        lay.addLayout(form_row("Proxy address", self.proxy, width=96))
+        hint = QLabel("Format: http://[user:password@]host:port — used for HTTP and HTTPS.")
+        hint.setObjectName("faint")
+        lay.addWidget(hint)
         lay.addStretch(1)
         return w
 
     def _appearance(self):
         w, lay = self._page("general", "Appearance")
         s = self.settings
-        lay.addWidget(_caption("THEME"))
+        lay.addWidget(caption("Theme"))
         cards = QHBoxLayout()
         self.theme_group = QButtonGroup(self)
         for key in theme.THEMES:
@@ -595,34 +619,36 @@ class OptionsDialog(QDialog):
         grid = QGridLayout()
         self.density = _segmented([("Comfortable", "comfortable"), ("Compact", "compact")], s.density)
         self.labels = _segmented([("Icons and labels", True), ("Icons only", False)], s.toolbar_labels)
-        grid.addWidget(QLabel("List density"), 0, 0)
+        grid.setVerticalSpacing(12)
+        grid.addWidget(form_label("List density"), 0, 0)
         grid.addWidget(self.density, 0, 1, Qt.AlignLeft)
-        grid.addWidget(QLabel("Toolbar"), 1, 0)
+        grid.addWidget(form_label("Toolbar"), 1, 0)
         grid.addWidget(self.labels, 1, 1, Qt.AlignLeft)
         self.menubar = _segmented([("Native", "native"), ("In window", "custom"), ("Both", "both")], s.menubar)
         mb_row = QHBoxLayout()
         mb_row.addWidget(self.menubar)
-        hint = QLabel("Native uses the desktop's global menu when it has one" if theme.global_menu_available()
-                      else "No global menu on this desktop: Native shows the menu in the window")
+        hint = QLabel("Native = desktop global menu" if theme.global_menu_available()
+                      else "No global menu here: Native shows it in the window")
         hint.setObjectName("faint")
         mb_row.addWidget(hint, 1)
-        grid.addWidget(QLabel("Menu bar"), 3, 0)
-        grid.addLayout(mb_row, 3, 1)
+        grid.addWidget(form_label("Menu bar"), 2, 0)
+        grid.addLayout(mb_row, 2, 1)
         self.list_font = s.list_font
-        self.font_label = QLabel()
+        self.font_label = QLineEdit()
+        self.font_label.setReadOnly(True)
+        self.font_label.setFocusPolicy(Qt.NoFocus)
         self._show_font()
-        change, reset = QPushButton("Change..."), QToolButton()
-        reset.setText("Reset")
-        reset.setObjectName("ghost")
+        change, reset = QPushButton("Change..."), QPushButton("Reset")
+        reset.setObjectName("ghostBtn")
         change.clicked.connect(self._choose_font)
         reset.clicked.connect(lambda: (setattr(self, "list_font", ""), self._show_font()))
         fr = QHBoxLayout()
         fr.addWidget(self.font_label, 1)
         fr.addWidget(change)
         fr.addWidget(reset)
-        grid.addWidget(QLabel("List font"), 2, 0)
-        grid.addLayout(fr, 2, 1)
-        grid.setColumnMinimumWidth(0, 140)
+        grid.addWidget(form_label("List font"), 3, 0)
+        grid.addLayout(fr, 3, 1)
+        grid.setColumnMinimumWidth(0, 160)
         grid.setColumnStretch(1, 1)
         lay.addLayout(grid)
         lay.addWidget(separator())
@@ -690,12 +716,6 @@ class OptionsDialog(QDialog):
         for key, cb in self.view_boxes.items():
             setattr(s, key, cb.isChecked())
         super().accept()
-
-
-def _caption(text: str) -> QLabel:
-    lab = QLabel(text)
-    lab.setObjectName("sectionTitle")
-    return lab
 
 
 class _Segmented(QFrame):
@@ -768,7 +788,7 @@ class _ThemePreview(QWidget):
 class _ThemeCard(QFrame):
     def __init__(self, key: str, group: QButtonGroup):
         super().__init__()
-        self.setObjectName("panel")
+        self.setObjectName("themeCard")
         lay = QVBoxLayout(self)
         lay.setContentsMargins(8, 8, 8, 8)
         lay.addWidget(_ThemePreview(key))
@@ -776,6 +796,12 @@ class _ThemeCard(QFrame):
         self.radio.setProperty("theme", key)
         group.addButton(self.radio)
         lay.addWidget(self.radio)
+        self.radio.toggled.connect(self._mark)
+
+    def _mark(self, on: bool) -> None:
+        self.setProperty("selected", on)
+        self.style().unpolish(self)
+        self.style().polish(self)
 
     def mousePressEvent(self, e):
         self.radio.setChecked(True)
