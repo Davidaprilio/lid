@@ -127,6 +127,20 @@ class InstallTests(unittest.TestCase):
         browser.uninstall(found, self.home)
         self.assertFalse(any(browser.is_installed(b, self.home) for b in found))
 
+    def test_firefox_in_the_xdg_config_folder(self):
+        """Firefox 147+ without ~/.mozilla keeps profiles and hosts in ~/.config/mozilla."""
+        (self.home / ".mozilla").rmdir()
+        (self.home / ".config/mozilla/firefox").mkdir(parents=True)
+        found = browser.detected(self.home)
+        self.assertIn("Firefox", [b.name for b in found])
+        fox = next(b for b in found if b.name == "Firefox")
+        browser.install([fox], self.home)
+        self.assertTrue((self.home / ".config/mozilla/native-messaging-hosts" / f"{browser.HOST_NAME}.json").is_file())
+        self.assertFalse((self.home / ".mozilla").exists())
+        self.assertTrue(browser.is_installed(fox, self.home))
+        browser.uninstall([fox], self.home)
+        self.assertFalse(browser.is_installed(fox, self.home))
+
     def test_appimage_wrapper_runs_the_appimage(self):
         os.environ["APPIMAGE"] = "/opt/apps/Lider 1.0.AppImage"
         try:

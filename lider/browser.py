@@ -56,6 +56,9 @@ class Browser:
     family: str  # chromium | firefox
     hosts_dir: str  # NativeMessagingHosts folder
     root: str = "config"  # paths are relative to $XDG_CONFIG_HOME ("config") or to the home folder ("home")
+    # Gecko browsers: the folder under $XDG_CONFIG_HOME they use when their folder in the home
+    # directory does not exist (Firefox 147 and later; ~/.mozilla stays in use where it exists).
+    xdg: str = ""
 
 
 BROWSERS = [
@@ -65,18 +68,36 @@ BROWSERS = [
     Browser("Microsoft Edge", "microsoft-edge", "chromium", "microsoft-edge/NativeMessagingHosts"),
     Browser("Vivaldi", "vivaldi", "chromium", "vivaldi/NativeMessagingHosts"),
     Browser("Opera", "opera", "chromium", "opera/NativeMessagingHosts"),
-    Browser("Firefox", ".mozilla", "firefox", ".mozilla/native-messaging-hosts", "home"),
-    Browser("LibreWolf", ".librewolf", "firefox", ".librewolf/native-messaging-hosts", "home"),
+    Browser("Firefox", ".mozilla", "firefox", ".mozilla/native-messaging-hosts", "home", xdg="mozilla"),
+    Browser("LibreWolf", ".librewolf", "firefox", ".librewolf/native-messaging-hosts", "home", xdg="librewolf"),
 ]
+
+
+def _config_dir(home: Path | None) -> Path:
+    if home is not None:
+        return home / ".config"
+    return Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
 
 
 def _base(b: Browser, home: Path | None) -> Path:
     """Chromium browsers follow $XDG_CONFIG_HOME for their default folder; Firefox uses the home folder."""
-    if b.root == "home":
-        return home or Path.home()
-    if home is not None:
-        return home / ".config"
-    return Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config")
+    return (home or Path.home()) if b.root == "home" else _config_dir(home)
+
+
+def _paths(b: Browser, home: Path | None, legacy: bool | None = None) -> tuple[Path, Path]:
+    """(profile folder, NativeMessagingHosts folder) of a browser.
+
+    Firefox keeps ~/.mozilla where it exists (or with MOZ_LEGACY_HOME set) and otherwise uses
+    $XDG_CONFIG_HOME/mozilla, with the profiles and native-messaging-hosts inside; ``legacy`` forces a side.
+    """
+    if b.xdg:
+        if legacy is None:
+            legacy = (_base(b, home) / b.config).is_dir() or bool(os.environ.get("MOZ_LEGACY_HOME"))
+        if not legacy:
+            folder = _config_dir(home) / b.xdg
+            return folder, folder / Path(b.hosts_dir).relative_to(b.config)
+    base = _base(b, home)
+    return base / b.config, base / b.hosts_dir
 
 
 # System-wide folders used by the .deb and Arch packages.
@@ -119,11 +140,11 @@ def host_executable() -> Path:
 
 
 def detected(home: Path | None = None) -> list[Browser]:
-    return [b for b in BROWSERS if (_base(b, home) / b.config).is_dir()]
+    return [b for b in BROWSERS if _paths(b, home)[0].is_dir()]
 
 
 def is_installed(browser: Browser, home: Path | None = None) -> bool:
-    return (_base(browser, home) / browser.hosts_dir / f"{HOST_NAME}.json").is_file()
+    return (_paths(browser, home)[1] / f"{HOST_NAME}.json").is_file()
 
 
 def install(browsers: list[Browser], home: Path | None = None) -> Path:
@@ -133,7 +154,7 @@ def install(browsers: list[Browser], home: Path | None = None) -> Path:
     exe.write_text(wrapper_script())
     exe.chmod(0o755)
     for b in browsers:
-        folder = _base(b, home) / b.hosts_dir
+        folder = _paths(b, home)[1]
         folder.mkdir(parents=True, exist_ok=True)
         (folder / f"{HOST_NAME}.json").write_text(json.dumps(host_manifest(b.family, str(exe)), indent=2) + "\n")
     return exe
@@ -141,7 +162,8 @@ def install(browsers: list[Browser], home: Path | None = None) -> Path:
 
 def uninstall(browsers: list[Browser], home: Path | None = None) -> None:
     for b in browsers:
-        (_base(b, home) / b.hosts_dir / f"{HOST_NAME}.json").unlink(missing_ok=True)
+        for legacy in ((True, False) if b.xdg else (None,)):  # Gecko: both places, whichever was used
+            (_paths(b, home, legacy)[1] / f"{HOST_NAME}.json").unlink(missing_ok=True)
 
 
 def export_extension(family: str, dest: Path, variant: str = "full", update_url: str = "") -> Path:
