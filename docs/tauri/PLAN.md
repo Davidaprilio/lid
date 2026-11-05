@@ -291,10 +291,17 @@ answer here and mark the parity item `[~]` if it changes.
 
 ## 10. Prerequisites on this machine
 
-Not installed yet (checked 2026-11-06): `webkit2gtk-4.1`, `gtk3`, `libsoup3` development files, `tauri-cli`.
-Present: rustc 1.98.1, cargo, node 24, pnpm, bun.
+Checked 2026-11-06: rustc 1.98.1, cargo, tauri-cli 2.12.4, node 24, pnpm, bun, and the system libraries
+(webkit2gtk-4.1 2.52.6, gtk3 3.24.52, libsoup3 3.6.6, ayatana-appindicator 0.6.0, librsvg) are present.
+
+On a fresh Arch machine:
 
 ```sh
 sudo pacman -S --needed webkit2gtk-4.1 libappindicator-gtk3 librsvg base-devel
 cargo install tauri-cli --locked
 ```
+
+Gotcha on this machine: Linuxbrew's `pkg-config` comes first in `PATH` and does not search
+`/usr/lib/pkgconfig`, so the GTK/WebKit `-sys` crates fail to build. Build with
+`PKG_CONFIG=/usr/bin/pkg-config` (export it in the shell, or put it in an uncommitted `~/.cargo/config.toml`
+`[env]` section).
