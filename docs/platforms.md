@@ -22,10 +22,10 @@ and pointing `Os` at it under `#[cfg(target_os = "<os>")]`. Nothing else changes
 
 | Port | Linux (done) | Windows (done, needs a try on a real machine) | macOS (to do) |
 |---|---|---|---|
-| `Instance`: one LID per user, lines to the running one | abstract Unix socket `lider-<uid>`, `SO_PEERCRED` | named pipe `\\.\pipe\lider-<user SID>`, owner check on the pipe | Unix socket in `$TMPDIR`, `getpeereid` |
-| `Desktop`: menu entry, autostart | `.desktop` files that follow a moved AppImage | Start-menu shortcut, `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (mostly the installer's job) | Login Items (`SMAppService`); the menu is the `.app` in /Applications |
-| `BrowserHosts`: where browsers find the native host | manifest files in each browser's NativeMessagingHosts folder, a `/bin/sh` wrapper | manifest file + registry key `HKCU\Software\<vendor>\<browser>\NativeMessagingHosts\io.github.davidaprilio.lid` per browser, an `.exe` (or `.bat`) host | manifest files in `~/Library/Application Support/<browser>/NativeMessagingHosts` |
-| `Shell`: open, show in folder, open with, detached start, power off, dark mode, global menu, fonts | xdg-open, FileManager1 (D-Bus), `setsid`, `systemctl poweroff`, settings portal, AppMenu registrar, fontconfig | `ShellExecuteW`, `explorer /select,`, `DETACHED_PROCESS`, `shutdown /s /t 0`, `AppsUseLightTheme`, none, DirectWrite | `open`, `open -R`, `open -a`, `osascript` shut down, `AppleInterfaceStyle`, the app menu bar, Core Text |
+| `Instance`: one LID per user, lines to the running one | abstract Unix socket `lider-<uid>`, `SO_PEERCRED` | named pipe `\\.\pipe\lider-<USERNAME>` (tokio; first instance only, local clients only; the default pipe security lets only this user write) | Unix socket in `$TMPDIR`, `getpeereid` |
+| `Desktop`: menu entry, autostart | `.desktop` files that follow a moved AppImage | the per-user installer adds the Start-menu entry; autostart is the `LID` value in `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` | Login Items (`SMAppService`); the menu is the `.app` in /Applications |
+| `BrowserHosts`: where browsers find the native host | manifest files in each browser's NativeMessagingHosts folder, a `/bin/sh` wrapper | a manifest per family in `%LOCALAPPDATA%\lider\native-host` + registry key `HKCU\Software\<vendor>\<browser>\NativeMessagingHosts\io.github.davidaprilio.lid` (Chrome, Chromium, Brave, Edge, Firefox); the manifest names `lider.exe`, whose browser-given arguments select host mode | manifest files in `~/Library/Application Support/<browser>/NativeMessagingHosts` |
+| `Shell`: open, show in folder, open with, detached start, power off, dark mode, global menu, fonts | xdg-open, FileManager1 (D-Bus), `setsid`, `systemctl poweroff`, settings portal, AppMenu registrar, fontconfig | `explorer.exe <path>`, `explorer /select,`, `DETACHED_PROCESS`, `shutdown /s /t 0`, `AppsUseLightTheme`, none, the registry font list (`Consolas` for mono) | `open`, `open -R`, `open -a`, `osascript` shut down, `AppleInterfaceStyle`, the app menu bar, Core Text |
 
 Already portable, outside the ports:
 - part files written in place: `lider_core::fsio::write_all_at` (`pwrite` / `seek_write`);
@@ -34,7 +34,7 @@ Already portable, outside the ports:
 - yt-dlp lookup: `fsio::is_executable` (`.exe` on Windows).
 
 Packaging per OS is separate from the ports: AppImage, deb and Arch for Linux (`packaging/build.sh`);
-Windows would add the Tauri MSI/NSIS bundle (it needs `src-tauri/icons/icon.ico`), macOS a signed and
+Windows has the Tauri NSIS bundle (per-user, `src-tauri/icons/icon.ico`), macOS would need a signed and
 notarised `.app`/DMG.
 
 ## Checks
