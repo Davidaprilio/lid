@@ -3,7 +3,7 @@ name: Rust port
 # Checks for the Rust + Tauri port (docs/tauri/PLAN.md). Runs next to the Python tests until the cut-over.
 on:
   push:
-    branches: [tauri]
+    branches: [tauri, ports]
   pull_request:
   workflow_dispatch:
 
