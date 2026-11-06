@@ -163,8 +163,9 @@ u.mn { text-decoration: none; }
 }
 .compact:hover { border-color: var(--ac); }
 .compact:disabled { color: var(--fa); background: var(--win); border-color: var(--line); }
-.segbar { height: 16px; border-radius: 5px; background: var(--track); position: relative; overflow: hidden; }
-.segbar > div { position: absolute; top: 0; bottom: 0; background: var(--ac); border-right: 1px solid var(--pane); }
+.segbar { height: 12px; border-radius: 5px; background: var(--track); position: relative; overflow: hidden; }
+.segbar > div { position: absolute; top: 0; bottom: 0; background: var(--ac); }
+.segbar > .gap { position: absolute; top: 0; bottom: 0; width: 2px; margin-left: -2px; background: var(--win); }
 .segbar > div.done { background: var(--ok); }
 table.small { border-collapse: collapse; width: 100%; }
 table.small th { text-align: left; font-weight: 600; color: var(--mu); padding: 0 10px; height: 27px; background: var(--hdr); border-bottom: 1px solid var(--line); font-size: 0.9em; }
