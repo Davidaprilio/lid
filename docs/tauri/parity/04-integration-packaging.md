@@ -232,7 +232,7 @@ Everything below was read line by line. Paths are relative to the repository roo
   - Every `SYSTEM_HOST_DIRS` manifest, mode 0644.
   - Full-variant extension exports at `usr/share/lider/browser-extension/{chromium,firefox}`.
   - **QUIRK (likely bug, verify):** in the deb, the host starts `/usr/bin/python3 -m lider` with only `PYTHONPATH=/usr/lib/lider`. `/usr/lib/lider/vendor` (PySide6) and `/usr/lib/lider/ytdlp` are not on the path, so starting LID from the browser may fail where there is no system PySide6. Compare `build.sh:106-118`.
-- [ ] **"Browser integration" dialog**, which uses these constants (`ui/dialogs/browsers.py`): — **2.x:** phase 6 (dialogs)
+- [x] **"Browser integration" dialog**, which uses these constants (`ui/dialogs/browsers.py`): — **2.x:** the Browser integration window (`Browsers.svelte`, phase 6)
   - Title "Browser integration". Subtitle "LID talks to its extension through native messaging — no network port is opened."
   - Table columns: check box, `BROWSER`, `LID HELPER`. States: `Installed`, `Not installed`, and `browser not found` (disabled row). Detected browsers are pre-checked, and the header check box toggles all rows.
   - Buttons "Install for checked browsers" and "Remove".
@@ -304,7 +304,7 @@ Everything below was read line by line. Paths are relative to the repository roo
   - It returns the names it rewrote, for example `["menu","autostart","browser helper"]`.
   - Unmarked menu entries, which a menu editor saves, are left alone.
   - It also runs for deb and Arch installs, where `which lider` is found, and re-points autostart and the helper at `/usr/bin/lider`.
-- [ ] **First-start prompt** (`ui/dialogs/menu.py`): — **2.x:** `desktop::should_offer` is done (test `offer_once_and_only_to_an_appimage`); the dialog is phase 6
+- [x] **First-start prompt** (`ui/dialogs/menu.py`): — **2.x:** `desktop::should_offer` is done (test `offer_once_and_only_to_an_appimage`); the box is drawn over the main window; `menu_offered` is saved before it shows (phase 6)
   - `should_offer` is true when an AppImage is running and none of these is true: `settings.menu_offered`, `in_menu()`, `system_installed()`, `listed_elsewhere()` (`:37-39`).
   - `offer()` sets `menu_offered=True` and saves the settings **before** asking, so the user is asked once whatever they answer. If they accept, it calls `add_to_menu()` and ignores `OSError` (`:42-50`).
   - Dialog strings (`:15-34`):
@@ -313,7 +313,7 @@ Everything below was read line by line. Paths are relative to the repository roo
     - subtitle "`<AppImage basename>` runs on its own, so the application menu does not list LID yet."
     - note "LID keeps the entry pointed at the AppImage you start, also after you move or update it, and it disappears when the AppImage is deleted. You can change this later in Options → General."
     - buttons "Not now" and "Add to menu" (default)
-- [ ] **Options → General** (`options.py:310-323,704-713`): — **2.x:** phase 6
+- [x] **Options → General** (`options.py:310-323,704-713`): — **2.x:** Options → General and `options_apply` (phase 6)
   - "Launch LID on startup" reflects whether the autostart file exists.
   - "Show LID in the application menu" is checked and disabled when the system entry exists, with tooltip "Added by the installed LID package".
   - On accept, only changed items are applied: autostart, then add or remove the menu entry. `OSError` is ignored. `settings.launch_on_startup` is saved.

@@ -315,6 +315,27 @@ its own tokio runtime, instance socket, hidden start; lines are kept for the win
   Options (7 tabs), Scheduler (2 tabs), find, speed limiter, columns, server login, category, browser
   integration, check hash, mismatch, closing, add to menu, duplicate, about.
 
+**Status 2026-11-06: done.** `parity/03` is complete (242 `[x]`, 2 `[~]`), and so are the phase-6 items of 01, 02 and 04.
+- 6a/6b `src-tauri/src/dialogs.rs`: the commands behind every dialog (settings patch, add flow with probe, YouTube,
+  duplicate rule and unique names, batch, links and grabber, progress, complete, mismatch, check hash with a
+  background verifier, properties with move/rename, Options, scheduler and queues, browsers). `lider-core` gained
+  `batch.rs`, `links.rs` and `queue::next_run_text`.
+- 6c/6d `ui/src/windows/dialogs/`: 17 dialog pages on the shared parts in `ui/src/components/form/` (`Shell`,
+  `Row`, `Pill`, `TabStrip`, `TagInput`, `ChecksumEdit`, `Combo`). Each dialog is its own window (route after `#`);
+  a dialog opened from a dialog (category editor, server limit, questions) is drawn over that window (Q19).
+  Qt behaviour carried over: mnemonics (`installMnemonics`), Enter presses the default button and Escape cancels,
+  the default button has the focus, Check hash and Complete apply their rules when closed from the title bar.
+- 6e: an audit of all 244 items against the code found 40 partial; all were fixed.
+- UI tests: `LIDER_E2E=dialogs` opens each dialog from the main window the way a user does and checks it from
+  inside (`ui/src/dev/e2e-dialogs.ts`, 26 checks: Options tabs and OK, limiter with Enter, columns, batch, search
+  settings, scheduler with New queue and Alt+C, the add flow with an invalid checksum and Download Later, check
+  hash of a missing file, properties, a new category). `tests/e2e/run.sh` runs main and dialogs; 3 runs in a row pass.
+- `[~]`: `choose_file` (no caller in 1.x); the queue menu of Download Later opens above the button when the
+  window has no room below it (a menu cannot leave its webview).
+- Still open in `parity/02`: the manual checks of the tray click (D2) and drag-and-drop, and menu tips in the status bar.
+- For phase 8: the icons are still read from `lider/ui/assets/icons` (`ui/src/lib/icons.ts`); move them under
+  `ui/` before `lider/` is removed.
+
 ### Phase 7: packaging and release
 - `build.sh appimage|deb|arch|aur|extension|sdist|all` keeps its interface. AppImage and deb come from
   `tauri build`; Arch builds with cargo in `PKGBUILD`; `sdist` becomes a vendored source tarball
@@ -388,6 +409,7 @@ D2 and D4 still need a measurement or a test in their phase; record the outcome 
 | Q16 | Verifier error text is Python's (`[Errno 2] No such file or directory: '<path>'`) | 1 | **Accepted 2026-11-06:** Rust's OS message plus the path. The text only appears after "Checksum check failed:". |
 | Q17 | Engine edge cases in 1.x: a failed disk write left zeros in the file; invalid input killed a connection's thread; `socks5://` proxies did not work; an `ftp://` folder URL downloaded the listing | 2 | **Accepted 2026-11-06:** give the bytes back and retry the write; fail the connection with a message; SOCKS works; a folder URL is an error. |
 | Q18 | 1.x message boxes (QMessageBox, QInputDialog) are separate windows | 5 | **Accepted 2026-11-06:** draw them over the main window (the window comes forward when needed). Real dialogs stay windows. |
+| Q19 | 1.x opens nested dialogs (the category editor and server limit from Options, + Add category from Download File Info, questions inside a dialog) as more windows | 6 | **Proposed:** draw them over the dialog that opens them, like Q18; every dialog opened from the main window or the tray stays its own window. Awaiting David's yes. |
 
 ## 10. Prerequisites on this machine
 

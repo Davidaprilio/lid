@@ -195,7 +195,7 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
 ### 2.2 Public methods
 - [x] `client()`: new `HttpClient(ua, proxy, timeout)` (`:109`). — **2.x:** `DownloadManager::client`; a bad proxy fails the download with a message (test `bad_proxy_fails_the_download_with_a_message`)
 - [x] `probe(url, referer, username, password, headers)`: probe with `request_headers` of a temporary Download; the response is closed (`:112-115`). — **2.x:** `DownloadManager::probe` returns a future to run off the UI thread
-- [ ] `find_duplicate(url)`: first download whose `d.url == url`, exact string match (`:117-121`). The duplicate policy is **(UI)** (`main_window.py:794-813`, `duplicate_action`): — **2.x:** `find_duplicate` is done; the duplicate policy is UI (phase 6)
+- [x] `find_duplicate(url)`: first download whose `d.url == url`, exact string match (`:117-121`). The duplicate policy is **(UI)** (`main_window.py:794-813`, `duplicate_action`): — **2.x:** `find_duplicate` is done; the duplicate policy is in the Add flow (phase 6)
   - `ask` shows a dialog with a "remember" option.
   - `complete` shows the Complete dialog if the duplicate is done, else starts it.
   - `overwrite` replaces it.
@@ -337,7 +337,7 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
 - [x] Mismatch, by `settings.checksum_mismatch`: — **2.x:** `tests/manager.rs` `checksum_mismatch_asks_keeps_or_downloads_again_once`, `mismatch_kept_says_so`
   - `redownload` and not `checksum_retried`: set `retried=True`, `redownload(overwrite=True)`, emit `changed(message="checksum mismatch, downloading again")`.
   - Otherwise emit `mismatch(message="kept" if policy=="keep" else "")`. A second mismatch under `redownload` always asks.
-- [ ] **(UI)** reaction to `mismatch`: — **2.x:** UI, phase 5/6
+- [x] **(UI)** reaction to `mismatch`: — **2.x:** a tray note for "kept", otherwise the Checksum mismatch window (phase 6)
   - `message=="kept"` shows a tray "file was kept".
   - Otherwise a MismatchDialog with choices: `again` (redownload with overwrite), `delete` (move to trash and remove), or keep (`main_window.py:1410-1440`).
 - [x] Tests: — **2.x:** `tests/manager.rs`: the three 1.x tests
@@ -547,7 +547,7 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
   3. Else `categories[0]` (General).
   - fnmatch supports `* ? [seq] [!seq]` and is case-sensitive on POSIX, hence the explicit lower-casing.
 - [x] `is_auto_capture_type(settings, fn)`: ext non-empty and matches any whitespace-split pattern in `auto_capture_types` (case-insensitive) (`:35-37`). — **2.x:** `categories::is_auto_capture_type`
-- [ ] `remember_last` is stored. It is used by the Options UI and the file-info dialog **(UI)**. — **2.x:** stored and round-tripped (`Category::remember_last`); the UI use comes in phase 6
+- [x] `remember_last` is stored. It is used by the Options UI and the file-info dialog **(UI)**. — **2.x:** stored and round-tripped (`Category::remember_last`); the Category editor and Options use it (phase 6)
 - [x] Tests: — **2.x:** `categories.rs` tests `default_extension_lists`, `site_rule_wins`
   - `test_default_extension_lists`: `a.R01` is Compressed, `.pptx` is Documents, `.flac` is General, `setup.MSI` is auto-capture, `page.html` is not.
   - `test_site_rule_wins`: `*.soundhost.com` sends a `.zip` to Music.
@@ -642,7 +642,7 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
   - Accepted: watch, youtu.be, m.youtube, shorts, music, http live.
   - Rejected: example.com, the bare home page, `youtube.com.evil.io`, `/channel/`.
   - Test `test_youtube_links`.
-- [ ] `available()`: yt_dlp is importable. **(UI)** if not, a warning says "needs the yt-dlp package: pip install yt-dlp" (`main_window.py:841`). — **2.x:** `media::available()` finds the `yt-dlp` program (PATH, `~/.local/bin`, or `python3 -m yt_dlp`); the UI warning comes in phase 6
+- [x] `available()`: yt_dlp is importable. **(UI)** if not, a warning says "needs the yt-dlp package: pip install yt-dlp" (`main_window.py:841`). — **2.x:** `media::available()` finds the `yt-dlp` program (PATH, `~/.local/bin`, or `python3 -m yt_dlp`); the Add flow shows the warning (phase 6)
 - [x] `ffmpeg()`: `which ffmpeg`, cached. — **2.x:** `media::ffmpeg`
 - [x] `ffmpeg_has_mp3()`: `ffmpeg -hide_banner -encoders` (10 s timeout) contains `libmp3lame`, cached. — **2.x:** `media::ffmpeg_has_mp3` (10 s timeout)
 - [x] `js_runtimes()`: the first of `deno`, `node`, `bun` on PATH gives `{name: {"path": p}}`, else `{}`. — **2.x:** `media::js_runtime`, passed as `--js-runtimes name:path`

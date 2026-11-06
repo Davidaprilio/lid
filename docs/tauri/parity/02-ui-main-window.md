@@ -57,16 +57,16 @@ All items are actions shared between the native menu bar and the in-window menu 
 - [x] `Find (Ctrl-F)`, shortcut Ctrl+F, icon `search`: `show_searchbar` (§10). — **2.x:** e2e `tests/e2e/run.sh`
 - [x] `Find Next (F3)`, shortcut F3: `find_next` (§10). — **2.x:** e2e `tests/e2e/run.sh`
 - [x] separator — **2.x:** done
-- [ ] `S&cheduler` (icon `scheduler`, tip "Scheduler and download queues") opens `SchedulerDialog(manager, queue=MAIN_QUEUE, on_events=handle_events)` modally, then rebuilds the tree and refreshes the rows (MW:1107-1110). — **2.x:** the menu item opens the Scheduler window; the window it opens is a dialog of phase 6
+- [x] `S&cheduler` (icon `scheduler`, tip "Scheduler and download queues") opens `SchedulerDialog(manager, queue=MAIN_QUEUE, on_events=handle_events)` modally, then rebuilds the tree and refreshes the rows (MW:1107-1110). — **2.x:** the menu item opens the Scheduler window; its window is built (phase 6)
 - [x] Submenu `Start &queue` is rebuilt every time it opens (aboutToShow). It lists `_queue_names()`: Main, then Synchronization, then the rest sorted. An item is enabled when that queue is **not** running. Picking one runs `handle_events(manager.start_queue(q))` and refreshes (MW:244-247, 1093-1102). — **2.x:** `menu.rs`: Main, Synchronization, the rest sorted; enabled when not running
 - [x] Submenu `S&top queue` uses the same list. An item is enabled when the queue **is** running, and picking it calls `manager.stop_queue(q)`. — **2.x:** done
 - [x] separator — **2.x:** done
-- [ ] Submenu `Speed &Limiter`: — **2.x:** Turn on/off done (shared with the tray); Settings… opens the limiter window, the window it opens is a dialog of phase 6
+- [x] Submenu `Speed &Limiter`: — **2.x:** Turn on/off done (shared with the tray); Settings… opens the limiter window, its window is built (phase 6)
   - `Turn o&n` and `Turn of&f` are checkable and exclusive (QActionGroup). Each calls `set_limiter(on)`, which sets the manager's limiter, re-syncs the checks and saves settings (MW:1187-1195).
   - separator
   - `S&ettings...` opens SpeedLimiterDialog. On OK it re-applies `speed_limiter_on` and saves (MW:1197-1200).
 - [x] separator — **2.x:** done
-- [ ] `&Options` (icon `options`, tip "Integration, file types, save folders, connections, proxy and others") calls `open_options("")` (§16). — **2.x:** the window it opens is a dialog of phase 6
+- [x] `&Options` (icon `options`, tip "Integration, file types, save folders, connections, proxy and others") calls `open_options("")` (§16). — **2.x:** its window is built (phase 6)
 
 ### View (`&View`, MW:256-273)
 - [x] `Hide &categories` is checkable, initially checked = `!show_categories`, and calls `toggle_categories(checked)` (MW:180, 1202-1205). — **2.x:** done
@@ -77,14 +77,14 @@ All items are actions shared between the native menu bar and the in-window menu 
   `By &Order Of Addition`(date_added), `By &File Name`(filename), `By &Size`(size), `By St&atus`(status), `By &Time Left`(time_left), `By Transfer &Rate`(rate), `By &Last Try Date`(last_try), `By &Description`(description), `By Save &Path`(save_to), `By R&eferer`(referer), `By Parent &Web Page`(parent_page).
 - [x] Submenu `&Toolbar` holds the exclusive items `Icons and &labels` and `&Icons only`, which call `set_toolbar_labels(True/False)` (MW:193-198). — **2.x:** e2e `tests/e2e/run.sh`
 - [x] Submenu `&Menu bar` holds the exclusive items `&Native (desktop menu)`(native), `In the &window`(custom) and `&Both`(both), which call `set_menubar_mode` (§3). — **2.x:** done
-- [ ] `C&ustomize URL List...` calls `customize_columns()`: ColumnsDialog, and on OK `model.set_columns()`, refresh, then re-apply the column widths (MW:1254-1258). — **2.x:** the window it opens is a dialog of phase 6
+- [x] `C&ustomize URL List...` calls `customize_columns()`: ColumnsDialog, and on OK `model.set_columns()`, refresh, then re-apply the column widths (MW:1254-1258). — **2.x:** its window is built (phase 6)
 - [x] Submenu `T&heme`: — **2.x:** e2e `tests/e2e/run.sh`
   - `Follow the system`
   - separator
   - `Ember`, `Ember Dark`, `Dark`
 
   These are exclusive and checkable, and each calls `choose_theme(key)` (MW:200-207, 1260-1272).
-- [ ] Submenu `Font` (no mnemonic): — **2.x:** Reset done; Choose Font… is a dialog of phase 6 (system fonts come from fontconfig, `system_fonts`)
+- [x] Submenu `Font` (no mnemonic): — **2.x:** Reset done; Choose Font… opens its window (phase 6) (system fonts come from fontconfig, `system_fonts`)
   - `Choose Font...`: QFontDialog seeded with the list's font. On OK it sets the list font and stores `font.toString()` in `list_font`; it does not save to disk immediately (MW:1282-1286).
   - `Reset to default Font`: the list returns to the app font and `list_font=""` (MW:1288).
 - [x] separator — **2.x:** done
@@ -155,7 +155,7 @@ Note: per the project rule this is the one allowed mention apart from the README
   - The category value filters all, unfinished and finished.
   - The search filter (§10) is applied next, and an invalid search is ignored here.
   - A queue node sorts by `queue_order`. Everything else uses SORT_KEYS[sort_key] (fallback date_added) with `sort_desc`.
-- [ ] Context menu (MW:568-584): — **2.x:** queue items and Delete category done; Add category / Properties open the Category window, the window it opens is a dialog of phase 6
+- [x] Context menu (MW:568-584): — **2.x:** queue items and Delete category done; Add category / Properties open the Category window, its window is built (phase 6)
   - On a queue node: `Start` → start_queue(name), `Stop` → stop_queue(name), separator, `Scheduler...` → open_scheduler(name).
   - On the Queues root: only `Scheduler...` (opens MAIN_QUEUE).
   - Anywhere else, including empty space: `Add category` (CategoryDialog, appended if the name is unique, then save and rebuild), `Delete` and `Properties`. Delete and Properties are enabled only on a category child (value is not None).
@@ -170,7 +170,7 @@ Note: per the project rule this is the one allowed mention apart from the README
 - [x] Header labels are shown **UPPERCASE** (download_model.py:105) and left-aligned. Sections are not movable, the last section stretches, and sections are clickable. — **2.x:** done
 - [x] Minimum widths: queue 34, size 88, status 170, time_left 96, rate 116 (MW:83). — **2.x:** `view::MIN_WIDTH`
 - [x] A resized width is written back into `settings.columns` (MW:685-690). — **2.x:** `ui_column_width`
-- [ ] Right-clicking the header opens Customize columns (MW:411-412). — **2.x:** right-click opens Customize columns, the window it opens is a dialog of phase 6
+- [x] Right-clicking the header opens Customize columns (MW:411-412). — **2.x:** right-click opens Customize columns, its window is built (phase 6)
 - [x] Cell contents (download_model.py:108-191): — **2.x:** `crates/lider-core/tests/view.rs` `rows_cells_and_columns`
   - filename: text plus a category icon.
   - queue: **no text**. It shows the `queue` icon when the download is queued, with the queue name as tooltip.
@@ -229,12 +229,12 @@ Note: per the project rule this is the one allowed mention apart from the README
 - [x] Changing the selection or current row updates the actions and the details pane (MW:413-415). — **2.x:** done
 
 ### Double-click (MW:765-775)
-- [ ] COMPLETE: Properties dialog. — **2.x:** opens the Properties window, the window it opens is a dialog of phase 6
-- [ ] Otherwise: start the download if it is not running, then `show_progress`, which respects `show_progress_dialog`. — **2.x:** starts the download; the progress window is the window it opens is a dialog of phase 6
+- [x] COMPLETE: Properties dialog. — **2.x:** opens the Properties window, its window is built (phase 6)
+- [x] Otherwise: start the download if it is not running, then `show_progress`, which respects `show_progress_dialog`. — **2.x:** starts the download; the progress window is its window is built (phase 6)
 
 ### Context menu (MW:730-763)
 - [x] With no selection: only `&Add new download`. — **2.x:** done
-- [ ] Otherwise, with d = the first selected item and "complete" = d is COMPLETE: — **2.x:** Open, Open with…, Open folder, Redownload, Start/Stop/Remove, queues and Copy are done; Move/Rename, Properties and Check hash open windows of phase 6
+- [x] Otherwise, with d = the first selected item and "complete" = d is COMPLETE: — **2.x:** Open, Open with…, Open folder, Redownload, Start/Stop/Remove, queues and Copy are done; Move/Rename, Properties and Check hash open their windows (phase 6)
   - `Open`: enabled if complete. Opens the file (`open_path`).
   - `Open with...`: enabled if complete. Input "Open with" / "Command (the file path is appended):". Runs `shlex.split(cmd)+[path]` in a new session (MW:1078-1083).
   - `Open folder`: if complete, `open_folder(path)` (DBus FileManager1.ShowItems selects the file; on OSError it opens the dirname). Otherwise it opens `save_dir`.
@@ -253,7 +253,7 @@ Note: per the project rule this is the one allowed mention apart from the README
 
 ### Drag and drop (MW:1496-1507)
 - [ ] The whole window accepts URL or text drags. URLs come from the URL list or from text split on whitespace, filtered by URL_RE. — **2.x:** built (text/uri-list and text/plain); needs a manual check, synthetic drops are not run
-- [ ] Exactly 1 URL: `add_url(url, ask_address=False)`. More than 1: `_add_many`. — **2.x:** several URLs go through `act_add_many` and the question; one URL goes to the add flow of phase 6
+- [x] Exactly 1 URL: `add_url(url, ask_address=False)`. More than 1: `_add_many`. — **2.x:** several URLs go through `act_add_many` and the question; one URL goes to the add flow (phase 6)
 
 ## 7. Details pane (details.py; MW:418-430, 1230-1252)
 - [x] It sits under the list in a vertical splitter (object `detailsSplit`) with initial sizes `[420, details_height (default 210)]`. It cannot collapse. The height is persisted when the pane is visible (MW:1519-1520). — **2.x:** done
@@ -306,7 +306,7 @@ Note: per the project rule this is the one allowed mention apart from the README
 - [x] Left side: — **2.x:** `crates/lider-core/tests/view.rs` `status_bar_and_tray`
   - `↓ {total rate}` in mono; "0 B/s" when idle.
   - `{n tasks} downloading · [{v} verifying · ]{q} in queue`, where q = downloads with a queue that are not COMPLETE/VERIFYING and not running.
-- [ ] Right side (permanent): — **2.x:** Speed Limiter and Clipboard done; Browser: … opens the Browser integration window (the window it opens is a dialog of phase 6) and `recheck_browser` re-checks
+- [x] Right side (permanent): — **2.x:** Speed Limiter and Clipboard done; Browser: … opens the Browser integration window (its window is built (phase 6)) and `recheck_browser` re-checks
   - `Speed Limiter: on|off`
   - `Clipboard: on|off`
   - **`Browser: connected|not set up`**: a link-style button (object sbLink, pointing hand, tooltip "Browser integration…"). Clicking it opens BrowserIntegrationDialog, then **clears the cached result and re-checks** (MW:464-469). Connected = any detected browser has the host installed. Exceptions count as not set up, and the result is cached.
@@ -325,7 +325,7 @@ Note: per the project rule this is the one allowed mention apart from the README
   - "LID" `"{queue}" processing stopped/finished` (Info 3 s).
   - "LID keeps downloading" `Open LID from this icon. Turn the icon off again in Options → Appearance.` (Info 5 s).
 - [x] Close-to-tray: if a tray exists, `close_to_tray` is on and this is not a real quit, closing the window hides it (MW:1524-1527). — **2.x:** `app::close_requested`
-- [ ] Options → Appearance can turn the tray on or off live (MW:1181-1185). — **2.x:** the Options window is phase 6
+- [x] Options → Appearance can turn the tray on or off live (MW:1181-1185). — **2.x:** Options OK re-applies the tray live (phase 6)
 - [x] Start minimized (app.py:122): with `--minimized` or `settings.start_minimized`, **and** a tray exists, the window is not shown. Otherwise it is shown, and the menu-entry offer (`dialogs.menu.offer`) appears if `should_offer`. — **2.x:** hidden only when a tray exists; the menu offer is a message box
 
 ## 10. Search bar (Ctrl+F) and Find Next (F3)
@@ -337,9 +337,9 @@ Note: per the project rule this is the one allowed mention apart from the README
   - persist `search_flags` and `search_string`;
   - reset Find Next and refresh, which filters the list.
   - Matching is case-insensitive (the test uses "LECTURE").
-- [ ] Settings...: FindDialog titled "LID Search settings" without the query field. On OK it persists the flags and refreshes if the search is active (MW:1130-1134). — **2.x:** the window it opens is a dialog of phase 6
+- [x] Settings...: FindDialog titled "LID Search settings" without the query field. On OK it persists the flags and refreshes if the search is active (MW:1130-1134). — **2.x:** its window is built (phase 6)
 - [x] Close (✕ or Esc): hides the bar, sets the search inactive (the filter is removed but the query is kept), refreshes and focuses the list (MW:1136-1140). — **2.x:** e2e `tests/e2e/run.sh`
-- [x] Find Next (MW:1142-1153): — **2.x:** e2e `tests/e2e/run.sh`; with no query it opens the Find window (the window it opens is a dialog of phase 6)
+- [x] Find Next (MW:1142-1153): — **2.x:** e2e `tests/e2e/run.sh`; with no query it opens the Find window (its window is built (phase 6))
   - with no query, opens the FindDialog first and stops on cancel; otherwise persists;
   - `finder.next(rows)` finds the next matching row index after the last one found;
   - with no match, shows info "Find file" / "No such files found";
@@ -363,13 +363,13 @@ Note: per the project rule this is the one allowed mention apart from the README
   - `queue_done` (queue still exists) → `_queue_done`.
   - `checked` and `queue_started` have no specific handling.
   - If there were any events, refresh the rows.
-- [ ] _download_complete: — **2.x:** rules done (progress options, running queue, notification, power off, exit); the Complete dialog is the window it opens is a dialog of phase 6
+- [x] _download_complete: — **2.x:** rules done (progress options, running queue, notification, power off, exit); the Complete dialog is its window is built (phase 6)
   - Options start as `{show_complete: settings.show_complete_dialog, exit: False, shutdown: False}`. If a progress dialog exists, its `completion_options()` replace them and the dialog closes.
   - If the download belongs to a running queue, show_complete is forced False.
   - show_complete: a parentless, non-modal CompleteDialog. When it is closed with "don't show" ticked, `show_complete_dialog=False` is saved.
   - Otherwise the tray shows "Download complete".
   - Then shutdown → `shutdown_computer`, or exit → `quit_app`.
-- [ ] _checksum_mismatch: — **2.x:** the window it opens is a dialog of phase 6
+- [x] _checksum_mismatch: — **2.x:** its window is built (phase 6)
   - closes the progress dialog;
   - with ask False, shows the tray "kept" message and stops;
   - otherwise a non-modal MismatchDialog (deleted on close). On accept, `_mismatch_choice` runs:
@@ -385,7 +385,7 @@ Note: per the project rule this is the one allowed mention apart from the README
   - Cancel stops it. At 0, `manager.shutdown()` runs and then `systemctl poweroff`.
 
 ## 12. Adding downloads (main-window flows)
-- [ ] **add_url(url=None, referer, description, parent_page, ask_address=True, headers, filename)** (MW:782-838): — **2.x:** the window it opens is a dialog of phase 6
+- [x] **add_url(url=None, referer, description, parent_page, ask_address=True, headers, filename)** (MW:782-838): — **2.x:** its window is built (phase 6)
   1. If url is None, or `ask_address` is set and the url is empty, open AddUrlDialog prefilled with the url. Its result gives url plus auth credentials.
   2. Duplicates (`manager.find_duplicate`) follow `settings.duplicate_action`, which is ask|number|overwrite|complete:
      - "ask" opens DuplicateDialog. Cancel aborts. Its "remember" checkbox persists the choice.
@@ -397,21 +397,21 @@ Note: per the project rule this is the one allowed mention apart from the README
      - On error, ask `Cannot get information about the file:\n{error}\n\nAdd it anyway?`. On Yes the name is `safe_filename(filename or filename_from_url)`, size −1 and resumable unknown.
      - On success, the browser-supplied filename wins when it has an extension and the probed name does not.
   5. `_confirm_and_add` follows.
-- [ ] **_confirm_and_add** (MW:894-922): — **2.x:** the window it opens is a dialog of phase 6
+- [x] **_confirm_and_add** (MW:894-922): — **2.x:** its window is built (phase 6)
   - start = `!only_add_to_queue`;
   - the category and save_dir come from `categories.classify`;
   - unless replacing, the name is made unique (`stem (2).ext`, … against both list entries and files on disk, MW:885-892);
   - if `show_start_dialog`, FileInfoDialog runs (path, category, description, checksum; action "later" queues to r.queue and does not start, otherwise it starts) and settings are saved;
   - replace: delete the old file if it is complete and at the same path, then remove the old entry;
   - `manager.add(...)`, refresh, and show_progress if started.
-- [ ] **YouTube** (MW:840-883): — **2.x:** the window it opens is a dialog of phase 6
+- [x] **YouTube** (MW:840-883): — **2.x:** its window is built (phase 6)
   - Without yt-dlp: warning "Downloading from YouTube needs the yt-dlp package:\n\n    pip install yt-dlp".
   - Async probe with a busy cursor. Errors show "Cannot read this YouTube video:\n{err without 'ERROR: '}". No variants shows "This YouTube video has no downloadable formats."
   - FileInfoDialog with media_info, preselected `media_kind`/`media_quality`. The chosen kind and quality are remembered and saved.
   - The replace logic is the same as above. The download is added with `parent_page=url`, resumable, a media record, and a queue only when not started. Progress is shown if started.
 - [x] **_add_many** (batch, drop, import; MW:1010-1019): each URL gets a safe name and a classified category, a unique name, and is added to MAIN_QUEUE with credentials. Then the window refreshes and asks `{n} file(s) were added to the "Main download queue". Start the queue now?`. Yes starts the queue. — **2.x:** `crates/lider-core/tests/view.rs` `unique_names_and_add_many` and the start question
-- [ ] **_add_choices** (LinksDialog results; MW:973-980): each choice is added with a unique name to MAIN_QUEUE with referer, parent and headers. If there were any, the Main queue **starts automatically**. — **2.x:** the window it opens is a dialog of phase 6
-- [ ] **Grabber** (MW:940-971): — **2.x:** the window it opens is a dialog of phase 6
+- [x] **_add_choices** (LinksDialog results; MW:973-980): each choice is added with a unique name to MAIN_QUEUE with referer, parent and headers. If there were any, the Main queue **starts automatically**. — **2.x:** its window is built (phase 6)
+- [x] **Grabber** (MW:940-971): — **2.x:** its window is built (phase 6)
   - QInputDialog "Grabber" / "Enter the address of the web page to explore:", prefilled with the clipboard if it holds a URL, else "https://". An invalid input aborts.
   - Async fetch without a range, up to 8 MiB, decoded with the response charset (default utf-8, replacement on errors).
   - Error: warning "Cannot open the web page:\n{err}". No links: "Cannot find the links!".
@@ -420,7 +420,7 @@ Note: per the project rule this is the one allowed mention apart from the README
   - Question box "Confirm deletion of downloads": "Are you sure you want to delete {n} file(s) from the download list?" with Yes/No and the checkbox "Also delete the downloaded files from disk".
   - Yes → `remove(ids, delete_files)`, uncheck them, refresh.
 - [x] **delete_completed** (MW:1070-1076): if n > 0, ask "Remove all {n} completed file(s) from the list?\nThe files stay on the disk." and on Yes call `remove_completed`. — **2.x:** done
-- [x] **show_progress(id, force)** (MW:1022-1032): one ProgressDialog per download, reused, shown and raised. It is skipped when `show_progress_dialog` is off, unless forced. — **2.x:** `commands::show_progress`; the window is the window it opens is a dialog of phase 6
+- [x] **show_progress(id, force)** (MW:1022-1032): one ProgressDialog per download, reused, shown and raised. It is skipped when `show_progress_dialog` is off, unless forced. — **2.x:** `commands::show_progress`; the window is its window is built (phase 6)
 
 ## 13. Import / Export (MW:1301-1347)
 - [x] Export .ef2: save dialog "Export download list", default "downloads.ef2", filter "Export files (*.ef2)". CRLF line endings, downloads sorted by id, written as `<`, url, optional `referer: X`, `>`. — **2.x:** `lider_core::ef2`; test `ef2_round_trip_format`
@@ -429,7 +429,7 @@ Note: per the project rule this is the one allowed mention apart from the README
 - [x] Import text: "Text files (*.txt);;All files (*)". Whitespace-separated tokens matching URL_RE go to `_add_many`. — **2.x:** done
 
 ## 14. Browser requests, clipboard, single instance
-- [x] **handle_browser_request(req)** (MW:983-1008): — **2.x:** `app::browser_request`; the add and links flows it starts are the window it opens is a dialog of phase 6
+- [x] **handle_browser_request(req)** (MW:983-1008): — **2.x:** `app::browser_request`; the add and links flows it starts are its window is built (phase 6)
   - `action:"show"` → show_normal.
   - Headers come from `cookies` → `Cookie` and `user_agent` → `User-Agent`. `page = page_url`; `referer = referer or page`.
   - `download`: only when the url matches URL_RE (so `javascript:` is ignored). Calls `add_url(url, referer, parent_page=page, ask_address=False, headers, filename)`.
@@ -454,7 +454,7 @@ Note: per the project rule this is the one allowed mention apart from the README
 - [x] _to_background: sets `tray_icon=True` and builds the tray if needed, then saves. With no tray available the window minimizes instead. Otherwise it hides and shows the "LID keeps downloading" message. — **2.x:** `app::to_background`
 
 ## 16. Options and appearance hooks
-- [ ] open_options(tab): selects the tab whose text equals `tab`, so "Appearance" opens on that tab; plain Options opens "General". On OK it runs `apply_appearance`, saves, rebuilds the tree and refreshes (MW:1156-1165). — **2.x:** the window it opens is a dialog of phase 6
+- [x] open_options(tab): selects the tab whose text equals `tab`, so "Appearance" opens on that tab; plain Options opens "General". On OK it runs `apply_appearance`, saves, rebuilds the tree and refreshes (MW:1156-1165). — **2.x:** its window is built (phase 6)
 - [x] apply_appearance (MW:1170-1185) re-applies: — **2.x:** the view applies appearance settings on every tick
   - theme, toolbar labels, menu bar mode;
   - show categories, details, status bar;
@@ -579,22 +579,22 @@ Note: per the project rule this is the one allowed mention apart from the README
 
 ## 18. widgets.py building blocks
 - [x] `mono_font(base)`: the system fixed font, at 0.95× the base size when a base is given (40-44). — **2.x:** `system::mono_family` (fontconfig)
-- [ ] `dialog_header(icon, title, subtitle, tile, badge)` (58-95): — **2.x:** the message box header is done; dialog headers come with the window it opens is a dialog of phase 6
+- [x] `dialog_header(icon, title, subtitle, tile, badge)` (58-95): — **2.x:** the message box header is done; dialog headers come with its window is built (phase 6)
   - Icon: bare 30 px, or 22 px on a 40 px tileSmall, or 22 px on a 42 px `{badge}Badge` circle.
   - Title: bold, 1.25×, object dialogTitle. Subtitle: muted, wrapping.
-- [ ] `shell(dialog, icon, title, subtitle, spacing=10, tile, badge)` (99-121): the frame of every dialog. Body margins 18/16/18/14 with the optional header on top. Footer bar (object footer) with margins 16/12/16/12 and spacing 8. Returns (body, footer). — **2.x:** the window it opens is a dialog of phase 6
-- [ ] `panel(spacing=12)`: a rounded card, object panel, margins 14 (124-131). — **2.x:** the window it opens is a dialog of phase 6
+- [x] `shell(dialog, icon, title, subtitle, spacing=10, tile, badge)` (99-121): the frame of every dialog. Body margins 18/16/18/14 with the optional header on top. Footer bar (object footer) with margins 16/12/16/12 and spacing 8. Returns (body, footer). — **2.x:** its window is built (phase 6)
+- [x] `panel(spacing=12)`: a rounded card, object panel, margins 14 (124-131). — **2.x:** its window is built (phase 6)
 - [x] `caption(text)`: uppercase sectionTitle at 11/12 size (134-140). — **2.x:** `.sectionTitle`
-- [ ] `link_field(edit)`: mono font with a leading link icon (143-147). — **2.x:** the window it opens is a dialog of phase 6
-- [ ] `form_label` (object formLabel, optional fixed width) and `form_row(label, *items, width=96)`: a fixed muted label column, then the controls; the last control stretches (150-169). — **2.x:** the window it opens is a dialog of phase 6
-- [ ] `note(text, boxed)`: wrapping faint text, or a noteBox with boxed=True (172-176). — **2.x:** the window it opens is a dialog of phase 6
-- [ ] `pill_label(text, kind)` and `set_pill`: QLabel pills ok/bad/accent/muted at 11.5/12 size, DemiBold (179-197). — **2.x:** the window it opens is a dialog of phase 6
-- [ ] `tab_strip(names)`: underlined, non-expanding tabs on a strip with a bottom rule, margins 14 (200-213). — **2.x:** details tabs done; the dialogs' tab strip is the window it opens is a dialog of phase 6
+- [x] `link_field(edit)`: mono font with a leading link icon (143-147). — **2.x:** its window is built (phase 6)
+- [x] `form_label` (object formLabel, optional fixed width) and `form_row(label, *items, width=96)`: a fixed muted label column, then the controls; the last control stretches (150-169). — **2.x:** its window is built (phase 6)
+- [x] `note(text, boxed)`: wrapping faint text, or a noteBox with boxed=True (172-176). — **2.x:** its window is built (phase 6)
+- [x] `pill_label(text, kind)` and `set_pill`: QLabel pills ok/bad/accent/muted at 11.5/12 size, DemiBold (179-197). — **2.x:** its window is built (phase 6)
+- [x] `tab_strip(names)`: underlined, non-expanding tabs on a strip with a bottom rule, margins 14 (200-213). — **2.x:** details tabs done; the dialogs' tab strip is its window is built (phase 6)
 - [x] `small_header(view)`: header font 10.5/12 with the smallHeader property (216-222). — **2.x:** `table.small`
 - [x] `primary(button)`: sets `primary=true`, which paints the accent button (225-228). — **2.x:** `.btn.primary`
-- [ ] `add_header`: inserts a dialog_header above an existing grid or vertical layout (231-245). — **2.x:** the window it opens is a dialog of phase 6
-- [ ] `FlowLayout`: lays items out and wraps them, spacing 6, margins 8, height-for-width (249-319). — **2.x:** the window it opens is a dialog of phase 6
-- [ ] **TagInput** (336-484): — **2.x:** the window it opens is a dialog of phase 6
+- [x] `add_header`: inserts a dialog_header above an existing grid or vertical layout (231-245). — **2.x:** its window is built (phase 6)
+- [x] `FlowLayout`: lays items out and wraps them, spacing 6, margins 8, height-for-width (249-319). — **2.x:** its window is built (phase 6)
+- [x] **TagInput** (336-484): — **2.x:** its window is built (phase 6)
   - Values are removable chips, normalised and deduplicated.
   - Enter, Return or "," commits. Pasted text is split on commas and whitespace. Backspace on an empty field removes the last chip. Focus-out commits, and focus toggles the `focused` style.
   - Each chip is a ToolButton "tag" with a trailing 11 px close icon (right-to-left layout), tooltip "Remove {v}"; clicking removes it.
@@ -607,15 +607,15 @@ Note: per the project rule this is the one allowed mention apart from the README
 - [x] `pill()`: described in §6. — **2.x:** done
 - [x] `check_box_pixmap`, `cross_pixmap` (stroke 2.4/24) and `check_pixmap` (stroke 2.2/24): helper pixmaps. — **2.x:** inline SVG
 - [x] **ToolButton** (557-615): sizes itself from padding, icon, gap and text, plus an 11 px chevron (stroke fa, 1.2 px) for split menus. It paints its own icon and label so the gap is exact. Disabled state uses the disabled palette and icon mode. — **2.x:** `.tb`
-- [ ] **ChecksumEdit** (632-711): — **2.x:** the window it opens is a dialog of phase 6
+- [x] **ChecksumEdit** (632-711): — **2.x:** its window is built (phase 6)
   - Algorithm combo: "Auto-detect" plus checksum titles, width 124.
   - Mono hash field with placeholder "Paste a hash (optional)". The detected type shows as an accent pill inside the right edge of the field, and the text margin reserves room for it.
   - Message line: hint "Optional — LID checks the file when the download finishes.", or the error in errorText style. An error also sets `invalid=true` on the field.
   - `value()` raises while invalid. `setValue("sha256:hex")` resets the combo to Auto-detect.
 - [x] **CheckChip** (731-774): described in §4. Height 30, margins 10/0/6, spacing 8. A 14 px partial box icon, the label, and a 20×20 ✕ (12 px cross in actx, white when hovered or active, tooltip "Clear the checks", pointing hand). It repaints on a style change. — **2.x:** e2e `tests/e2e/run.sh`
 - [x] **CheckHeader** (778-798): tri-state box in section 0. A click in section 0 emits toggled and does not sort. — **2.x:** e2e `tests/e2e/run.sh`
-- [ ] **TypePillDelegate** (801-832): text shown as a muted track pill (height ≤ 22, 11.5/12 DemiBold, centred); row height 27. — **2.x:** the window it opens is a dialog of phase 6
-- [ ] **PillDelegate(pills)** (835-879): mapped texts become pills. "ok" pills are ok on ok@31 with a 12 px check mark; other kinds are mu on track. Unmapped text is drawn in mu and elided. Row height 27. — **2.x:** the window it opens is a dialog of phase 6
+- [x] **TypePillDelegate** (801-832): text shown as a muted track pill (height ≤ 22, 11.5/12 DemiBold, centred); row height 27. — **2.x:** its window is built (phase 6)
+- [x] **PillDelegate(pills)** (835-879): mapped texts become pills. "ok" pills are ok on ok@31 with a 12 px check mark; other kinds are mu on track. Unmapped text is drawn in mu and elided. Row height 27. — **2.x:** its window is built (phase 6)
 - [x] **InfoPillDelegate**: "Finished" becomes a teal ok pill (882-884). — **2.x:** `.infopill`
 - [x] **ListDelegate** (887-935) and **TreeDelegate** (938-962): described in §6 and §5. The tree badge is mono, bold, 0.82×, width = text+14, height = font height+2, 6 px from the right, rounded. Selected: ac bg, white text. Unselected: track bg, mu text. — **2.x:** done
 - [~] Roles: STATUS_ROLE = UserRole+10, COUNT_ROLE = UserRole+11, ID_ROLE = UserRole+1. — **2.x:** no Qt roles: each row carries its data
@@ -624,7 +624,7 @@ Note: per the project rule this is the one allowed mention apart from the README
 - [x] `run_async(fn, cb)`: runs fn on a daemon thread and calls `cb(result, error)` on the UI thread (42-53). A Tauri port maps this to an async command plus an event. — **2.x:** async Tauri commands
 - [x] `open_path`: open the path with the desktop default (QDesktopServices). — **2.x:** `system::open_path` (xdg-open)
 - [x] `open_folder(path)`: DBus `org.freedesktop.FileManager1.ShowItems` with the file URI, which selects the file. On OSError it opens the parent folder (60-70). — **2.x:** `system::open_folder` (FileManager1.ShowItems, else the folder)
-- [ ] Also `dlu(w,h)` (×1.5, ×1.625), `separator()` (HLine) and `page_header(icon, title)`: a 22 px icon with a bold title at 14/12, the header of each Options page. — **2.x:** the window it opens is a dialog of phase 6
+- [x] Also `dlu(w,h)` (×1.5, ×1.625), `separator()` (HLine) and `page_header(icon, title)`: a 22 px icon with a bold title at 14/12, the header of each Options page. — **2.x:** its window is built (phase 6)
 
 ## 20. What each UI test asserts (tests/test_ui.py)
 - `test_menu_bar_layout` (55): the top-level menus are exactly Tasks/File/Downloads/View/Help. Downloads contains Pause All, Stop All, Delete All Completed, Find (Ctrl-F), Find Next (F3), Scheduler, Start queue, Stop queue, Speed Limiter and Options.
