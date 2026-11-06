@@ -9,9 +9,8 @@
 //! Segments are identified by their `start`, which never changes once a segment exists.
 
 use std::collections::HashSet;
-use std::fs::{self, File, OpenOptions};
+use std::fs::{self, File};
 use std::io;
-use std::os::unix::fs::{FileExt, OpenOptionsExt};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
@@ -416,12 +415,11 @@ impl Shared {
         }
 
         fs::create_dir_all(&self.options.temp_dir).map_err(|e| e.to_string())?;
-        let file = OpenOptions::new()
+        let file = crate::fsio::part_file_options()
             .read(true)
             .write(true)
             .create(true)
             .truncate(false)
-            .mode(0o644)
             .open(&self.part_path)
             .map_err(|e| e.to_string())?;
         let size = self.lock().d.size;
@@ -659,7 +657,9 @@ impl Shared {
                 (offset, allowed)
             };
             if allowed > 0 {
-                if let Err(e) = file.write_all_at(&data[..allowed as usize], offset as u64) {
+                if let Err(e) =
+                    crate::fsio::write_all_at(file, &data[..allowed as usize], offset as u64)
+                {
                     // Give the bytes back so the retry writes them again.
                     let mut st = self.lock();
                     let s = st.seg(segment);

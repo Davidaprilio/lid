@@ -17,7 +17,8 @@ use std::time::{Duration, Instant};
 use regex::Regex;
 use serde_json::{Map, Value, json};
 
-use crate::{ipc, sh};
+use crate::platform::{Instance, Shell, os};
+use crate::sh;
 
 pub const MAX_MESSAGE: u32 = 8 * 1024 * 1024;
 pub const MAX_LINKS: usize = 5000;
@@ -206,7 +207,7 @@ pub fn launch_command() -> Vec<String> {
 /// Start a program detached from the browser (own session, no stdio).
 fn spawn_detached(cmd: &[String]) -> bool {
     cmd.split_first()
-        .is_some_and(|(program, args)| sh::spawn_detached(program, args).is_ok())
+        .is_some_and(|(program, args)| os().spawn_detached(program, args).is_ok())
 }
 
 /// Send to the running LID; start it and retry for up to `wait` when it is not running.
@@ -216,7 +217,7 @@ pub fn deliver(
     launch: Option<&dyn Fn() -> bool>,
     wait: Duration,
 ) -> bool {
-    if ipc::send_request(request, socket) {
+    if os().send_request(request, socket) {
         return true;
     }
     let started = match launch {
@@ -229,7 +230,7 @@ pub fn deliver(
     let end = Instant::now() + wait;
     while Instant::now() < end {
         std::thread::sleep(Duration::from_millis(250));
-        if ipc::send_request(request, socket) {
+        if os().send_request(request, socket) {
             return true;
         }
     }
@@ -253,7 +254,7 @@ pub fn handle(
                 "capture": s.browser_capture,
                 "types": s.auto_capture_types.split_whitespace().collect::<Vec<_>>(),
                 "skip_sites": s.no_auto_sites.split_whitespace().collect::<Vec<_>>(),
-                "running": ipc::is_running(socket),
+                "running": os().is_running(socket),
             })
         }
         "download" | "links" | "show" => {
@@ -280,7 +281,7 @@ pub fn handle(
 /// input, 1 after a framing error (which is answered first).
 pub fn main() -> i32 {
     let dirs = lider_core::paths::Dirs::from_env();
-    let socket = ipc::socket_name();
+    let socket = os().instance_name();
     let mut stdin = io::stdin().lock();
     let mut stdout = io::stdout().lock();
     loop {
@@ -299,7 +300,7 @@ pub fn main() -> i32 {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
     use std::io::Cursor;

@@ -8,11 +8,14 @@ use std::io;
 use std::path::PathBuf;
 use std::process::Command;
 
-use crate::browser::{host_executable, wrapper_script};
-use crate::env::{Launch, SysEnv};
+use super::browsers::{host_executable, wrapper_script};
+use super::env::{Launch, SysEnv};
 
 /// The app icon installed with the menu entry.
-pub const ICON: &[u8] = include_bytes!("../../../lider/ui/assets/icons/app.svg");
+pub const ICON: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/../../lider/ui/assets/icons/app.svg"
+));
 /// Entries LID wrote, which it may rewrite or remove.
 const MARK: &str = "X-LID-Written-By=LID";
 const RESERVED: &str = " \t\n\"'\\><~|&;$*?#()`";
@@ -206,7 +209,7 @@ pub fn refresh(env: &SysEnv) -> Vec<&'static str> {
 mod tests {
     //! Port of tests/test_desktop.py (the Options-dialog case comes with the UI).
     use super::*;
-    use crate::browser;
+    use crate::platform::linux::browsers as browser;
     use std::path::Path;
 
     const APPIMAGE: &str = "/opt/apps/Lider 1.2.0.AppImage";

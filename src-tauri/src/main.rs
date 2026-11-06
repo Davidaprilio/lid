@@ -8,11 +8,12 @@ mod dialogs;
 mod gui;
 mod menu;
 mod pump;
-mod system;
 mod tray;
 mod windows;
 
 use std::process::ExitCode;
+
+use lider_sys::platform::prelude::*;
 
 /// What this process does, decided from argv alone.
 #[derive(Debug, PartialEq, Eq)]
@@ -45,21 +46,18 @@ fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match mode(&args) {
         Mode::NativeHost => code(lider_sys::native_host::main()),
-        Mode::BrowserIntegration => code(lider_sys::browser::main(
-            &args,
-            &lider_sys::env::SysEnv::from_process(),
-        )),
+        Mode::BrowserIntegration => code(lider_sys::browser::main(&args, os())),
         Mode::Gui => {
             let cli = cli::parse(&args);
             if cli.help {
                 print!("{}", cli::USAGE);
                 return ExitCode::SUCCESS;
             }
-            let socket = lider_sys::ipc::socket_name();
+            let socket = os().instance_name();
             // A running LID takes the URLs (or comes forward); this process then ends.
             match cli::lines_for_running(&cli) {
-                None if lider_sys::ipc::is_running(&socket) => return ExitCode::SUCCESS,
-                Some(lines) if lider_sys::ipc::send_lines(&lines, &socket) => {
+                None if os().is_running(&socket) => return ExitCode::SUCCESS,
+                Some(lines) if os().send_lines(&lines, &socket) => {
                     return ExitCode::SUCCESS;
                 }
                 _ => {}

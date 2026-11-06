@@ -13,6 +13,7 @@ use lider_core::models::{Download, MAIN_QUEUE, SYNC_QUEUE, Status};
 use lider_core::queue::QueueSchedule;
 use lider_core::settings::{Category, ColumnState, Settings};
 use lider_core::view;
+use lider_sys::platform::prelude::*;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 use tauri::{AppHandle, Manager, State};
@@ -1128,15 +1129,12 @@ pub fn properties_apply(
 
 #[tauri::command]
 pub fn desktop_state(state: State<'_, AppState>) -> Value {
-    let s = &state.sys;
-    let connected = lider_sys::browser::BROWSERS
-        .iter()
-        .filter(|b| lider_sys::browser::is_installed(b, s))
-        .count();
+    let s = state.sys;
+    let connected = s.browsers().iter().filter(|b| b.installed).count();
     json!({
-        "autostart": lider_sys::desktop::autostart_enabled(s),
-        "in_menu": lider_sys::desktop::in_menu(s),
-        "system_installed": lider_sys::desktop::system_installed(s),
+        "autostart": s.autostart_enabled(),
+        "in_menu": s.in_menu(),
+        "system_installed": s.system_installed(),
         "browsers_connected": connected,
         "global_menu": state.ui().global_menu,
         "default_file_types": lider_core::settings::DEFAULT_FILE_TYPES,
@@ -1156,19 +1154,19 @@ pub fn options_apply(
         .and_then(Value::as_bool)
         .unwrap_or(false);
     settings_patch(app.clone(), state.clone(), settings)?;
-    let s = &state.sys;
-    if launch != lider_sys::desktop::autostart_enabled(s) {
+    let s = state.sys;
+    if launch != s.autostart_enabled() {
         // 1.x ignores an OSError here: OK still closes the window.
-        let _ = lider_sys::desktop::set_autostart(s, launch);
+        let _ = s.set_autostart(launch);
     }
     if let Some(on) = menu
-        && !lider_sys::desktop::system_installed(s)
+        && !s.system_installed()
     {
-        let in_menu = lider_sys::desktop::in_menu(s);
+        let in_menu = s.in_menu();
         if on && !in_menu {
-            let _ = lider_sys::desktop::add_to_menu(s);
+            let _ = s.add_to_menu();
         } else if !on && in_menu {
-            lider_sys::desktop::remove_from_menu(s);
+            s.remove_from_menu();
         }
     }
     state.ui().browser_ok = None;
@@ -1261,24 +1259,19 @@ pub fn queue_move(app: AppHandle, state: State<'_, AppState>, id: i64, delta: i6
 
 #[tauri::command]
 pub fn browsers_list(state: State<'_, AppState>) -> Value {
-    let s = &state.sys;
-    let detected = lider_sys::browser::detected(s);
-    let rows: Vec<Value> = lider_sys::browser::BROWSERS
+    let s = state.sys;
+    let rows: Vec<Value> = s
+        .browsers()
         .iter()
         .map(|b| {
-            let found = detected.iter().any(|d| d.name == b.name);
-            let installed = lider_sys::browser::is_installed(b, s);
-            json!({"name": b.name, "family": b.family.as_str(), "detected": found,
-                "state": if installed { "installed" } else if found { "not installed" } else { "browser not found" }})
+            json!({"name": b.name, "family": b.family.as_str(), "detected": b.detected,
+                "state": if b.installed { "installed" } else if b.detected { "not installed" } else { "browser not found" }})
         })
         .collect();
     let folder = |f: lider_sys::browser::Family| {
-        let p = s.dirs().data.join("browser-extension").join(f.as_str());
-        if p.join("manifest.json").is_file() {
-            p.to_string_lossy().into_owned()
-        } else {
-            String::new()
-        }
+        s.exported_extension(f)
+            .map(|p| p.to_string_lossy().into_owned())
+            .unwrap_or_default()
     };
     json!({
         "rows": rows,
@@ -1296,21 +1289,22 @@ pub fn browsers_list(state: State<'_, AppState>) -> Value {
 /// Install or remove the helper for the named browsers; installing exports the extension folders.
 #[tauri::command]
 pub fn browsers_apply(state: State<'_, AppState>, names: Vec<String>, install: bool) -> Res<()> {
-    let s = &state.sys;
-    let chosen: Vec<lider_sys::browser::Browser> = lider_sys::browser::BROWSERS
-        .iter()
+    let s = state.sys;
+    let chosen: Vec<_> = s
+        .browsers()
+        .into_iter()
         .filter(|b| names.iter().any(|n| n == b.name))
-        .copied()
         .collect();
+    let chosen_names: Vec<&str> = chosen.iter().map(|b| b.name).collect();
     if install {
-        lider_sys::browser::install(&chosen, s).map_err(|e| e.to_string())?;
+        s.install(&chosen_names).map_err(|e| e.to_string())?;
         let mut families: Vec<_> = chosen.iter().map(|b| b.family).collect();
         families.dedup();
         for f in families {
-            lider_sys::browser::extension_folder(f, s).map_err(|e| e.to_string())?;
+            s.extension_folder(f).map_err(|e| e.to_string())?;
         }
     } else {
-        lider_sys::browser::uninstall(&chosen, s);
+        s.uninstall(&chosen_names);
     }
     state.ui().browser_ok = None;
     Ok(())
@@ -1319,7 +1313,7 @@ pub fn browsers_apply(state: State<'_, AppState>, names: Vec<String>, install: b
 /// Open a web page or file with the desktop's default program.
 #[tauri::command]
 pub fn open_url(url: String) -> Res<()> {
-    crate::system::open_path(&url).map_err(|e| e.to_string())
+    os().open_path(&url).map_err(|e| e.to_string())
 }
 
 /// A download as JSON (for dialogs that only read it).
@@ -1343,9 +1337,5 @@ pub fn home_dir() -> String {
 /// The AppImage's file name, for "… runs on its own".
 #[tauri::command]
 pub fn appimage_name(state: State<'_, AppState>) -> Option<String> {
-    state.sys.appimage.as_ref().and_then(|p| {
-        std::path::Path::new(p)
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-    })
+    state.sys.self_contained_name()
 }

@@ -13,7 +13,8 @@ use crate::PACKAGE_NAME;
 /// Folder names used by earlier builds, newest first.
 pub const LEGACY_NAMES: [&str; 2] = ["lidman", "lindm"];
 
-/// LID's folders: `<XDG dir>/lider` for config, data and cache, plus the home folder.
+/// LID's folders: `<XDG dir>/lider` for config, data and cache, plus the home folder. The XDG variables
+/// win on every OS; without them each OS has its own place (see [`default_homes`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Dirs {
     pub home: PathBuf,
@@ -48,10 +49,11 @@ impl Dirs {
         let pick = |v: Option<OsString>, default: PathBuf| {
             v.map(PathBuf::from).unwrap_or(default).join(PACKAGE_NAME)
         };
+        let [config, data, cache] = default_homes(&home);
         Dirs {
-            config: pick(config_home, home.join(".config")),
-            data: pick(data_home, home.join(".local").join("share")),
-            cache: pick(cache_home, home.join(".cache")),
+            config: pick(config_home, config),
+            data: pick(data_home, data),
+            cache: pick(cache_home, cache),
             home,
         }
     }
@@ -72,6 +74,30 @@ impl Dirs {
     /// `~/Downloads`: the home folder's `Downloads`, not the XDG user dir, as in 1.x.
     pub fn downloads_root(&self) -> PathBuf {
         self.home.join("Downloads")
+    }
+}
+
+/// Where config, data and cache go without the XDG variables (each gets a `lider` folder):
+/// Linux and other Unix `~/.config`, `~/.local/share`, `~/.cache` (1.x); macOS `~/Library/Application
+/// Support` (config and data) and `~/Library/Caches`; Windows `AppData\Roaming` (config) and
+/// `AppData\Local` (data and cache) in the home folder.
+pub fn default_homes(home: &Path) -> [PathBuf; 3] {
+    if cfg!(windows) {
+        let local = home.join("AppData").join("Local");
+        [home.join("AppData").join("Roaming"), local.clone(), local]
+    } else if cfg!(target_os = "macos") {
+        let support = home.join("Library").join("Application Support");
+        [
+            support.clone(),
+            support,
+            home.join("Library").join("Caches"),
+        ]
+    } else {
+        [
+            home.join(".config"),
+            home.join(".local").join("share"),
+            home.join(".cache"),
+        ]
     }
 }
 

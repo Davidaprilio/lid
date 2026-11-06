@@ -21,8 +21,10 @@ fn main() -> ExitCode {
     let result = match a.as_slice() {
         ["extensions", dist, work] => fs::create_dir_all(dist)
             .and_then(|_| browser::build_extensions(Path::new(dist), Path::new(work))),
+        // The deb and Arch packages (Linux only).
+        #[cfg(target_os = "linux")]
         ["system-files", root, host, lider] => {
-            browser::write_system_files(Path::new(root), host, lider)
+            lider_sys::platform::linux::browsers::write_system_files(Path::new(root), host, lider)
         }
         ["licenses", out] => licenses(Path::new(out)),
         ["version"] => {

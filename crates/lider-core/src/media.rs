@@ -43,9 +43,7 @@ pub fn which(name: &str) -> Option<PathBuf> {
 }
 
 fn is_executable(p: &Path) -> bool {
-    use std::os::unix::fs::PermissionsExt;
-    p.metadata()
-        .is_ok_and(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+    crate::fsio::is_executable(p)
 }
 
 /// How to run yt-dlp: the program and the arguments that come before LID's own.

@@ -1,4 +1,5 @@
-//! Shell quoting as Python's `shlex.quote` / `shlex.join` (the wrapper scripts and `LIDER_LAUNCH`).
+//! Shell quoting as Python's `shlex.quote` / `shlex.join` (the wrapper scripts and `LIDER_LAUNCH`) and
+//! splitting a command line ("Open with…").
 
 /// `shlex.quote`: unchanged when it only has safe characters, else in single quotes.
 pub fn quote(s: &str) -> String {
@@ -18,25 +19,6 @@ pub fn join<S: AsRef<str>>(args: &[S]) -> String {
         .map(|a| quote(a.as_ref()))
         .collect::<Vec<_>>()
         .join(" ")
-}
-
-/// Start a program detached from LID (own session, no stdio).
-pub fn spawn_detached(program: &str, args: &[String]) -> std::io::Result<()> {
-    use std::os::unix::process::CommandExt;
-    use std::process::{Command, Stdio};
-    let mut c = Command::new(program);
-    c.args(args)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    // SAFETY: setsid is async-signal-safe.
-    unsafe {
-        c.pre_exec(|| {
-            libc::setsid();
-            Ok(())
-        });
-    }
-    c.spawn().map(|_| ())
 }
 
 /// `shlex.split` (POSIX rules); `None` for unbalanced quotes.

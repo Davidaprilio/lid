@@ -14,8 +14,7 @@ use std::sync::Mutex;
 use lider_core::manager::DownloadManager;
 use lider_core::paths::{Dirs, migrate_legacy_dirs};
 use lider_core::store::Store;
-use lider_sys::env::SysEnv;
-use lider_sys::ipc::InstanceServer;
+use lider_sys::platform::prelude::*;
 use tauri::{Emitter, Manager, WindowEvent};
 
 use crate::app::{self, AppState};
@@ -25,8 +24,8 @@ pub fn run(cli: Cli, socket: String) -> ExitCode {
     let dirs = Dirs::from_env();
     migrate_legacy_dirs(&dirs);
     let mut settings = lider_core::settings::load(&dirs);
-    let sys = SysEnv::from_process();
-    let _ = lider_sys::desktop::refresh(&sys);
+    let sys = os();
+    let _ = sys.refresh();
     let engine = match tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .thread_name("lider-engine")
@@ -45,7 +44,7 @@ pub fn run(cli: Cli, socket: String) -> ExitCode {
             return ExitCode::FAILURE;
         }
     };
-    let offer_menu = lider_sys::desktop::should_offer(&sys, settings.menu_offered);
+    let offer_menu = sys.should_offer(settings.menu_offered);
     let start_hidden = (cli.minimized || settings.start_minimized) && settings.tray_icon;
     if settings.speed_limiter_on_startup {
         settings.speed_limiter_on = true;
@@ -183,18 +182,21 @@ pub fn run(cli: Cli, socket: String) -> ExitCode {
         })
         .setup(move |app| {
             let handle = app.handle().clone();
-            let server = InstanceServer::bind(&socket, move |line| {
-                let state = handle.state::<AppState>();
-                if *app::lock(&state.ready) {
-                    app::on_line(&handle, &line);
-                } else {
-                    app::lock(&state.pending).push(line);
-                }
-            });
+            let server = sys.bind(
+                &socket,
+                Box::new(move |line| {
+                    let state = handle.state::<AppState>();
+                    if *app::lock(&state.ready) {
+                        app::on_line(&handle, &line);
+                    } else {
+                        app::lock(&state.pending).push(line);
+                    }
+                }),
+            );
             let server = match server {
                 Ok(s) => Some(s),
                 // Another LID started at the same moment and owns the socket.
-                Err(_) if lider_sys::ipc::send_lines(&cli.urls, &socket) => std::process::exit(0),
+                Err(_) if sys.send_lines(&cli.urls, &socket) => std::process::exit(0),
                 Err(_) => None,
             };
             let window_state = manager.settings.window_state;
@@ -212,10 +214,10 @@ pub fn run(cli: Cli, socket: String) -> ExitCode {
             });
             let state = app.state::<AppState>();
             {
-                let dark = crate::system::prefers_dark().unwrap_or(false);
+                let dark = sys.prefers_dark().unwrap_or(false);
                 let mut ui = state.ui();
                 ui.dark_system = dark;
-                ui.global_menu = crate::system::global_menu_available();
+                ui.global_menu = sys.global_menu_available();
             }
             crate::tray::ensure(app.handle(), state.inner());
             if let Some(w) = app.get_webview_window("main") {

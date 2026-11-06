@@ -13,8 +13,7 @@ use lider_core::settings::{Settings, WindowState};
 use lider_core::view::{
     self, ActionState, CheckState, Details, Row, StatusBar, TreeFilter, TreeNode,
 };
-use lider_sys::env::SysEnv;
-use lider_sys::ipc::InstanceServer;
+use lider_sys::platform::prelude::*;
 use serde::Serialize;
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager};
@@ -57,10 +56,11 @@ pub struct AppState {
     pub offer_menu: Mutex<bool>,
     pub start_hidden: bool,
     pub dirs: Dirs,
-    pub sys: SysEnv,
+    /// The OS adapter (lider_sys::platform): every OS service goes through its ports.
+    pub sys: &'static lider_sys::platform::Os,
     /// Kept alive for the lifetime of the app: the download engine and the instance socket.
     pub _engine: tokio::runtime::Runtime,
-    pub _server: Mutex<Option<InstanceServer>>,
+    pub _server: Mutex<Option<lider_sys::platform::InstanceGuard>>,
 }
 
 pub fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
@@ -263,9 +263,11 @@ pub fn main_view(state: &AppState, force_menus: bool) -> MainView {
         Some(view::details(&m, d, snap.as_ref()))
     });
     if ui.browser_ok.is_none() {
-        let ok = lider_sys::browser::detected(&state.sys)
+        let ok = state
+            .sys
+            .browsers()
             .iter()
-            .any(|b| lider_sys::browser::is_installed(b, &state.sys));
+            .any(|b| b.detected && b.installed);
         ui.browser_ok = Some(ok);
     }
     let menus = menu::menus(&m, &actions);
@@ -436,7 +438,7 @@ pub fn handle_events(app: &AppHandle, state: &AppState, events: &[Event]) {
                     };
                     notify(app, "LID", &format!("\"{name}\" processing {how}"));
                     if !s.open_when_done.is_empty() {
-                        let _ = crate::system::open_path(&s.open_when_done);
+                        let _ = os().open_path(&s.open_when_done);
                     }
                     if s.shutdown_when_done {
                         show_normal(app);

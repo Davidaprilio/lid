@@ -5,7 +5,24 @@ use std::process::Command;
 
 use zbus::blocking::Connection;
 
-pub use lider_sys::sh::spawn_detached;
+/// Start a program detached from LID (own session, no stdio).
+pub fn spawn_detached(program: &str, args: &[String]) -> std::io::Result<()> {
+    use std::os::unix::process::CommandExt;
+    use std::process::{Command, Stdio};
+    let mut c = Command::new(program);
+    c.args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    // SAFETY: setsid is async-signal-safe.
+    unsafe {
+        c.pre_exec(|| {
+            libc::setsid();
+            Ok(())
+        });
+    }
+    c.spawn().map(|_| ())
+}
 
 /// Open a file or folder with the desktop's default program.
 pub fn open_path(path: &str) -> std::io::Result<()> {
@@ -14,7 +31,7 @@ pub fn open_path(path: &str) -> std::io::Result<()> {
 
 /// Show the file selected in the file manager (FileManager1.ShowItems); the folder when that fails.
 pub fn open_folder(path: &str) -> std::io::Result<()> {
-    let shown = tauri::Url::from_file_path(path).ok().is_some_and(|uri| {
+    let shown = url::Url::from_file_path(path).ok().is_some_and(|uri| {
         Connection::session()
             .and_then(|c| {
                 c.call_method(
@@ -38,7 +55,7 @@ pub fn open_folder(path: &str) -> std::io::Result<()> {
 
 /// "Open with…": the command split like a shell line, with the file appended.
 pub fn open_with(command: &str, path: &str) -> std::io::Result<()> {
-    let mut args = lider_sys::sh::split(command)
+    let mut args = crate::sh::split(command)
         .filter(|a| !a.is_empty())
         .ok_or_else(|| std::io::Error::other("Not a valid command"))?;
     let program = args.remove(0);

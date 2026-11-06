@@ -6,6 +6,7 @@ pub mod checksum;
 pub mod ef2;
 pub mod engine;
 pub mod fmt;
+pub mod fsio;
 pub mod ftp;
 pub mod http;
 pub mod limiter;

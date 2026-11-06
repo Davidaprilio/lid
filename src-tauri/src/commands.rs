@@ -2,6 +2,7 @@
 
 use lider_core::models::{MAIN_QUEUE, Status};
 use lider_core::view::{self, TreeFilter};
+use lider_sys::platform::prelude::*;
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -171,7 +172,7 @@ pub fn app_info() -> AppInfo {
         name: lider_core::APP_NAME,
         long_name: lider_core::APP_LONG_NAME,
         version: lider_core::VERSION,
-        mono_family: crate::system::mono_family(),
+        mono_family: os().mono_family(),
     }
 }
 
@@ -461,7 +462,7 @@ pub fn act_details_button(app: AppHandle, state: State<'_, AppState>, id: i64, a
         "open" => {
             let p = state.manager().downloads.get(&id).map(|d| d.path());
             if let Some(p) = p {
-                let _ = crate::system::open_path(&p);
+                let _ = os().open_path(&p);
             }
         }
         _ => {
@@ -489,7 +490,7 @@ pub fn act_open(state: State<'_, AppState>, id: i64) -> Res<()> {
         .get(&id)
         .map(|d| d.path())
         .ok_or("no such download")?;
-    crate::system::open_path(&p).map_err(|e| e.to_string())
+    os().open_path(&p).map_err(|e| e.to_string())
 }
 
 /// "Open folder": the file selected in the file manager when complete, else its folder.
@@ -502,9 +503,9 @@ pub fn act_open_folder(state: State<'_, AppState>, id: i64) -> Res<()> {
         .cloned()
         .ok_or("no such download")?;
     let r = if d.status == Status::Complete {
-        crate::system::open_folder(&d.path())
+        os().open_folder(&d.path())
     } else {
-        crate::system::open_path(&d.save_dir)
+        os().open_path(&d.save_dir)
     };
     r.map_err(|e| e.to_string())
 }
@@ -517,7 +518,7 @@ pub fn act_open_with(state: State<'_, AppState>, id: i64, command: String) -> Re
         .get(&id)
         .map(|d| d.path())
         .ok_or("no such download")?;
-    crate::system::open_with(&command, &p).map_err(|e| e.to_string())
+    os().open_with(&command, &p).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -615,7 +616,7 @@ pub fn set_list_font(app: AppHandle, state: State<'_, AppState>, family: String,
 
 #[tauri::command]
 pub fn system_fonts() -> Vec<String> {
-    crate::system::font_families()
+    os().font_families()
 }
 
 /// The answer to "downloads are running" when closing: keep, background or stop.
@@ -633,14 +634,14 @@ pub fn close_choice(app: AppHandle, state: State<'_, AppState>, choice: String) 
 pub fn shutdown_now(app: AppHandle, state: State<'_, AppState>) {
     app::save_settings(&app, &state);
     state.manager().shutdown();
-    let _ = crate::system::power_off();
+    let _ = os().power_off();
 }
 
 /// The answer to "Add LID to the application menu?" (asked once either way).
 #[tauri::command]
 pub fn menu_offer_answer(state: State<'_, AppState>, add: bool) -> Res<()> {
     if add {
-        lider_sys::desktop::add_to_menu(&state.sys).map_err(|e| e.to_string())?;
+        state.sys.add_to_menu().map_err(|e| e.to_string())?;
     }
     Ok(())
 }

@@ -3,6 +3,7 @@
 
 use std::time::Duration;
 
+use lider_sys::platform::prelude::*;
 use tauri::{AppHandle, Emitter, Manager};
 
 use crate::app::{self, AppState};
@@ -30,11 +31,11 @@ fn tick(app: &AppHandle, state: &AppState, clipboard: Option<&mut arboard::Clipb
         ui.tick
     };
     if n % 4 == 1 {
-        let dark = crate::system::prefers_dark().unwrap_or(false);
+        let dark = os().prefers_dark().unwrap_or(false);
         state.ui().dark_system = dark;
     }
     if n % 20 == 1 {
-        let global = crate::system::global_menu_available();
+        let global = os().global_menu_available();
         let changed = {
             let mut ui = state.ui();
             let c = ui.global_menu != global;
