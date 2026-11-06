@@ -106,6 +106,9 @@ pub fn run(cli: Cli, socket: String) -> ExitCode {
             crate::commands::save_settings,
             crate::commands::browser_request,
             crate::commands::set_completion_options,
+            crate::commands::open_dialog,
+            crate::commands::download_url,
+            crate::commands::delete_category,
         ])
         .on_menu_event(|app, e| crate::commands::run_menu(app, e.id().as_ref()))
         .on_window_event(|window, e| {

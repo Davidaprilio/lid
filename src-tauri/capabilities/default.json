@@ -3,5 +3,5 @@
   "identifier": "default",
   "description": "Permissions of LID's own windows",
   "windows": ["*"],
-  "permissions": ["core:default"]
+  "permissions": ["core:default", "dialog:default", "notification:default"]
 }

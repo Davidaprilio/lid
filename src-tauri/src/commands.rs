@@ -187,7 +187,15 @@ pub fn ready(app: AppHandle, state: State<'_, AppState>) -> MainView {
     if offer && !state.start_hidden {
         app::request(&app, app::UiRequest::OfferMenu);
     }
-    app::main_view(&state, true)
+    let view = app::main_view(&state, true);
+    // A copy of the first view for frontend checks outside Tauri (ui/src/dev/mock.ts).
+    if let Ok(path) = std::env::var("LIDER_DUMP_VIEW") {
+        let _ = std::fs::write(
+            path,
+            serde_json::to_string_pretty(&view).unwrap_or_default(),
+        );
+    }
+    view
 }
 
 #[tauri::command]
@@ -663,4 +671,51 @@ pub fn set_completion_options(
     options: crate::windows::CompletionOptions,
 ) {
     crate::windows::set_completion_options(window.label(), options);
+}
+
+/// Open (or bring forward) one of LID's dialog windows.
+#[tauri::command]
+pub fn open_dialog(
+    app: AppHandle,
+    label: String,
+    route: String,
+    title: String,
+    width: f64,
+    height: f64,
+    modal: bool,
+) -> Res<()> {
+    crate::windows::open(&app, &label, &route, &title, (width, height), modal)
+        .map_err(|e| e.to_string())
+}
+
+/// The address of a download ("Copy download address").
+#[tauri::command]
+pub fn download_url(state: State<'_, AppState>, id: i64) -> Res<String> {
+    state
+        .manager()
+        .downloads
+        .get(&id)
+        .map(|d| d.url.clone())
+        .ok_or_else(|| "no such download".into())
+}
+
+/// Delete a category: its downloads move to "General", the list shows All Downloads.
+#[tauri::command]
+pub fn delete_category(app: AppHandle, state: State<'_, AppState>, name: String) {
+    {
+        let mut m = state.manager();
+        m.settings.categories.retain(|c| c.name != name);
+        let ids: Vec<i64> = m
+            .downloads
+            .values()
+            .filter(|d| d.category == name)
+            .map(|d| d.id)
+            .collect();
+        for id in ids {
+            m.edit(id, |d| d.category = "General".into());
+        }
+        let _ = lider_core::settings::save(&m.settings, &state.dirs);
+    }
+    state.ui().filter = TreeFilter::default();
+    crate::pump::push_view(&app, &state);
 }
