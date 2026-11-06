@@ -34,7 +34,7 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
   1. Refill `tokens = min(rate*0.25, tokens + dt*rate)`, so the burst cap is 250 ms worth.
   2. Subtract `tokens -= n` (it may go negative).
   3. Set `delay = -tokens/rate` and sleep outside the lock using `stop.wait(delay)`, so a pause interrupts it.
-- [ ] Global limiter: one instance in the manager (`manager.py:102`), shared by all tasks and their connections. — **2.x:** the engine takes a shared `Arc<SpeedLimiter>` (test `speed_limit`); the manager's single instance comes in phase 3
+- [x] Global limiter: one instance in the manager (`manager.py:102`), shared by all tasks and their connections. — **2.x:** `DownloadManager::limiter`, one `Arc<SpeedLimiter>` handed to every task; test `global_limiter_follows_the_setting`
 - [x] Per-file limiter: one per task, built from `d.speed_limit_kbps` (`engine.py:223`). Each read is charged to both, global first, then file (`:423-425`). — **2.x:** global first, then the file limiter; test `per_file_limit_applies_and_can_change`
 - [x] `DownloadTask.set_speed_limit(kbps)` updates `d.speed_limit_kbps` and the live limiter (`:254-256`). — **2.x:** `DownloadTask::set_speed_limit`
 
@@ -44,7 +44,7 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
 - [x] One meter per task and one per connection. Test `test_snapshot_reports_speed_per_connection`: the per-connection rates sum to roughly the task rate (±50%). — **2.x:** `tests/engine.rs` `snapshot_reports_speed_per_connection`
 
 ### 1.5 HttpClient (`:136-172`)
-- [ ] Built per task from `(settings.user_agent, settings.proxy, settings.timeout)` (`manager.py:109-110`). — **2.x:** `HttpClient::new(user_agent, proxy, timeout)` exists; building it per task from Settings is the manager's job (phase 3)
+- [x] Built per task from `(settings.user_agent, settings.proxy, settings.timeout)` (`manager.py:109-110`). — **2.x:** `DownloadManager::client()` per task (the media factory uses the stream's user agent)
 - [~] Proxy: one string used for both `http` and `https` (`engine.py:141-142`). — **2.x:** one proxy for http and https (test `http_proxy_is_used`); environment proxies still apply when none is set (reqwest system proxy); `socks5://` and `socks5h://` now work, which urllib could not do despite the tab's name (PLAN §9 Q17); FTP is never proxied
   - **Quirk:** when `proxy == ""`, urllib's default ProxyHandler still applies, so `http_proxy`/`https_proxy`/`no_proxy` env vars are honoured.
   - FTP is never proxied by the explicit setting.
@@ -174,7 +174,7 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
   - `connections`: `[(index, received, status, alive, rate if alive else 0.0)]`.
   - `rate`: task meter rate.
   - `time_left`: `int((size-downloaded)/rate)`, or -1 if rate is 0 or size ≤ 0.
-- [ ] Resume persistence: what is saved per segment is `{start, end, pos}`, plus `d.size`, `d.downloaded`, `d.resumable` in the Download JSON. The manager saves running tasks every >5 s and on every finish (`manager.py:482-484`, `:460-463`). — **2.x:** `{start,end,pos}`, size, downloaded, resumable are in the Download JSON (golden test); the periodic save is the manager's (phase 3)
+- [x] Resume persistence: what is saved per segment is `{start, end, pos}`, plus `d.size`, `d.downloaded`, `d.resumable` in the Download JSON. The manager saves running tasks every >5 s and on every finish (`manager.py:482-484`, `:460-463`). — **2.x:** `poll()` saves the running tasks' copies every >5 s and every finished task
 - [x] Tests: — **2.x:** `tests/engine.rs`: `segmented_download_is_byte_exact`, `pause_and_resume`, `speed_limit`
   - `test_segmented_download_is_byte_exact`: 5 MiB+123, 8 connections, SHA matches, more than one connection, more than one non-`bytes=0-` Range request.
   - `test_pause_and_resume`: pause after ≥512 KB gives PAUSED with segments and `0 < downloaded < size`. A new task on the same Download completes byte-exact, and **no request after the first resumes from `bytes=0-`**.
@@ -185,83 +185,83 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
 ## 2. Manager (`manager.py`)
 
 ### 2.1 Construction (`:83-106`)
-- [ ] Load downloads in id order. Active statuses (connecting/downloading/assembling) become `PAUSED`. `VERIFYING` becomes `COMPLETE` (unchecked; `checksum_result` is untouched). Test `test_active_status_becomes_paused_after_restart`.
-- [ ] Load queues: `Queue(name, QueueSchedule(**data["schedule"]))`. **Quirk:** an unknown schedule key raises TypeError.
-- [ ] Ensure `MAIN_QUEUE="Main download queue"` (periodic False) and `SYNC_QUEUE="Synchronization queue"` (periodic True) exist. They are not written to the DB until `save_queue`. Test `test_default_queues_exist`.
-- [ ] Global limiter = `speed_limit_kbps if speed_limiter_on else 0`.
-- [ ] `_next_id = store.next_id()` = `MAX(id)+1`. **Ids can be reused** after the highest id is deleted.
-- [ ] `_started=False`, `_last_save=monotonic()`.
+- [x] Load downloads in id order. Active statuses (connecting/downloading/assembling) become `PAUSED`. `VERIFYING` becomes `COMPLETE` (unchecked; `checksum_result` is untouched). Test `test_active_status_becomes_paused_after_restart`. — **2.x:** `DownloadManager::new`; test `active_status_becomes_paused_after_restart` (also VERIFYING → COMPLETE)
+- [~] Load queues: `Queue(name, QueueSchedule(**data["schedule"]))`. **Quirk:** an unknown schedule key raises TypeError. — **2.x:** unknown schedule keys are kept and written back instead of failing the start (PLAN §9 Q15)
+- [x] Ensure `MAIN_QUEUE="Main download queue"` (periodic False) and `SYNC_QUEUE="Synchronization queue"` (periodic True) exist. They are not written to the DB until `save_queue`. Test `test_default_queues_exist`. — **2.x:** test `default_queues_exist`
+- [x] Global limiter = `speed_limit_kbps if speed_limiter_on else 0`. — **2.x:** done
+- [x] `_next_id = store.next_id()` = `MAX(id)+1`. **Ids can be reused** after the highest id is deleted. — **2.x:** `store.next_id()`; ids can still be reused after the highest is deleted, as in 1.x
+- [x] `_started=False`, `_last_save=monotonic()`. — **2.x:** done
 
 ### 2.2 Public methods
-- [ ] `client()`: new `HttpClient(ua, proxy, timeout)` (`:109`).
-- [ ] `probe(url, referer, username, password, headers)`: probe with `request_headers` of a temporary Download; the response is closed (`:112-115`).
-- [ ] `find_duplicate(url)`: first download whose `d.url == url`, exact string match (`:117-121`). The duplicate policy is **(UI)** (`main_window.py:794-813`, `duplicate_action`):
+- [x] `client()`: new `HttpClient(ua, proxy, timeout)` (`:109`). — **2.x:** `DownloadManager::client`; a bad proxy fails the download with a message (test `bad_proxy_fails_the_download_with_a_message`)
+- [x] `probe(url, referer, username, password, headers)`: probe with `request_headers` of a temporary Download; the response is closed (`:112-115`). — **2.x:** `DownloadManager::probe` returns a future to run off the UI thread
+- [ ] `find_duplicate(url)`: first download whose `d.url == url`, exact string match (`:117-121`). The duplicate policy is **(UI)** (`main_window.py:794-813`, `duplicate_action`): — **2.x:** `find_duplicate` is done; the duplicate policy is UI (phase 6)
   - `ask` shows a dialog with a "remember" option.
   - `complete` shows the Complete dialog if the duplicate is done, else starts it.
   - `overwrite` replaces it.
   - `number` adds a new numbered copy.
-- [ ] `add(url, filename, save_dir, category, description, referer, parent_page, username, password, size=-1, resumable=None, queue_name="", start=False, media=None, headers=None, checksum="")` (`:123-167`):
+- [x] `add(url, filename, save_dir, category, description, referer, parent_page, username, password, size=-1, resumable=None, queue_name="", start=False, media=None, headers=None, checksum="")` (`:123-167`): — **2.x:** `DownloadManager::add(url, filename, NewDownload)`; test `add_classifies_and_completes`. An empty category name also classifies
   - Category: if named, `settings.category(name)` (falls back to the first category). Otherwise `categories.classify(settings, filename, url)`.
   - `save_dir` = argument or the category's `save_dir`. `d.category = cat.name`.
   - The id increments. `queue_name` is applied through `set_queue`. Saved, and started if `start`.
   - The filename is **not** sanitised or made unique here.
   - Test `test_add_classifies_and_completes`: `movie.mkv` goes to Video, gives a `complete` event, and the file ends up in the Video save_dir.
-- [ ] `task(id)`, `is_running(id)` (thread alive) (`:170-175`).
-- [ ] `_options(d)` (`:177-184`):
+- [x] `task(id)`, `is_running(id)` (thread alive) (`:170-175`). — **2.x:** `task`, `is_running`
+- [x] `_options(d)` (`:177-184`): — **2.x:** `DownloadManager::options`
   - `max_connections = d.connections or settings.connections_for(host)`, where `connections_for` uses `server_limits` fnmatch on the lower-cased host and pattern (first match in dict order), else `max_connections`.
   - `retries`, `retry_delay` and `temp_dir` come from settings.
-- [ ] `start(id)` (`:186-198`):
+- [x] `start(id)` (`:186-198`): — **2.x:** `DownloadManager::start`; `Task::Plain` / `Task::Media`; test `youtube_download_through_the_manager`
   - No-op, returning the existing task, if the download is missing, already running, or status is COMPLETE/VERIFYING.
   - Media downloads get `MediaTask`, with a client factory `ua -> HttpClient(ua or settings.user_agent, proxy, timeout)`. Others get `DownloadTask`.
   - Registered in `tasks` and started. An ERROR download simply restarts and resumes if possible.
-- [ ] `stop(id)`: `task.stop()` plus `skip_check(id)` (`:200-204`).
-- [ ] `verify(id, manual=False)` (`:207-217`):
+- [x] `stop(id)`: `task.stop()` plus `skip_check(id)` (`:200-204`). — **2.x:** done
+- [x] `verify(id, manual=False)` (`:207-217`): — **2.x:** verifier on a thread `verify-<id>`; test `skip_check_and_verify_now`
   - Returns False unless the download exists, has a checksum, is not already verifying, has status COMPLETE/VERIFYING, and its file exists.
   - Sets status VERIFYING, starts a `Verifier`, returns True.
-- [ ] `check_when_finished(id, checksum)`: sets checksum, `checksum_force=True`, clears result and actual, saves (`:219-224`). Test `test_check_when_finished_runs_even_with_verification_off`.
-- [ ] `record_check(id, checksum, result, actual, seconds)`: stores the "Check hash…" dialog result (`checksum_checked = now`). `verified` resets `checksum_retried=False`. Saves (`:226-233`).
-- [ ] `skip_check(id)`: `verifier.skip()`. The download ends Complete with result `skipped` (`:235-239`).
-- [ ] `verify_progress(id)`: 0..1 or None (`:241-243`).
-- [ ] `stop_all()`: stop every task and set every queue's `running=False`. Verifiers are not stopped (`:274-278`).
-- [ ] `redownload(id, overwrite=False, start=True)` (`:280-297`):
+- [x] `check_when_finished(id, checksum)`: sets checksum, `checksum_force=True`, clears result and actual, saves (`:219-224`). Test `test_check_when_finished_runs_even_with_verification_off`. — **2.x:** `tests/manager.rs` `check_when_finished_runs_even_with_verification_off`
+- [x] `record_check(id, checksum, result, actual, seconds)`: stores the "Check hash…" dialog result (`checksum_checked = now`). `verified` resets `checksum_retried=False`. Saves (`:226-233`). — **2.x:** `record_check`
+- [x] `skip_check(id)`: `verifier.skip()`. The download ends Complete with result `skipped` (`:235-239`). — **2.x:** done
+- [x] `verify_progress(id)`: 0..1 or None (`:241-243`). — **2.x:** done
+- [x] `stop_all()`: stop every task and set every queue's `running=False`. Verifiers are not stopped (`:274-278`). — **2.x:** `tests/manager.rs` `remove_completed_and_stop_all`
+- [x] `redownload(id, overwrite=False, start=True)` (`:280-297`): — **2.x:** `tests/manager.rs` `checksum_mismatch_asks_keeps_or_downloads_again_once`, `youtube_download_through_the_manager`
   1. No-op if running. Otherwise `skip_check`.
   2. If `overwrite` and the file exists, **delete the file**.
   3. Media: `reset_streams` + `remove_parts`, `size = variant.size or -1`. Otherwise `size = -1`.
   4. Reset `status=QUEUED`, `downloaded=0`, `segments=[]`, `resumable=None`, `error=""`, `checksum_result=""`, `checksum_actual=""`. `checksum_retried` and `checksum_force` are kept.
   5. Save, and start if `start`.
   - The old non-media part file is deleted by the next `_run`.
-- [ ] `remove(ids, delete_files=False)` (`:299-319`), per id:
+- [x] `remove(ids, delete_files=False)` (`:299-319`), per id: — **2.x:** `tests/manager.rs` `remove_and_persist`, `remove_deletes_parts_and_finished_files_when_asked`
   1. Pop and stop the task, `join(5)`. Pop and skip the verifier, `join(5)`.
   2. Pop the download. Delete `<temp>/<id>.part` and media parts (`<id>-media*`).
   3. If `delete_files` **and status COMPLETE** and the file exists, delete the file.
   - Finally `store.delete_downloads(ids)`. Test `test_remove_and_persist`.
-- [ ] `remove_completed()`: removes all COMPLETE downloads and returns their ids (`:321-324`).
-- [ ] `update(d)`: save (`:326`).
-- [ ] `set_speed_limiter(on, kbps=None)`: optionally set `settings.speed_limit_kbps`, set `speed_limiter_on`, and set the limiter to that kbps or 0 (`:329-333`). **(UI)** `speed_limiter_on_startup` calls `set_speed_limiter(True)` at startup (`main_window.py:120`).
-- [ ] `shutdown()`: skip all verifiers, stop all tasks, `join(10)` each, save **all** downloads (`:487-494`).
+- [x] `remove_completed()`: removes all COMPLETE downloads and returns their ids (`:321-324`). — **2.x:** `tests/manager.rs` `remove_completed_and_stop_all`
+- [~] `update(d)`: save (`:326`). — **2.x:** `update(d)` / `edit(id, f)`: while the download runs only the user's fields reach the task, because the task owns its own copy (test `pause_resume_and_edit_while_running`)
+- [x] `set_speed_limiter(on, kbps=None)`: optionally set `settings.speed_limit_kbps`, set `speed_limiter_on`, and set the limiter to that kbps or 0 (`:329-333`). **(UI)** `speed_limiter_on_startup` calls `set_speed_limiter(True)` at startup (`main_window.py:120`). — **2.x:** `tests/manager.rs` `global_limiter_follows_the_setting`
+- [x] `shutdown()`: skip all verifiers, stop all tasks, `join(10)` each, save **all** downloads (`:487-494`). — **2.x:** `shutdown`
 
 ### 2.3 Queues (`:336-414`)
-- [ ] `queue_items(name)`: downloads with `d.queue == name`, sorted by `queue_order`.
-- [ ] `set_queue(ids, name)`:
+- [x] `queue_items(name)`: downloads with `d.queue == name`, sorted by `queue_order`. — **2.x:** done
+- [x] `set_queue(ids, name)`: — **2.x:** done
   - `order = max(queue_order in target)` (0 if empty or `name==""`).
   - Each id whose queue differs gets `order += 1`, `queue=name`, `queue_order=order`, and is saved. Ids already in that queue are untouched.
   - `name=""` removes from queues.
-- [ ] `move_in_queue(id, delta)`: move by `delta` with the index clamped, renumber 1..n, save all.
-- [ ] `add_queue(name)`: `setdefault` plus `save_queue`. `delete_queue(name)`: MAIN and SYNC are protected. Otherwise stop the queue, detach items (`queue=""`), delete from memory and the DB.
-- [ ] `save_queue`: stores `{"schedule": asdict(schedule)}`. `running`, `next_run`, `failures` and `_fired` are **not persisted**.
-- [ ] `start_queue(name)` (`:376-386`):
+- [x] `move_in_queue(id, delta)`: move by `delta` with the index clamped, renumber 1..n, save all. — **2.x:** `tests/manager.rs` `queue_runs_items_one_at_a_time_in_order`
+- [x] `add_queue(name)`: `setdefault` plus `save_queue`. `delete_queue(name)`: MAIN and SYNC are protected. Otherwise stop the queue, detach items (`queue=""`), delete from memory and the DB. — **2.x:** `tests/manager.rs` `queues_are_saved_and_deleted`
+- [x] `save_queue`: stores `{"schedule": asdict(schedule)}`. `running`, `next_run`, `failures` and `_fired` are **not persisted**. — **2.x:** done
+- [x] `start_queue(name)` (`:376-386`): — **2.x:** `tests/manager.rs` `periodic_queue_downloads_again_and_plans_the_next_run`
   1. Returns `[]` if already running.
   2. Sets `running=True` and clears `failures`.
   3. **Periodic (sync) queue:** every COMPLETE item gets `redownload(overwrite=True, start=False)`, which deletes the file and re-fetches it.
   4. Returns `[Event("queue_started")] + _process_queue`.
-- [ ] `stop_queue(name)`: `running=False`, `stop(id)` on every item. No event is emitted.
-- [ ] `_process_queue(q)` (`:394-414`):
+- [x] `stop_queue(name)`: `running=False`, `stop(id)` on every item. No event is emitted. — **2.x:** done
+- [x] `_process_queue(q)` (`:394-414`): — **2.x:** `tests/manager.rs` `queue_runs_n_at_a_time`, `failed_queue_items_are_retried_up_to_the_limit`
   - Retry limit = `schedule.retries` if `retries_enabled`, else 0.
   - Waiting items: not running, status not COMPLETE, and (status not ERROR or `failures[id] <= limit`). So an ERROR item is retried up to limit+1 failures, and with retries disabled an ERROR item gets one try.
   - Start up to `max_parallel - active`, in queue order. **Quirk:** a VERIFYING item is "started" (no-op) and counted as active, so the queue waits for verification. A PAUSED item in a running queue is restarted on the next poll.
   - When nothing is active: `running=False`. A periodic queue sets `next_run = time.time() + every_hours*3600 + every_minutes*60`. Emits `Event("queue_done")`.
-- [ ] Failures are counted in `poll` when a download ends in ERROR and its queue is running (`:466-469`).
-- [ ] Test `test_queue_runs_items_one_at_a_time_in_order`:
+- [x] Failures are counted in `poll` when a download ends in ERROR and its queue is running (`:466-469`). — **2.x:** `tests/manager.rs` `failed_queue_items_are_retried_up_to_the_limit`
+- [x] Test `test_queue_runs_items_one_at_a_time_in_order`: — **2.x:** `tests/manager.rs` `queue_runs_items_one_at_a_time_in_order`
   - `move_in_queue(ids[2], -2)` gives the order [2, 0, 1].
   - With max_parallel 1, at most one item runs at a time.
   - All items end COMPLETE, then `queue_done` fires and the queue is not running.
@@ -287,7 +287,7 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
 | `exit_when_done` | `False` |
 | `shutdown_when_done` | `False` |
 
-- [ ] `Queue` runtime fields: `name`, `schedule`, `running=False`, `next_run=0.0`, `failures={}`, `_fired=set()` (`:64-71`).
+- [x] `Queue` runtime fields: `name`, `schedule`, `running=False`, `next_run=0.0`, `failures={}`, `_fired=set()` (`:64-71`). — **2.x:** `manager::Queue`
 - [x] `next_start(now)` (`:48-61`): — **2.x:** `queue.rs` test `once_daily_and_off`
   - None if `start_enabled` is off. `now` is truncated to the minute, so the current minute counts.
   - `daily`: first of today+0..7 days at HH:MM that is `>= now` and whose weekday is in `days`, else None.
@@ -296,17 +296,17 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
   - Test `test_once_daily_and_off`.
 
 ### 2.5 Scheduler (`_tick_schedules`, `:417-438`)
-- [ ] `_due(t, now)`: `now.strftime("%H:%M") == t`, an exact zero-padded string compare. `stamp = "YYYY-MM-DD HH:MM"`.
-- [ ] Start fires when all hold: `start_enabled`, not running, due, and `"start "+stamp` not in `_fired`. The day must also match:
+- [x] `_due(t, now)`: `now.strftime("%H:%M") == t`, an exact zero-padded string compare. `stamp = "YYYY-MM-DD HH:MM"`. — **2.x:** done
+- [x] Start fires when all hold: `start_enabled`, not running, due, and `"start "+stamp` not in `_fired`. The day must also match: — **2.x:** `tests/manager.rs` `scheduler_starts_and_stops_queue`, `once_date_and_start_on_startup`
   - `daily`: weekday in `days`.
   - Otherwise: `once_date` empty (**which fires every day**) or `once_date == today`.
   - When it fires, `stamp` is added to `_fired` and `start_queue` runs.
   - Test `test_scheduler_starts_and_stops_queue`: Tuesday does not fire, Monday 03:15 gives `queue_started` and the queue is running.
-- [ ] Stop fires when `stop_enabled`, running, due at `stop_time`, and not fired. It runs `stop_queue` and emits `Event("queue_done", message="stopped by schedule")`. `next_run` is not set.
-- [ ] Periodic restart: `periodic and next_run and not running and time.time() >= next_run` sets `next_run=0` and runs `start_queue`. It uses wall-clock `time.time()`, not the `now` argument.
-- [ ] `start_on_startup`: started on the first `poll()` (`:443-447`).
-- [ ] `_fired` only grows, in memory.
-- [ ] On-done actions are **(UI)**, in `main_window.py:1445-1476` `_queue_done`, run on **every** `queue_done`, including "stopped by schedule":
+- [x] Stop fires when `stop_enabled`, running, due at `stop_time`, and not fired. It runs `stop_queue` and emits `Event("queue_done", message="stopped by schedule")`. `next_run` is not set. — **2.x:** `tests/manager.rs` `scheduler_starts_and_stops_queue`
+- [x] Periodic restart: `periodic and next_run and not running and time.time() >= next_run` sets `next_run=0` and runs `start_queue`. It uses wall-clock `time.time()`, not the `now` argument. — **2.x:** `tests/manager.rs` `periodic_queue_downloads_again_and_plans_the_next_run` (wall clock, as 1.x)
+- [x] `start_on_startup`: started on the first `poll()` (`:443-447`). — **2.x:** `tests/manager.rs` `once_date_and_start_on_startup`
+- [x] `_fired` only grows, in memory. — **2.x:** done
+- [ ] On-done actions are **(UI)**, in `main_window.py:1445-1476` `_queue_done`, run on **every** `queue_done`, including "stopped by schedule": — **2.x:** the `queue_done` events are there; the actions (tray message, open, power off, exit) are UI, phase 5
   1. Tray message `"<name>" processing stopped/finished`.
   2. `open_when_done` opens the path with `QDesktopServices.openUrl(file://…)` (xdg-open behaviour) (`ui/util.py:56`).
   3. `shutdown_when_done`, which takes priority over exit: a 30 s countdown dialog the user can cancel, then `manager.shutdown()`, then `subprocess.Popen(["systemctl","poweroff"])`.
@@ -314,33 +314,33 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
   - A per-download equivalent exists in the progress dialog ("Exit LID when done", "Turn off computer when done") (`ui/dialogs/progress.py:149-155,238-243`, `main_window.py:1382-1402`). The Complete dialog is suppressed while the download's queue is running.
 
 ### 2.6 `poll(now=None)` order (`:441-485`)
-1. [ ] On the first call, start the `start_on_startup` queues.
-2. [ ] Drain finished tasks. Remove the task from `tasks` if it is the same object, and skip the download if it was removed. Then:
+1. [x] On the first call, start the `start_on_startup` queues. — **2.x:** done
+2. [x] Drain finished tasks. Remove the task from `tasks` if it is the same object, and skip the download if it was removed. Then: — **2.x:** a stale finish of an older task of the same download is ignored (tasks carry a serial)
    - If `check = verify_checksum or checksum_force`, the status is COMPLETE, the download has a checksum, and `verify()` succeeds: save and emit `changed`. `complete` comes later.
    - Otherwise save, then emit:
      - COMPLETE: `complete`.
      - ERROR: count a queue failure if its queue is running, then `error(message=d.error)`.
      - Anything else (PAUSED): `changed`.
-3. [ ] Drain verifiers through `_checked`.
-4. [ ] `_process_queue` for each queue.
-5. [ ] `_tick_schedules(now or datetime.now())`.
-6. [ ] More than 5 s since the last save with tasks present: `save_downloads(all task downloads)`. This is the periodic resume persistence.
+3. [x] Drain verifiers through `_checked`. — **2.x:** done
+4. [x] `_process_queue` for each queue. — **2.x:** done
+5. [x] `_tick_schedules(now or datetime.now())`. — **2.x:** `poll(Some(now))` for tests, local time otherwise
+6. [x] More than 5 s since the last save with tasks present: `save_downloads(all task downloads)`. This is the periodic resume persistence. — **2.x:** done
 
 ### 2.7 Checksum flow (`_checked`, `:245-272`)
-- [ ] Remove the verifier.
-- [ ] `error`: status ERROR, `d.error = "Checksum check failed: <err>"`, save, emit `error`.
-- [ ] Otherwise status COMPLETE and `checksum_result = v.result`.
+- [x] Remove the verifier. — **2.x:** done
+- [x] `error`: status ERROR, `d.error = "Checksum check failed: <err>"`, save, emit `error`. — **2.x:** done
+- [x] Otherwise status COMPLETE and `checksum_result = v.result`. — **2.x:** done
   - Unless the result is `skipped`, also set `checksum_actual`, `checksum_checked = now`, `checksum_seconds`.
   - `verified` resets `checksum_retried=False`. Save.
-- [ ] Manual verify: emit `checked(message=result)` and nothing else.
-- [ ] Result other than mismatch (`verified`/`computed`/`skipped`): emit `complete`.
-- [ ] Mismatch, by `settings.checksum_mismatch`:
+- [x] Manual verify: emit `checked(message=result)` and nothing else. — **2.x:** done
+- [x] Result other than mismatch (`verified`/`computed`/`skipped`): emit `complete`. — **2.x:** done
+- [x] Mismatch, by `settings.checksum_mismatch`: — **2.x:** `tests/manager.rs` `checksum_mismatch_asks_keeps_or_downloads_again_once`, `mismatch_kept_says_so`
   - `redownload` and not `checksum_retried`: set `retried=True`, `redownload(overwrite=True)`, emit `changed(message="checksum mismatch, downloading again")`.
   - Otherwise emit `mismatch(message="kept" if policy=="keep" else "")`. A second mismatch under `redownload` always asks.
-- [ ] **(UI)** reaction to `mismatch`:
+- [ ] **(UI)** reaction to `mismatch`: — **2.x:** UI, phase 5/6
   - `message=="kept"` shows a tray "file was kept".
   - Otherwise a MismatchDialog with choices: `again` (redownload with overwrite), `delete` (move to trash and remove), or keep (`main_window.py:1410-1440`).
-- [ ] Tests:
+- [x] Tests: — **2.x:** `tests/manager.rs`: the three 1.x tests
   - `test_checksum_is_verified_before_complete`: the only non-`changed` event is `complete`, and actual = sha.
   - `test_checksum_mismatch_asks_keeps_or_downloads_again_once`:
     - Under `ask`: a `("mismatch","")` event, status COMPLETE, no `complete` event.
@@ -638,32 +638,32 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
 ## 10. Media / YouTube (`media.py`, `media_task.py`)
 
 ### 10.1 Detection and tools
-- [ ] `YOUTUBE_RE`: `^https?://(?:(?:www|m|music)\.)?(?:youtube\.com/(?:watch\?|shorts/|live/|embed/)|youtu\.be/)\S+`, case-insensitive, applied to `url.strip()` (`media.py:17-26`).
+- [x] `YOUTUBE_RE`: `^https?://(?:(?:www|m|music)\.)?(?:youtube\.com/(?:watch\?|shorts/|live/|embed/)|youtu\.be/)\S+`, case-insensitive, applied to `url.strip()` (`media.py:17-26`). — **2.x:** `media::is_youtube`; `tests/media.rs` `youtube_links`
   - Accepted: watch, youtu.be, m.youtube, shorts, music, http live.
   - Rejected: example.com, the bare home page, `youtube.com.evil.io`, `/channel/`.
   - Test `test_youtube_links`.
-- [ ] `available()`: yt_dlp is importable. **(UI)** if not, a warning says "needs the yt-dlp package: pip install yt-dlp" (`main_window.py:841`).
-- [ ] `ffmpeg()`: `which ffmpeg`, cached.
-- [ ] `ffmpeg_has_mp3()`: `ffmpeg -hide_banner -encoders` (10 s timeout) contains `libmp3lame`, cached.
-- [ ] `js_runtimes()`: the first of `deno`, `node`, `bun` on PATH gives `{name: {"path": p}}`, else `{}`.
-- [ ] yt-dlp is used **as a Python library, not the CLI**: `YoutubeDL(opts).extract_info(url, download=False)`.
+- [ ] `available()`: yt_dlp is importable. **(UI)** if not, a warning says "needs the yt-dlp package: pip install yt-dlp" (`main_window.py:841`). — **2.x:** `media::available()` finds the `yt-dlp` program (PATH, `~/.local/bin`, or `python3 -m yt_dlp`); the UI warning comes in phase 6
+- [x] `ffmpeg()`: `which ffmpeg`, cached. — **2.x:** `media::ffmpeg`
+- [x] `ffmpeg_has_mp3()`: `ffmpeg -hide_banner -encoders` (10 s timeout) contains `libmp3lame`, cached. — **2.x:** `media::ffmpeg_has_mp3` (10 s timeout)
+- [x] `js_runtimes()`: the first of `deno`, `node`, `bun` on PATH gives `{name: {"path": p}}`, else `{}`. — **2.x:** `media::js_runtime`, passed as `--js-runtimes name:path`
+- [~] yt-dlp is used **as a Python library, not the CLI**: `YoutubeDL(opts).extract_info(url, download=False)`. — **2.x:** yt-dlp runs as a program: `--dump-single-json --skip-download --no-playlist`; live test `live_probe_real_video` (LIDER_NETWORK_TESTS=1) passes against YouTube
   - Options: `quiet`, `no_warnings`, `noprogress`, `skip_download`, `noplaylist` (all True), plus `js_runtimes` when a runtime was found (`:63-75`).
   - A Rust port calling the CLI would roughly need `yt-dlp -J --no-playlist --no-warnings --skip-download [--js-runtimes <name>:<path>]`. This is my mapping; check it against your yt-dlp version.
-- [ ] Error text: the `"ERROR: "` prefix is stripped from messages (`media_task.py:170`, UI `main_window.py:850`).
+- [x] Error text: the `"ERROR: "` prefix is stripped from messages (`media_task.py:170`, UI `main_window.py:850`). — **2.x:** `media::clean_error`
 
 ### 10.2 Variant selection (`build_variants`, `:158-212`)
-- [ ] Usable formats: `protocol` starts with `"http"`, so https is in and m3u8_native and mhtml are out, and `"drc"` is not in `format_id`.
-- [ ] Audio-only: `vcodec=="none"` and acodec not None or `"none"`.
-- [ ] `best` = max by `abr or tbr or 0`. `m4a` = best audio with ext m4a; `opus` = best audio with ext webm.
-- [ ] `_quality`: `format_note` matching `^(\d{3,4}p)`, else `"{height}p"`. Append `int(fps)` if `fps > 30` (e.g. `720p60`).
-- [ ] `_codec`: `avc1` is H.264; `vp9`/`vp09` is VP9; `av01` is AV1; else the vcodec up to the first `.`, upper-cased.
-- [ ] `_size`: `filesize or filesize_approx`, else `tbr*1000/8*duration`, else -1.
-- [ ] `_fmt_size`:
+- [x] Usable formats: `protocol` starts with `"http"`, so https is in and m3u8_native and mhtml are out, and `"drc"` is not in `format_id`. — **2.x:** done
+- [x] Audio-only: `vcodec=="none"` and acodec not None or `"none"`. — **2.x:** done
+- [x] `best` = max by `abr or tbr or 0`. `m4a` = best audio with ext m4a; `opus` = best audio with ext webm. — **2.x:** first maximum wins, like Python's `max`
+- [x] `_quality`: `format_note` matching `^(\d{3,4}p)`, else `"{height}p"`. Append `int(fps)` if `fps > 30` (e.g. `720p60`). — **2.x:** done
+- [x] `_codec`: `avc1` is H.264; `vp9`/`vp09` is VP9; `av01` is AV1; else the vcodec up to the first `.`, upper-cased. — **2.x:** done
+- [x] `_size`: `filesize or filesize_approx`, else `tbr*1000/8*duration`, else -1. — **2.x:** done
+- [x] `_fmt_size`: — **2.x:** `media::fmt_size`
   - Negative: "size unknown".
   - Under 1 MiB: `"%.0f KB"`.
   - Under 1 GiB: `"%.1f MB"`.
   - Otherwise `"%.2f GB"`.
-- [ ] With ffmpeg:
+- [x] With ffmpeg: — **2.x:** `tests/media.rs` `h264_mp4_preferred_then_vp9_webm`, `labels_match_1_2` (every label equals the 1.2 output)
   1. Video-only formats (vcodec set, `acodec=="none"`, height truthy) are grouped by quality.
   2. Per group, pick the min of `(codec rank H.264 0, VP9 1, AV1 2, other 9; -tbr)`.
   3. Pair with audio:
@@ -673,32 +673,32 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
      - Else skip the group.
   4. `total` = video + audio sizes if both are known, else -1.
   5. Label: `"{q} · {EXT} ({codec}) · {size}"` (U+00B7 middle dot).
-- [ ] Without ffmpeg: only progressive formats (both codecs set). Label `"{q} · {EXT} · {size}"`, no audio_format.
-- [ ] Video variants are sorted by `(-height, quality)`.
-- [ ] Audio variants:
+- [x] Without ffmpeg: only progressive formats (both codecs set). Label `"{q} · {EXT} · {size}"`, no audio_format. — **2.x:** `tests/media.rs` `without_ffmpeg_only_unmerged_formats`
+- [x] Video variants are sorted by `(-height, quality)`. — **2.x:** `tests/media.rs` `one_variant_per_resolution_best_first`
+- [x] Audio variants: — **2.x:** `tests/media.rs` `audio_choices_skip_drc`
   - `M4A`: `"M4A (AAC {abr} kbps) · size"`, ext m4a, no convert. Offered if m4a exists, even without ffmpeg.
   - `MP3`: if `have_mp3`. `"MP3 (192 kbps, converted) · ~size"`, estimated at `duration*192000/8`, source m4a, convert mp3.
   - `OPUS`: if opus and ffmpeg. `"Opus ({abr} kbps) · size"`, ext opus, convert opus.
-- [ ] `Variant(kind, quality, label, ext, video_format="", audio_format="", size=-1, height=0, convert="")`. `MediaInfo(url, id, title, uploader, duration, variants)`.
-- [ ] `default_variant(kind, quality)`:
+- [x] `Variant(kind, quality, label, ext, video_format="", audio_format="", size=-1, height=0, convert="")`. `MediaInfo(url, id, title, uploader, duration, variants)`. — **2.x:** `media::Variant`, `media::MediaInfo`
+- [x] `default_variant(kind, quality)`: — **2.x:** `tests/media.rs` `default_variant`
   - Options are the variants of that kind, or all variants.
   - An exact quality match wins.
   - Video: first mp4 with height ≤ 1080, else first. Audio: first.
   - **(UI)** the last pick is remembered in `media_kind`/`media_quality`.
-- [ ] `probe(url)`:
+- [x] `probe(url)`: — **2.x:** `media::probe`
   - `url = webpage_url or url`, `title or "video"`, `uploader or channel or ""`, duration as int.
   - Variants are built with `ffmpeg()` and `ffmpeg_has_mp3()`.
-- [ ] `suggested_filename`: `safe_filename(title).rstrip(". ") + "." + ext`. Test: `"Review: A07 / A08."` gives `"Review: A07 _ A08.mp4"`.
-- [ ] `resolve_streams(page_url, ids)`:
+- [x] `suggested_filename`: `safe_filename(title).rstrip(". ") + "." + ext`. Test: `"Review: A07 / A08."` gives `"Review: A07 _ A08.mp4"`. — **2.x:** `tests/media.rs` `suggested_filename_drops_trailing_dot`
+- [x] `resolve_streams(page_url, ids)`: — **2.x:** `media::resolve_streams` / `resolve_from_info`; `tests/media.rs` `resolve_from_info_finds_formats`
   - Runs a fresh `extract_info`.
   - A missing id raises `LookupError("YouTube no longer offers format {fid} for this video")`.
   - Each stream returns `{url, headers: http_headers, size: _size if filesize present else -1, ext or "bin"}`.
-- [ ] `postprocess_command(inputs, out, variant)` (`:267-284`), base `[ffmpeg, -y, -hide_banner, -loglevel, error]`, None if there is no ffmpeg:
+- [x] `postprocess_command(inputs, out, variant)` (`:267-284`), base `[ffmpeg, -y, -hide_banner, -loglevel, error]`, None if there is no ffmpeg: — **2.x:** `tests/media.rs` `postprocess_commands`
   - 2 inputs: `-i V -i A -map 0:v:0 -map 1:a:0 -c copy` (+ `-movflags +faststart` if ext mp4) `OUT`.
   - mp3: `-i IN -vn -c:a libmp3lame -q:a 2 OUT`.
   - opus: `-i IN -vn -c:a copy OUT`.
   - Otherwise: `-i IN -c copy OUT`, which turns fragmented DASH into a regular file.
-- [ ] Tests (`test_media.py`, using fixture `youtube_formats.json`: video 8h9mr7EZiA4, duration 501, DASH https + m3u8 + storyboard + drc formats; the "1080p" format has height 960):
+- [x] Tests (`test_media.py`, using fixture `youtube_formats.json`: video 8h9mr7EZiA4, duration 501, DASH https + m3u8 + storyboard + drc formats; the "1080p" format has height 960): — **2.x:** `tests/media.rs`: every 1.x case
   - Qualities are exactly `2160p,1440p,1080p,720p,480p,360p,240p,144p`.
   - 1080p is mp4, 137+140, size 92006373+8106621, label contains "1080p · MP4 (H.264)".
   - 2160p is webm, 313+251.
@@ -707,8 +707,8 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
   - Default video is 1080p, default audio is M4A, and an explicit 480p is honoured.
 
 ### 10.3 MediaTask (`media_task.py`)
-- [ ] It has the same surface as DownloadTask. `connections` and `meter` come from the inner task, or empty/idle. `status_text` holds the phase text (`:41-119`).
-- [ ] Phase texts:
+- [x] It has the same surface as DownloadTask. `connections` and `meter` come from the inner task, or empty/idle. `status_text` holds the phase text (`:41-119`). — **2.x:** `media_task::MediaTask` (`status_text()`, `snapshot()`)
+- [x] Phase texts: — **2.x:** done
   - `"Getting the video address..."`
   - `"Receiving video..."` / `"Receiving audio..."`
   - `"Getting a new video address..."`
@@ -716,12 +716,12 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
   - `"Converting to MP3..."`
   - `"Finishing the file..."`
   - `""` when idle.
-- [ ] Snapshot:
+- [x] Snapshot: — **2.x:** `MediaTask::snapshot`
   - Segments of every stream are concatenated with byte offsets (offset += stream size).
   - The current stream uses the live inner segments. Done streams show as full. Others use saved segments.
   - Connection labels become `"Video: <status>"`.
   - Rate and time left come from `d.size`/`d.downloaded`.
-- [ ] `_run` (`:125-177`):
+- [x] `_run` (`:125-177`): — **2.x:** `tests/media.rs` `pause_resume_refreshes_urls_and_keeps_progress`, `forbidden_stream_gets_a_fresh_url`, `resolver_error_is_reported`
   1. Set `last_try`, `error=""`, CONNECTING.
   2. **Re-resolve every stream URL on every start.** If a known size changed, drop that stream's progress. Update `url`, `headers`, `ext`, and set the size if it was unknown.
   3. `d.size` = sum of stream sizes once all are known.
@@ -734,7 +734,7 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
      - Otherwise ERROR.
   6. Any exception becomes ERROR with its message.
   7. Clear `inner`/`_current`/`status_text`, then call `on_finish`.
-- [ ] `_download_stream`:
+- [x] `_download_stream`: — **2.x:** done
   - A sub-Download with the same id: url, filename `"<id>-media-<kind>.<ext>"`, `save_dir = temp_dir`, size/resumable/segments from the stream, the parent's speed limit, and the stream's headers (yt-dlp `http_headers` override engine defaults).
   - With no saved segments, delete any stale finished stream file.
   - Client UA = stream header `User-Agent` or the default. `part_name="<id>-media-<kind>"`.
@@ -743,16 +743,16 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
   - COMPLETE: `done=True`, `file = sub.path`.
   - PAUSED: return False.
   - Otherwise error `"<Kind> stream: <err or 'download failed'>"`.
-- [ ] `_assemble`:
+- [x] `_assemble`: — **2.x:** `tests/media.rs` `video_and_audio_are_merged`, `audio_converted_to_mp3`, `merging_without_ffmpeg_says_so`
   1. ASSEMBLING. Output goes to `<temp>/<id>-media-out.<ext>`.
   2. With no ffmpeg: fail with `"ffmpeg is required to finish this download"` if there are 2 inputs or a conversion; otherwise just move the file.
   3. A non-zero ffmpeg exit fails with `"ffmpeg failed: <last 300 chars of stderr>"`. ffmpeg runs blocking and ignores stop.
   4. `mkdir -p save_dir`, `unique_path`, move, set `filename`, `size = downloaded = file size`, remove all parts, COMPLETE.
-- [ ] Helpers: `part_prefix = "<id>-media"`. `remove_parts` globs `<temp>/<id>-media*`. `reset_streams` pops `segments,size,resumable,done,file,downloaded`.
-- [ ] Manager integration:
+- [x] Helpers: `part_prefix = "<id>-media"`. `remove_parts` globs `<temp>/<id>-media*`. `reset_streams` pops `segments,size,resumable,done,file,downloaded`. — **2.x:** `media_task::part_prefix`, `remove_parts`, `reset_streams`
+- [x] Manager integration: — **2.x:** `tests/manager.rs` `youtube_download_through_the_manager`
   - `redownload` of media resets the streams, removes parts, and sets `size = variant.size`.
   - `remove` deletes media parts.
-- [ ] Tests:
+- [x] Tests: — **2.x:** `tests/media.rs`: all five; CI installs ffmpeg so they run there too
   - `test_video_and_audio_are_merged`: the output has audio and video streams, `d.size` equals the file size, and the parts dir ends up empty.
   - `test_audio_converted_to_mp3`: `.mp3` output with codec mp3.
   - `test_pause_resume_refreshes_urls_and_keeps_progress`: PAUSED keeps stream segments or done, and resolve is called **2 times** across 2 starts.
@@ -763,10 +763,10 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
 ---
 
 ## 11. Test fixture contract (`tests/httpfixture.py`)
-- [ ] `FileServer(size, ranges, length, delay_per_chunk, drop_after, data, fail_first)`, HTTP/1.1 on `127.0.0.1:<random>`.
+- [x] `FileServer(size, ranges, length, delay_per_chunk, drop_after, data, fail_first)`, HTTP/1.1 on `127.0.0.1:<random>`. — **2.x:** `tests/fixture/mod.rs` `FileServer` with the same options
   - URL: `/files/test%20file.bin`. Every path is served.
-- [ ] Records each request's `Range` header (`""` if absent) in `requests`.
-- [ ] Behaviour:
+- [x] Records each request's `Range` header (`""` if absent) in `requests`. — **2.x:** done
+- [x] Behaviour: — **2.x:** done
   - `fail_first` answers the first N requests with 403.
   - Parses `bytes=S-[E]` and returns 206 with `Content-Range bytes S-E/N`. Returns 416 with `bytes */N` if S ≥ N.
   - `ranges=False` always returns 200 with the full body.
@@ -774,4 +774,4 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
   - Always sends `Content-Disposition: attachment; filename="test file.bin"`.
   - Sends 32 KiB chunks with an optional delay.
   - `drop_after` cuts the **first** response after N bytes.
-- [ ] The Rust port needs an equivalent fixture to keep these engine and media tests.
+- [x] The Rust port needs an equivalent fixture to keep these engine and media tests. — **2.x:** plus redirects, a hanging path, proxy mode, a range switch and an FTP server

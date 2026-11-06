@@ -234,7 +234,7 @@ retries, fallbacks, resume, pwrite, finish).
   | loopback, 1 GiB, no cap | 1 / 8 / 32 | 4453 / 3868 / 3855 MB/s | 3340 / 3799 / 2741 MB/s |
   | 200 MiB, 20 MB/s per connection | 1 / 8 / 16 | 18 / 146 / 294 MB/s | 18 / 146 / 293 MB/s |
 
-- Parity `01-core.md`: 98 done, 9 changed (decision Q17 is new and needs a yes). Open in the engine section, all
+- Parity `01-core.md`: 98 done, 9 changed (decision Q17 accepted 2026-11-06). Open in the engine section, all
   waiting for the manager in phase 3: the single global limiter, the client built from Settings, the periodic save.
 - `parity-progress.sh` now also counts numbered items (`1. [ ]`), which adds 15 to the total.
 - Fixed on the way: serde_json's default float parser is not exact, so a `date_added` like 1793950472.7764683
@@ -245,6 +245,22 @@ retries, fallbacks, resume, pwrite, finish).
   (auto-verify, mismatch policies, check_when_finished, record_check, skip), media + media_task.
 - Port `test_manager.py` and `test_media.py` (media tests skip without ffmpeg; the live test stays behind
   `LIDER_NETWORK_TESTS=1`).
+
+**Status 2026-11-06: done.** `crates/lider-core/src/`: `manager` (list, tasks, queues, scheduler, checksum flow,
+events, periodic save), `media` (link detection, tool lookup, variants, yt-dlp, ffmpeg commands), `media_task`
+(streams through the engine, fresh URLs on every start and after a 403, merge/convert).
+- A running task owns its copy of the download; `poll()` copies it into the list, and `edit()`/`update()` send
+  the user's fields (description, queue, checksum, address…) to a running task too. Finish reports carry a
+  serial, so a stale report from an older task of the same download is ignored.
+- yt-dlp runs as a program (`--dump-single-json`), found on PATH, in `~/.local/bin`, or as `python3 -m yt_dlp`;
+  the JS runtime goes in `--js-runtimes`. The live probe against YouTube passes (`LIDER_NETWORK_TESTS=1`).
+- `tests/manager.rs` (22): every manager case of `test_manager.py` plus N-at-a-time queues, retry limits, the
+  scheduler's stop time and once date, start on startup, periodic queues, edits while running, queue
+  persistence, stop all, a bad proxy, the global limiter and a YouTube download through the manager.
+- `tests/media.rs` (17): every `test_media.py` case plus ffmpeg commands, resolving, no-ffmpeg merging, and
+  `labels_match_1_2`, which compares every variant label with the 1.2 output for the saved format list.
+- CI installs ffmpeg so the media tests run there. 120 Rust tests in total, 3 full runs without a failure.
+- Parity `01-core.md`: 190 done, 12 changed, 6 open; the open ones are UI or startup work (phases 4–6).
 
 ### Phase 4: process modes and Linux integration (`lider-sys`, `main.rs`)
 - CLI dispatch, IPC client/server (+ peer uid check, §9 Q2), native host, browser install/uninstall,
@@ -337,7 +353,7 @@ D2 and D4 still need a measurement or a test in their phase; record the outcome 
 | Q14 | A settings value of the wrong JSON type was stored as is and could fail later | 1 | **Accepted 2026-11-06:** that key keeps its default; the rest of the file loads. |
 | Q15 | One unreadable row in `downloads.db` (or `QueueSchedule(**data)` with an unknown key) stopped 1.x from starting | 1 | **Accepted 2026-11-06:** skip the bad row, leave it in the file, report it (the UI can show a note in phase 5); unknown queue keys are kept like download keys. |
 | Q16 | Verifier error text is Python's (`[Errno 2] No such file or directory: '<path>'`) | 1 | **Accepted 2026-11-06:** Rust's OS message plus the path. The text only appears after "Checksum check failed:". |
-| Q17 | Engine edge cases in 1.x: a failed disk write left zeros in the file; invalid input killed a connection's thread; `socks5://` proxies did not work; an `ftp://` folder URL downloaded the listing | 2 | **Proposed in phase 2, built, awaiting confirmation:** give the bytes back and retry the write; fail the connection with a message; SOCKS works; a folder URL is an error. |
+| Q17 | Engine edge cases in 1.x: a failed disk write left zeros in the file; invalid input killed a connection's thread; `socks5://` proxies did not work; an `ftp://` folder URL downloaded the listing | 2 | **Accepted 2026-11-06:** give the bytes back and retry the write; fail the connection with a message; SOCKS works; a folder URL is an error. |
 
 ## 10. Prerequisites on this machine
 

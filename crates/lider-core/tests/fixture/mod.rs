@@ -26,6 +26,8 @@ pub struct Options {
     pub delay_per_chunk: Duration,
     pub drop_after: usize,
     pub fail_first: usize,
+    /// Serve these bytes instead of `size` random ones.
+    pub data: Option<Vec<u8>>,
 }
 
 impl Default for Options {
@@ -37,6 +39,7 @@ impl Default for Options {
             delay_per_chunk: Duration::ZERO,
             drop_after: 0,
             fail_first: 0,
+            data: None,
         }
     }
 }
@@ -96,7 +99,7 @@ pub fn sha256_hex(data: &[u8]) -> String {
 
 impl FileServer {
     pub async fn start(o: Options) -> FileServer {
-        let data = random_bytes(o.size);
+        let data = o.data.clone().unwrap_or_else(|| random_bytes(o.size));
         let sha256 = sha256_hex(&data);
         let inner = Arc::new(Inner {
             data,
@@ -159,6 +162,10 @@ impl FileServer {
     /// Only the next `n` requests get range support (to fake a server that changes its mind).
     pub fn ranges_for_next(&self, n: isize) {
         self.inner.ranged_left.store(n, Ordering::SeqCst);
+    }
+
+    pub fn fail_next(&self, n: usize) {
+        self.inner.fail_first.store(n, Ordering::SeqCst);
     }
 
     pub fn set_ranges(&self, on: bool) {
