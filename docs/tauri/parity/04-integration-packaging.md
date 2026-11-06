@@ -5,27 +5,27 @@ Everything below was read line by line. Paths are relative to the repository roo
 ---
 
 ## 0. Identity and constants
-- [ ] App version `__version__ = "1.2.0"`. `APP_NAME="LID"`, `APP_LONG_NAME="Linux Internet Downloader"`, `PACKAGE_NAME="lider"` (`lider/__init__.py:3-6`). This is the only place the version is defined: `pyproject.toml:21`, `build.sh:26` and `release.yml:30,89` all read it with `sed -n 's/^__version__ = "\(.*\)"/\1/p'`. The port needs one equivalent version source, and CI and build must parse it.
-- [ ] The command and package are named `lider`. The desktop file name is `lider` (`app.py:83`) and the icon name is `lider`.
-- [ ] Native messaging host name: `io.github.davidaprilio.lid` (`browser.py:24`, `background.js:6`).
-- [ ] Extension version `EXTENSION_VERSION = "1.0.0"` is separate from the app version (`browser.py:27`).
-- [ ] Project URLs: `https://github.com/Davidaprilio/lid`, with releases at `.../releases/latest` (`browser.py:39`, `popup.js:7-8`).
+- [ ] App version `__version__ = "1.2.0"`. `APP_NAME="LID"`, `APP_LONG_NAME="Linux Internet Downloader"`, `PACKAGE_NAME="lider"` (`lider/__init__.py:3-6`). This is the only place the version is defined: `pyproject.toml:21`, `build.sh:26` and `release.yml:30,89` all read it with `sed -n 's/^__version__ = "\(.*\)"/\1/p'`. The port needs one equivalent version source, and CI and build must parse it. — **2.x:** names are `lider_core::APP_NAME` etc.; the version lives in the workspace `Cargo.toml` (2.0.0-alpha.1); build.sh and the release workflow read it in phase 7
+- [x] The command and package are named `lider`. The desktop file name is `lider` (`app.py:83`) and the icon name is `lider`. — **2.x:** done
+- [x] Native messaging host name: `io.github.davidaprilio.lid` (`browser.py:24`, `background.js:6`). — **2.x:** `browser::HOST_NAME`; test `background_uses_the_same_host_name`
+- [x] Extension version `EXTENSION_VERSION = "1.0.0"` is separate from the app version (`browser.py:27`). — **2.x:** `browser::EXTENSION_VERSION`
+- [x] Project URLs: `https://github.com/Davidaprilio/lid`, with releases at `.../releases/latest` (`browser.py:39`, `popup.js:7-8`). — **2.x:** `browser::RELEASES_URL` and the other URL constants
 
 ## 1. CLI and process modes
-- [ ] **Dispatch happens before any GUI code loads** (`__main__.py:3-15`, repeated in `app.py:63-71`):
+- [x] **Dispatch happens before any GUI code loads** (`__main__.py:3-15`, repeated in `app.py:63-71`): — **2.x:** `src-tauri/src/main.rs` `mode()`; test `dispatch_matches_app_py`. The host mode never builds Tauri; it starts in 23 ms median (1.2: 32 ms), so one binary is enough (decision D4)
   - `--native-host` anywhere in argv starts native-host mode. No GUI or Qt (in Rust, no Tauri/webview) may be initialised. Test `test_native_host_does_not_load_qt` enforces this.
   - Otherwise, `--install-browser-integration` or `--uninstall-browser-integration` anywhere in argv starts browser-integration CLI mode (`browser.py:251-268`).
   - Otherwise the GUI app starts.
   - The checks run in that order, so `--native-host` wins over the others.
-- [ ] **Native-host mode must ignore the extra positional args the browser adds.** Chrome passes the origin `chrome-extension://<id>/` (and `--parent-window=` on some platforms). Firefox passes the manifest path and the extension id. The wrappers forward them with `"$@"` (`browser.py:136,239`), so you get, for example, `Lider.AppImage --native-host chrome-extension://…/`. They must never be treated as URLs.
-- [ ] GUI mode arguments (`app.py:72-75`, argparse `prog="lider"`, description `"LID: Linux Internet Downloader"`):
+- [x] **Native-host mode must ignore the extra positional args the browser adds.** Chrome passes the origin `chrome-extension://<id>/` (and `--parent-window=` on some platforms). Firefox passes the manifest path and the extension id. The wrappers forward them with `"$@"` (`browser.py:136,239`), so you get, for example, `Lider.AppImage --native-host chrome-extension://…/`. They must never be treated as URLs. — **2.x:** `--native-host` anywhere wins; the browser's extra arguments are never parsed as URLs
+- [~] GUI mode arguments (`app.py:72-75`, argparse `prog="lider"`, description `"LID: Linux Internet Downloader"`): — **2.x:** `src-tauri/src/cli.rs`: urls, `--minimized`, `-h/--help` with the argparse text, `--` ends options; other options are ignored instead of going to a toolkit, so there is no exit code 2
   - positional `urls` (`nargs="*"`, help `"addresses to download"`)
   - `--minimized` (help `"start hidden in the system tray"`)
   - `-h/--help` (argparse default, exit 0)
   - Unknown args are passed through to `QApplication` via `parse_known_args` (`app.py:75,80`), for example `-platform offscreen`. Decide what Tauri does with unknown flags.
-- [ ] **Single instance** (`app.py:77-78`). The program first calls `send_to_running(urls)`. If an instance answers, it exits 0. With no URLs it sends `--show`.
+- [~] **Single instance** (`app.py:77-78`). The program first calls `send_to_running(urls)`. If an instance answers, it exits 0. With no URLs it sends `--show`. — **2.x:** same, except `--minimized` alone does nothing when LID runs (decision Q1); test `minimized_alone_does_not_show_a_running_lid`, checked end to end (23 ms, exit 0)
   - **QUIRK:** `lider --minimized` while LID is already running sends `--show`, so the window pops up. This also happens when autostart runs while LID is open.
-- [ ] Start-up order when this process becomes the instance (`app.py:80-129`):
+- [ ] Start-up order when this process becomes the instance (`app.py:80-129`): — **2.x:** steps 2–6 and the server in `gui.rs`; showing/hiding by the tray, the menu offer and adding the argv URLs finish with the window in phase 5
   1. Set up the app: name and display name "LID", desktop file name "lider", `quitOnLastWindowClosed=False` (LID lives in the tray), window icon `app`.
   2. `settings_mod.migrate_legacy_dirs()` (§6).
   3. `settings.load()`.
@@ -36,7 +36,7 @@ Everything below was read line by line. Paths are relative to the repository roo
   8. The first-start "add to menu" offer runs only when the window is shown, through `QTimer.singleShot(0)` (`app.py:124-127`).
   9. Each argv URL is added after the event loop starts with `win.add_url(u, ask_address=False)` (`app.py:128-129`).
   10. On exit: close the server, close the store, return `app.exec()` rc.
-- [ ] **Exit codes:**
+- [ ] **Exit codes:** — **2.x:** GUI, native host and CLI codes as 1.x (no argparse error code, see the GUI arguments); the build.sh rows come in phase 7
 
   | Mode | Code | Meaning |
   |---|---|---|
@@ -50,7 +50,7 @@ Everything below was read line by line. Paths are relative to the repository roo
   | `build.sh` | 1 | usage |
   | `build.sh aur` | 2 | `AUR_SOURCE_URL` missing |
 
-- [ ] **Browser-integration CLI output** (`browser.py:251-268`):
+- [x] **Browser-integration CLI output** (`browser.py:251-268`): — **2.x:** `browser::main`; LibreWolf added to the message (decision Q8); test `cli_messages`
   - Uninstall always removes from **all** `BROWSERS`, detected or not. It prints `Removed the LID native messaging host from every browser.` and returns 0. If both flags are given, uninstall wins.
   - Install with nothing detected prints `No supported browser profile found (Chrome, Chromium, Brave, Edge, Vivaldi, Opera, Firefox).` and returns 1. **QUIRK:** LibreWolf is missing from that message.
   - Install prints, in order:
@@ -58,7 +58,7 @@ Everything below was read line by line. Paths are relative to the repository roo
     - `  registered for <name>` for each browser
     - `Extension for <family>: <folder>` for each family, sorted (exports the extension)
     - `Load that folder as an unpacked extension (see Options -> General -> Browser integration).`
-- [ ] **Environment variables:**
+- [ ] **Environment variables:** — **2.x:** LIDER_SOCKET_NAME, LIDER_LAUNCH, LIDER_NETWORK_TESTS, APPIMAGE, XDG_*, MOZ_LEGACY_HOME as 1.x; the packaging variables come in phase 7, the Qt/Python ones go away
 
   | Variable | Read in | Effect |
   |---|---|---|
@@ -75,26 +75,26 @@ Everything below was read line by line. Paths are relative to the repository roo
   | `MAINTAINER`, `PKG_LICENSE`, `PROJECT_URL`, `AUR_SOURCE_URL`, `AMO_JWT_ISSUER`, `AMO_JWT_SECRET` | `build.sh:11-17,27-29` | build settings |
 
 ## 2. IPC (single-instance socket)
-- [ ] The socket is an **abstract-namespace** Unix `SOCK_STREAM` socket named `"\0" + (LIDER_SOCKET_NAME or f"lider-{uid}")`, for example `\0lider-1000` (`ipc.py:15`). There is no filesystem node. The server uses `listen(8)` and is non-blocking, driven by a `QSocketNotifier` on the GUI loop (`app.py:27-38`).
-- [ ] **Client side** (`ipc.py:18-26`):
+- [x] The socket is an **abstract-namespace** Unix `SOCK_STREAM` socket named `"\0" + (LIDER_SOCKET_NAME or f"lider-{uid}")`, for example `\0lider-1000` (`ipc.py:15`). There is no filesystem node. The server uses `listen(8)` and is non-blocking, driven by a `QSocketNotifier` on the GUI loop (`app.py:27-38`). — **2.x:** `ipc::socket_name`, `SocketAddr::from_abstract_name`; checked against a running 1.2 in both directions
+- [x] **Client side** (`ipc.py:18-26`): — **2.x:** `ipc::send_lines`
   - `send_lines(lines)` connects and sends `"\n".join(lines)` (or `"--show"` when the list is empty), plus a trailing `"\n"`, as UTF-8. Then it closes.
   - It returns False when the connect or send fails (no instance running).
   - **There is no handshake and no reply.** Success means only that the connect and send worked.
-- [ ] `send_request(dict)` sends a single line, `json.dumps(request, separators=(",",":"))`, which is compact JSON with `ensure_ascii` on by default (`ipc.py:29-30`).
-- [ ] `is_running()` only connects, then closes without sending anything (`ipc.py:33-39`). The server reads an empty connection and ignores it.
-- [ ] **Server side** (`app.py:40-55`):
+- [x] `send_request(dict)` sends a single line, `json.dumps(request, separators=(",",":"))`, which is compact JSON with `ensure_ascii` on by default (`ipc.py:29-30`). — **2.x:** `ipc::send_request` (compact JSON; non-ASCII is sent as UTF-8, which 1.2 reads the same)
+- [x] `is_running()` only connects, then closes without sending anything (`ipc.py:33-39`). The server reads an empty connection and ignores it. — **2.x:** `ipc::is_running`
+- [~] **Server side** (`app.py:40-55`): — **2.x:** `ipc::InstanceServer`: a thread per connection with the 2 s read timeout, so a slow client no longer blocks anyone (decision Q3); test `a_slow_client_does_not_block_others`
   - On accept, it reads until EOF with a 2 s timeout. Any `OSError` keeps whatever data already arrived.
   - It decodes UTF-8 with `errors="replace"`, splits lines with `splitlines()`, strips each line and drops empty ones.
   - Each line is handed to `on_line`.
   - **QUIRK:** the read blocks the GUI loop for up to 2 s per slow client.
-- [ ] **Line semantics** (`app.py:101-112`):
+- [ ] **Line semantics** (`app.py:101-112`): — **2.x:** lines reach the app (`lid://instance-line`, `take_pending_lines`); what the window does with them is phase 5
   - A line starting with `{` is parsed as JSON. Invalid JSON is ignored silently, and so is any value that is not an object. A valid object goes to `win.handle_browser_request(req)`. **A JSON line does not bring the window forward**, except `action:"show"`.
   - Any other line first calls `win.show_normal()` (`showNormal`, `raise_`, `activateWindow`, `main_window.py:1510-1513`). Then, unless the line is `--show`, it calls `win.add_url(line, ask_address=False)`. Plain lines are not validated as URLs at this point.
-- [ ] **JSON requests from the native host to the app.** These are the fields after cleaning in `native_host.py`. Every field except `action` is optional, and each is present only when non-empty.
+- [x] **JSON requests from the native host to the app.** These are the fields after cleaning in `native_host.py`. Every field except `action` is optional, and each is present only when non-empty. — **2.x:** `native_host::clean_download` / `clean_links`
   - `{"action":"show"}`
   - `{"action":"download","url","final_url","referer","page_url","filename","mime","cookies","user_agent","size"}`
   - `{"action":"links","items":[{"url","text","kind"}],"referer","page_url","cookies","user_agent"}`
-- [ ] **How the app uses a request** (`main_window.py:983-1008`):
+- [ ] **How the app uses a request** (`main_window.py:983-1008`): — **2.x:** phase 5 (main window)
   - `show` calls `show_normal()`.
   - `cookies` becomes the header `Cookie`, and `user_agent` becomes the header `User-Agent`.
   - `page = page_url or ""` and `referer = referer or page`.
@@ -102,28 +102,28 @@ Everything below was read line by line. Paths are relative to the repository roo
   - `filename` is used only when the probe fails, or when the probe's name has no extension and the browser's does (`main_window.py:830-834`). YouTube URLs go to the YouTube flow (`main_window.py:814-816`).
   - `links`: items with a matching URL become `(url, text, kind)`, and `LinksDialog` opens (raised). The chosen links are added with the referer, page and headers.
   - **QUIRK:** `mime`, `size` and `final_url` are forwarded but the UI ignores them.
-- [ ] **QUIRK (security):** abstract sockets have no file permissions, so any local user can connect to `\0lider-<uid>` and inject downloads. Consider an `SO_PEERCRED` uid check in Rust.
+- [~] **QUIRK (security):** abstract sockets have no file permissions, so any local user can connect to `\0lider-<uid>` and inject downloads. Consider an `SO_PEERCRED` uid check in Rust. — **2.x:** the server drops connections from other users (`SO_PEERCRED`, decision Q2); test `peer_uid_is_ours`
 
 ## 3. Native messaging host (`lider/native_host.py`)
-- [ ] **Framing** (`:35-54`):
+- [x] **Framing** (`:35-54`): — **2.x:** `lider-sys/src/native_host.rs` `read_message`/`write_message`; tests `round_trip`, `end_of_input`, `oversized_message_is_refused`
   - Each message is a 4-byte length, unsigned 32-bit in **native byte order** (`struct "=I"`), followed by UTF-8 JSON.
   - Replies are compact JSON, flushed after every message.
   - `MAX_MESSAGE = 8 MiB` (`:28`).
-- [ ] **Read rules:**
+- [~] **Read rules:** — **2.x:** same limits; error texts are fixed sentences instead of Python's decoder messages (decision Q6)
   - Fewer than 4 header bytes, or a short body, counts as EOF: exit 0.
   - A size above the limit is a `ValueError("message of {size} bytes is too large")`.
   - Invalid JSON is a `ValueError` (Python's JSON error text).
   - A JSON value that is not an object is `ValueError("a message must be a JSON object")`.
   - Invalid UTF-8 is a `UnicodeDecodeError`.
   - On any of these errors the host writes `{"ok":false,"error":"<msg>"}` and **exits 1** (`:144-146`).
-- [ ] **Loop:** read, handle, write, until EOF (`:139-149`). One process serves many messages in sequence. Test `test_host_process_speaks_native_messaging` sends two frames in one stream.
-- [ ] **`hello` message** (`:121-125`):
+- [x] **Loop:** read, handle, write, until EOF (`:139-149`). One process serves many messages in sequence. Test `test_host_process_speaks_native_messaging` sends two frames in one stream. — **2.x:** `native_host::main`; checked end to end with two messages against a running 2.x and a running 1.2
+- [x] **`hello` message** (`:121-125`): — **2.x:** `lider-sys/src/native_host.rs` `hello_reports_the_capture_settings`
   - It loads the settings from `~/.config/lider/settings.json` directly and **does not start LID**.
   - Reply: `{"ok":true,"version":__version__,"capture":settings.browser_capture,"types":auto_capture_types.split(),"skip_sites":no_auto_sites.split(),"running":ipc.is_running()}`.
   - `split()` splits on any whitespace. The defaults are `browser_capture=True`, `DEFAULT_FILE_TYPES`, and `no_auto_sites=""` (`settings.py:12-16,116-119`).
   - A missing or broken settings file means defaults (`settings.py:208-213`).
   - The Rust port must read the same JSON keys: `browser_capture`, `auto_capture_types`, `no_auto_sites`.
-- [ ] **`download` message cleaning** (`_clean_download`, `:57-71`):
+- [~] **`download` message cleaning** (`_clean_download`, `:57-71`): — **2.x:** `lider-sys/src/native_host.rs` `download_is_forwarded_with_only_known_fields`, `bad_urls_are_rejected`, `long_fields_are_cut`; `size: true` is no longer taken as 1 (decision Q5, test `size_must_be_a_positive_integer`)
   - It starts from `{"action":"download"}` and copies only these string fields, each when non-empty, truncated to a limit:
 
     | Field | Limit (characters) |
@@ -140,36 +140,36 @@ Everything below was read line by line. Paths are relative to the repository roo
   - `size` is kept when it is an int above 0. **QUIRK:** a JSON `true` passes as 1, because a Python bool is an int.
   - `url` must match `URL_RE = ^(https?|ftp)://\S+$` (case-insensitive, `:29`), or the request is invalid.
   - `final_url`, `referer` and `page_url` are dropped (not rejected) when they do not match. Unknown fields are dropped.
-- [ ] **`links` message cleaning** (`_clean_links`, `:74-91`):
+- [~] **`links` message cleaning** (`_clean_links`, `:74-91`): — **2.x:** `lider-sys/src/native_host.rs` `links_are_cleaned`; `referer`/`page_url` must be web addresses too (decision Q5); a non-list `items` counts as no links
   - It takes `items[:5000]` (`MAX_LINKS`) and skips entries that are not objects.
   - Each item needs a matching `url` of at most 8192 characters.
   - `text` must be a string, truncated to 300; otherwise it becomes `""`.
   - `kind` must be one of `a`, `img`, `video`, `audio`; anything else becomes `"a"`.
   - No valid items means an invalid request.
   - It copies `referer`, `page_url`, `cookies` and `user_agent` when they are non-empty strings, truncated to the `TEXT_FIELDS` limits. **QUIRK:** `referer` and `page_url` are *not* URL-validated here, unlike in `download`.
-- [ ] **`show` message** becomes `{"action":"show"}`.
-- [ ] **Replies** (`:131-136`):
+- [x] **`show` message** becomes `{"action":"show"}`. — **2.x:** done
+- [~] **Replies** (`:131-136`): — **2.x:** same replies; the unknown-type text is fixed ("unknown message type", decision Q6); test `unknown_type`
   - `{"ok":true}`
   - `{"ok":false,"error":"invalid request"}`
   - `{"ok":false,"error":"LID is not running and could not be started"}`
   - `{"ok":false,"error":"unknown message type 'x'"}`. This uses Python `repr`: a missing type gives `None`, and a number gives `5`.
-- [ ] **Delivery and launch** (`deliver`, `:101-116`):
+- [x] **Delivery and launch** (`deliver`, `:101-116`): — **2.x:** `lider-sys/src/native_host.rs` `starts_lid_when_it_is_not_running`, `not_started_is_reported`; the launched LID gets its own session (setsid)
   1. Try `ipc.send_request`.
   2. If that fails, `Popen(launch_command())` with stdin, stdout and stderr set to `/dev/null` and `start_new_session=True`. If `Popen` raises `OSError`, the result is False.
   3. Then poll: sleep 0.25 s, retry the send, for up to **15 s** (`wait=15.0`).
-- [ ] **Launch command** (`:94-98`): `shlex.split($LIDER_LAUNCH)` when set. Otherwise `[sys.executable, "-m", "lider", "--minimized"]`.
-- [ ] **Host process requirements:** start fast and use the standard library only (`ipc.py:5`). The host must not touch Qt or the GUI.
+- [~] **Launch command** (`:94-98`): `shlex.split($LIDER_LAUNCH)` when set. Otherwise `[sys.executable, "-m", "lider", "--minimized"]`. — **2.x:** `shlex.split($LIDER_LAUNCH)`, else this program with `--minimized`
+- [x] **Host process requirements:** start fast and use the standard library only (`ipc.py:5`). The host must not touch Qt or the GUI. — **2.x:** no GUI code in the host path; 23 ms median start
 
 ## 4. Browser integration (`lider/browser.py`)
-- [ ] **Allowed extension IDs, exactly:**
+- [x] **Allowed extension IDs, exactly:** — **2.x:** `browser::CHROMIUM_EXTENSION_IDS`, `FIREFOX_EXTENSION_ID`; test `chromium_key_gives_the_registered_extension_id`
   - Chromium origins: `chrome-extension://hljibhdjbmpphbjhbfgiejnijpeobbne/` (`CHROMIUM_EXTENSION_ID`, fixed by the manifest `key`) and `chrome-extension://ophlhhmpoaonhglimkemkgjifigpghej/` (`EDGE_ADDONS_EXTENSION_ID`, Edge store "CRX ID", Store ID `0RDCKF25DZGT`), in that order (`:29-34`, `listing.md:16`).
   - Firefox: `lid@davidaprilio.github.io` (`:35`).
-- [ ] **Host manifest** (`host_manifest`, `:117-123`):
+- [x] **Host manifest** (`host_manifest`, `:117-123`): — **2.x:** test `host_accepts_every_known_chromium_id`
   - Fields: `{"name":HOST_NAME,"description":"LID (Linux Internet Downloader) browser integration","path":<abs exe>,"type":"stdio"}`.
   - Firefox adds `"allowed_extensions":[firefox id]`. Chromium adds `"allowed_origins":[...]`.
   - It is written as `json.dumps(indent=2)` plus `"\n"`, in key order `name, description, path, type, allowed_*`.
   - The file name is `io.github.davidaprilio.lid.json`.
-- [ ] **Browser table** (`BROWSERS`, `:70-79`). Detection looks for the profile folder (`detected`, `:143-144`).
+- [x] **Browser table** (`BROWSERS`, `:70-79`). Detection looks for the profile folder (`detected`, `:143-144`). — **2.x:** `browser::BROWSERS`; tests `detect_install_uninstall`, `firefox_in_the_xdg_config_folder`
 
   | Name | Family | Profile folder (detection) | User host folder |
   |---|---|---|---|
@@ -184,11 +184,11 @@ Everything below was read line by line. Paths are relative to the repository roo
 
   - `$XDG_CONFIG_HOME` defaults to `~/.config` (`:82-85`). With the test `home` override, `<home>/.config` is used.
   - **Gecko side choice** (`_paths`, `:93-106`): use the legacy home folder when it exists or `MOZ_LEGACY_HOME` is set. Otherwise use the XDG folder (Firefox 147+).
-- [ ] **System-wide host folders**, written by the deb and Arch packages (`SYSTEM_HOST_DIRS`, `:110-114`):
+- [ ] **System-wide host folders**, written by the deb and Arch packages (`SYSTEM_HOST_DIRS`, `:110-114`): — **2.x:** same four Chromium folders and the Mozilla one. Vivaldi, Opera and LibreWolf folders (decision Q8) are NOT added: no official source confirms their system paths; per-user registration covers them
   - Chromium family: `/etc/opt/chrome/native-messaging-hosts`, `/etc/chromium/native-messaging-hosts`, `/etc/opt/edge/native-messaging-hosts`, `/etc/opt/brave/native-messaging-hosts`
   - Firefox: `/usr/lib/mozilla/native-messaging-hosts`
   - **QUIRK:** there are no system folders for Vivaldi, Opera or LibreWolf.
-- [ ] **User wrapper script** at `$XDG_DATA_HOME/lider/native-host/lider-native-host`, mode 0755 (`:126-140,151-156`). Exact text:
+- [~] **User wrapper script** at `$XDG_DATA_HOME/lider/native-host/lider-native-host`, mode 0755 (`:126-140,151-156`). Exact text: — **2.x:** same path, mode and comments; it runs `exec <AppImage or this binary> --native-host "$@"` instead of Python; tests `appimage_wrapper_runs_the_appimage`, `detect_install_uninstall`
   ```
   #!/bin/sh
   # Native messaging host for the LID browser extension. Written by LID; safe to delete.
@@ -198,30 +198,30 @@ Everything below was read line by line. Paths are relative to the repository roo
   - For an AppImage, `run` is `exec <shlex.quote($APPIMAGE)> --native-host`.
   - Otherwise `run` is `PYTHONPATH=<quoted pkg parent> exec <quoted python> -m lider.native_host`.
   - `launch_command` is `shlex.join(launch_argv()+["--minimized"])` (§5), so the `LIDER_LAUNCH` value is shell-quoted twice.
-- [ ] **`install(browsers)`** (`:151-161`) writes the wrapper once, then one manifest per browser, creating folders as needed. **`uninstall`** (`:164-167`) unlinks the manifest. For Gecko browsers it unlinks on **both** sides (legacy and XDG). Missing files are fine. The wrapper itself is not deleted.
-- [ ] **`is_installed`** checks that the manifest file exists in the browser's current host folder (`:147-148`).
-- [ ] **`export_extension(family, dest, variant="full", update_url="")`** (`:170-189`):
+- [x] **`install(browsers)`** (`:151-161`) writes the wrapper once, then one manifest per browser, creating folders as needed. **`uninstall`** (`:164-167`) unlinks the manifest. For Gecko browsers it unlinks on **both** sides (legacy and XDG). Missing files are fine. The wrapper itself is not deleted. — **2.x:** done
+- [x] **`is_installed`** checks that the manifest file exists in the browser's current host folder (`:147-148`). — **2.x:** done
+- [x] **`export_extension(family, dest, variant="full", update_url="")`** (`:170-189`): — **2.x:** `browser::export_extension` over the extension built into the program (`include_dir`); tests `store_variant_has_no_youtube_and_no_key`, `update_url_only_for_the_self_distributed_firefox_build`, `export_extension_per_family`
   - It runs `rmtree(dest)`, then copies `browser_extension/`, skipping `manifest.*.json`, `__pycache__` and `*.py`. The `store` variant also skips `youtube.js` and `youtube.css`.
   - It writes `manifest.json` from `manifest.<family>.json` with `version` set to `EXTENSION_VERSION`.
   - The `store` variant removes `key` and `content_scripts` and sets `description` to `STORE_DESCRIPTION` (`"Send downloads and links from the browser to LID (Linux Internet Downloader)."`, `:54`).
   - With an `update_url` for Firefox, it sets `browser_specific_settings.gecko.update_url`.
   - Output is `indent=2` plus `"\n"`.
-- [ ] **User extension folders:** `$XDG_DATA_HOME/lider/browser-extension/{chromium,firefox}` (`extension_folder`, `:227-229`). They are exported again each time the user installs.
-- [ ] **Reproducible zip** (`zip_folder`, `:192-201`): entries sorted, date 1980-01-01 00:00:00, mode 0644, deflate.
-- [ ] **`firefox_updates_json(version, xpi_url)`** returns `{"addons":{"lid@davidaprilio.github.io":{"updates":[{"version":…,"update_link":…}]}}}` (`:204-206`).
-- [ ] **`build_extensions(dist, work)`** (`:209-224`) produces:
+- [x] **User extension folders:** `$XDG_DATA_HOME/lider/browser-extension/{chromium,firefox}` (`extension_folder`, `:227-229`). They are exported again each time the user installs. — **2.x:** `browser::extension_folder`
+- [x] **Reproducible zip** (`zip_folder`, `:192-201`): entries sorted, date 1980-01-01 00:00:00, mode 0644, deflate. — **2.x:** `browser::zip_folder`; test `release_files_are_reproducible`
+- [x] **`firefox_updates_json(version, xpi_url)`** returns `{"addons":{"lid@davidaprilio.github.io":{"updates":[{"version":…,"update_link":…}]}}}` (`:204-206`). — **2.x:** done
+- [x] **`build_extensions(dist, work)`** (`:209-224`) produces: — **2.x:** `browser::build_extensions`; the build.sh call comes in phase 7
   - `lid-extension-chromium.zip`: full, with `key`
   - `lid-extension-chromium-store.zip`: store variant
   - `lid-extension-firefox.zip`: listed build, no `update_url`
   - `work/firefox-unlisted/`: with `update_url = FIREFOX_UPDATES_URL`
   - `firefox-updates.json`: `EXTENSION_VERSION`, with link `https://github.com/Davidaprilio/lid/releases/download/v<__version__>/lid-extension-firefox.xpi`
-- [ ] **URL constants** (`:39-50`):
+- [x] **URL constants** (`:39-50`): — **2.x:** done
   - `RELEASES_URL = https://github.com/Davidaprilio/lid/releases/latest`
   - `FIREFOX_XPI_URL`, `FIREFOX_ZIP_URL`, `FIREFOX_UPDATES_URL` and `CHROMIUM_ZIP_URL` are `RELEASES_URL + "/download/<file>"`
   - `CHROME_WEB_STORE_URL = ""` and `FIREFOX_ADDONS_URL = ""` (not yet published)
   - `FIREFOX_SIGNED_XPI = False`
   - `YOUTUBE_FILES = ("youtube.js","youtube.css")`
-- [ ] **`write_system_files(root, host_path, python, pythonpath="")`**, used by the packages (`:232-248`):
+- [~] **`write_system_files(root, host_path, python, pythonpath="")`**, used by the packages (`:232-248`): — **2.x:** `write_system_files(root, host_path, lider)`: the host script runs the `lider` binary instead of Python; test `system_files_for_packages`
   - Host script at `root/host_path`, mode 0755. Exact text:
     ```
     #!/bin/sh
@@ -232,7 +232,7 @@ Everything below was read line by line. Paths are relative to the repository roo
   - Every `SYSTEM_HOST_DIRS` manifest, mode 0644.
   - Full-variant extension exports at `usr/share/lider/browser-extension/{chromium,firefox}`.
   - **QUIRK (likely bug, verify):** in the deb, the host starts `/usr/bin/python3 -m lider` with only `PYTHONPATH=/usr/lib/lider`. `/usr/lib/lider/vendor` (PySide6) and `/usr/lib/lider/ytdlp` are not on the path, so starting LID from the browser may fail where there is no system PySide6. Compare `build.sh:106-118`.
-- [ ] **"Browser integration" dialog**, which uses these constants (`ui/dialogs/browsers.py`):
+- [ ] **"Browser integration" dialog**, which uses these constants (`ui/dialogs/browsers.py`): — **2.x:** phase 6 (dialogs)
   - Title "Browser integration". Subtitle "LID talks to its extension through native messaging — no network port is opened."
   - Table columns: check box, `BROWSER`, `LID HELPER`. States: `Installed`, `Not installed`, and `browser not found` (disabled row). Detected browsers are pre-checked, and the header check box toggles all rows.
   - Buttons "Install for checked browsers" and "Remove".
@@ -242,29 +242,29 @@ Everything below was read line by line. Paths are relative to the repository roo
     - Firefox Add-ons if `FIREFOX_ADDONS_URL` is set; otherwise "Firefox (.xpi)" if `FIREFOX_SIGNED_XPI`; otherwise "Firefox (.zip)"
     - always "All downloads" (`RELEASES_URL`)
   - Each link has the URL as its tooltip.
-- [ ] **Other places that show browser status:**
+- [ ] **Other places that show browser status:** — **2.x:** phase 5
   - Status bar text "Browser: connected" or "Browser: not set up". It is computed once and cached: connected means any detected browser has the host installed (`main_window.py:486-491`). Clicking it opens the dialog (`:454-467`).
   - Options → General has "Capture downloads from browsers (needs the LID extension)" (`settings.browser_capture`), a note, "Set up browsers...", and the pill "✓ N browser(s) connected" or "Not set up yet" (`options.py:328-346`).
 
 ## 5. Desktop integration (`lider/desktop.py`)
-- [ ] **Paths:**
+- [x] **Paths:** — **2.x:** `desktop::menu_entry_path`, `autostart_path`, `icon_path`
   - Menu entry: `$XDG_DATA_HOME/applications/lider.desktop` (`:29-30`)
   - Autostart: `$XDG_CONFIG_HOME/autostart/lider.desktop` (`:33-34`)
   - Icon: `$XDG_DATA_HOME/icons/hicolor/scalable/apps/lider.svg`, copied from `lider/ui/assets/icons/app.svg` (`:15,37-38`)
   - System entry: `/usr/share/applications/lider.desktop` (`:16`)
-- [ ] **AppImage detection:** `$APPIMAGE` is non-empty (`:41-42`).
-- [ ] **`launch_argv()`** (`:45-53`):
+- [x] **AppImage detection:** `$APPIMAGE` is non-empty (`:41-42`). — **2.x:** `SysEnv::appimage`
+- [~] **`launch_argv()`** (`:45-53`): — **2.x:** `SysEnv::launch()`: the AppImage, else `lider` on PATH, else this binary; a binary inside a cargo `target/` folder counts as a checkout
   - `[$APPIMAGE]`
   - else `[shutil.which("lider")]`
   - else a **checkout**: `["env", "PYTHONPATH=<pkg parent>", sys.executable, "-m", "lider"]`
   - `launch_command(*extra)` is `shlex.join` of that list plus the extras.
-- [ ] **Exec quoting** (`_exec_arg`, `:61-67`, and `_string`, `:70-72`):
+- [x] **Exec quoting** (`_exec_arg`, `:61-67`, and `_string`, `:70-72`): — **2.x:** `desktop::exec_arg`; test `exec_quoting`
   1. Replace `%` with `%%`.
   2. If the arg is non-empty and contains none of space, tab, newline, `"`, `'`, `\`, `>`, `<`, `~`, `|`, `&`, `;`, `$`, `*`, `?`, `#`, `(`, `)` or backtick (`_RESERVED`, `:18`), use it as it is.
   3. Otherwise wrap it in `"…"`, backslash-escaping `"`, backtick, `$` and `\`. Then string-escape the whole value: `\` becomes `\\`, and newline, tab and CR become `\n`, `\t` and `\r`.
   - An empty arg becomes `""`.
   - Expected results (test): `/a/$x` becomes `"/a/\\$x"`, and `/a/"b"` becomes `"/a/\\"b\\""`.
-- [ ] **Menu entry text, exact** (`:79-93`):
+- [~] **Menu entry text, exact** (`:79-93`): — **2.x:** same text except `Categories=Network;FileTransfer;` (no `Qt;` any more); a 1.x entry is rewritten on the first start (test `a_1x_menu_entry_is_updated_on_the_first_2x_start`); `desktop-file-validate` passes
   ```
   [Desktop Entry]
   Type=Application
@@ -280,7 +280,7 @@ Everything below was read line by line. Paths are relative to the repository roo
   X-LID-Written-By=LID
   ```
   `TryExec` hides the entry once the AppImage is deleted.
-- [ ] **Autostart text, exact** (`:96-103`). It has **no** marker:
+- [x] **Autostart text, exact** (`:96-103`). It has **no** marker: — **2.x:** test `menu_entry_runs_the_appimage`
   ```
   [Desktop Entry]
   Type=Application
@@ -290,13 +290,13 @@ Everything below was read line by line. Paths are relative to the repository roo
   Terminal=false
   X-GNOME-Autostart-enabled=true
   ```
-- [ ] **Helper functions:**
+- [x] **Helper functions:** — **2.x:** `system_installed`, `in_menu`, `listed_elsewhere`
   - `system_installed()`: the system entry exists.
   - `in_menu()`: the user menu entry is a file.
   - `listed_elsewhere()`: an AppImage is running and some *other* `*.desktop` file in the user's applications folder contains the `$APPIMAGE` string. This covers AppImageLauncher, Gear Lever and appimaged (`:115-127`).
-- [ ] **`add_to_menu`** copies the icon, writes the entry and runs `update-desktop-database <folder>` when it exists. That call has a 20 s timeout, its output is captured and errors are ignored. **`remove_from_menu`** unlinks the entry and the icon, then runs the same update (`:130-150`).
-- [ ] **`set_autostart(on)`** writes or unlinks the autostart file. **`autostart_enabled()`** checks that the file exists (`:153-163`).
-- [ ] **`refresh()`**, run at every start (`:166-188`):
+- [x] **`add_to_menu`** copies the icon, writes the entry and runs `update-desktop-database <folder>` when it exists. That call has a 20 s timeout, its output is captured and errors are ignored. **`remove_from_menu`** unlinks the entry and the icon, then runs the same update (`:130-150`). — **2.x:** tests `add_and_remove`
+- [x] **`set_autostart(on)`** writes or unlinks the autostart file. **`autostart_enabled()`** checks that the file exists (`:153-163`). — **2.x:** test `autostart`
+- [x] **`refresh()`**, run at every start (`:166-188`): — **2.x:** `desktop::refresh`, called at start-up in `gui.rs`; tests `refresh_follows_a_moved_appimage`, `refresh_leaves_missing_files_alone`, `a_checkout_does_not_take_over_the_entries`, `an_entry_from_a_menu_editor_is_left_alone`, `an_old_autostart_entry_is_fixed`, `package_entry_takes_over`
   - A checkout (`argv[0]=="env"`) returns `[]` and touches nothing.
   - Rewrite candidates, in order: `menu` (only if the entry exists **and** contains `X-LID-Written-By=LID`), `autostart` (any existing file, marker or not), and `browser helper` (the wrapper, if it exists).
   - If the menu entry is marked **and** a system entry exists, `remove_from_menu()` runs and `"menu"` is reported. The package's entry takes over.
@@ -304,7 +304,7 @@ Everything below was read line by line. Paths are relative to the repository roo
   - It returns the names it rewrote, for example `["menu","autostart","browser helper"]`.
   - Unmarked menu entries, which a menu editor saves, are left alone.
   - It also runs for deb and Arch installs, where `which lider` is found, and re-points autostart and the helper at `/usr/bin/lider`.
-- [ ] **First-start prompt** (`ui/dialogs/menu.py`):
+- [ ] **First-start prompt** (`ui/dialogs/menu.py`): — **2.x:** `desktop::should_offer` is done (test `offer_once_and_only_to_an_appimage`); the dialog is phase 6
   - `should_offer` is true when an AppImage is running and none of these is true: `settings.menu_offered`, `in_menu()`, `system_installed()`, `listed_elsewhere()` (`:37-39`).
   - `offer()` sets `menu_offered=True` and saves the settings **before** asking, so the user is asked once whatever they answer. If they accept, it calls `add_to_menu()` and ignores `OSError` (`:42-50`).
   - Dialog strings (`:15-34`):
@@ -313,20 +313,20 @@ Everything below was read line by line. Paths are relative to the repository roo
     - subtitle "`<AppImage basename>` runs on its own, so the application menu does not list LID yet."
     - note "LID keeps the entry pointed at the AppImage you start, also after you move or update it, and it disappears when the AppImage is deleted. You can change this later in Options → General."
     - buttons "Not now" and "Add to menu" (default)
-- [ ] **Options → General** (`options.py:310-323,704-713`):
+- [ ] **Options → General** (`options.py:310-323,704-713`): — **2.x:** phase 6
   - "Launch LID on startup" reflects whether the autostart file exists.
   - "Show LID in the application menu" is checked and disabled when the system entry exists, with tooltip "Added by the installed LID package".
   - On accept, only changed items are applied: autostart, then add or remove the menu entry. `OSError` is ignored. `settings.launch_on_startup` is saved.
 
 ## 6. Data folders and migration (`lider/core/settings.py`)
-- [ ] **Config:** `$XDG_CONFIG_HOME/lider/` holds `settings.json`. It is saved atomically through `settings.tmp` with `indent=2` (`:45-46,216-221`).
-- [ ] **Data:** `$XDG_DATA_HOME/lider/` holds `downloads.db` (SQLite), `native-host/lider-native-host` and `browser-extension/{chromium,firefox}` (`:49-50`).
-- [ ] **Cache:** `$XDG_CACHE_HOME/lider/`, with `parts/` as the default `temp_dir` (`:53-54,137`).
-- [ ] **Legacy names**, newest first: `lidman`, `lindm` (`:57`).
-- [ ] **`migrate_legacy_dirs()`** (`:60-87`):
+- [x] **Config:** `$XDG_CONFIG_HOME/lider/` holds `settings.json`. It is saved atomically through `settings.tmp` with `indent=2` (`:45-46,216-221`). — **2.x:** phase 1 (`settings.rs`)
+- [x] **Data:** `$XDG_DATA_HOME/lider/` holds `downloads.db` (SQLite), `native-host/lider-native-host` and `browser-extension/{chromium,firefox}` (`:49-50`). — **2.x:** done
+- [x] **Cache:** `$XDG_CACHE_HOME/lider/`, with `parts/` as the default `temp_dir` (`:53-54,137`). — **2.x:** done
+- [x] **Legacy names**, newest first: `lidman`, `lindm` (`:57`). — **2.x:** `paths::LEGACY_NAMES`
+- [x] **`migrate_legacy_dirs()`** (`:60-87`): — **2.x:** `paths::migrate_legacy_dirs`, called first in `gui.rs`
   - For each of config, data and cache, and each legacy sibling folder that exists: if the new folder is missing, rename the old one to it. Otherwise merge: move each item that does not yet exist in the new folder, then `rmdir` the old folder, ignoring failure.
   - Afterwards, in `settings.json`, replace the text `<cache parent>/<legacy>` with the new cache path. This fixes `temp_dir`. Write only if something changed.
-- [ ] **Settings loading** ignores unknown keys, falls back to defaults on any error, and has shims (`dark_mode`, `toolbar_large`, and appending new columns). See `:188-213`. This matters because the native host reads the same file.
+- [x] **Settings loading** ignores unknown keys, falls back to defaults on any error, and has shims (`dark_mode`, `toolbar_large`, and appending new columns). See `:188-213`. This matters because the native host reads the same file. — **2.x:** phase 1
 
 ## 7. Browser extension (`lider/browser_extension/`)
 - [ ] **Manifests**: both are MV3, named "LID Integration", short name "LID", description "Send downloads, links and videos from the browser to LID (Linux Internet Downloader).", version 1.0.0, icons 16/32/48/128 PNG, action title "LID" with popup `popup.html` and icons 16/32.

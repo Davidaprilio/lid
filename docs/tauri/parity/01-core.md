@@ -430,7 +430,7 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
   - `next_id`: `COALESCE(MAX(id),0)+1`.
   - `load_queues`, `save_queue` (INSERT OR REPLACE), `delete_queue`, `close`.
   - One connection, `check_same_thread=False`, guarded by a lock.
-- [ ] Legacy folder migration lives in settings (§5.3), called at startup from `app.py:91`. — **2.x:** `paths::migrate_legacy_dirs` is ported and tested; the call at startup comes with `main.rs` in phase 4
+- [x] Legacy folder migration lives in settings (§5.3), called at startup from `app.py:91`. — **2.x:** `paths::migrate_legacy_dirs` is ported and tested; called first at start-up in `src-tauri/src/gui.rs`
 
 ---
 

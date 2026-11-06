@@ -268,6 +268,18 @@ events, periodic save), `media` (link detection, tool lookup, variants, yt-dlp, 
 - Port `test_app.py`, `test_native_host.py`, `test_browser.py`, `test_desktop.py`.
 - Cross-check: the 1.2 extension talks to the Rust host, and the Rust host talks to a running 1.2 app.
 
+**Status 2026-11-06: done.** `crates/lider-sys/src/`: `env` (how this copy runs: AppImage, installed, checkout,
+binary), `sh` (Python's shell quoting), `ipc` (same socket and protocol; same-user check, a thread per connection),
+`native_host`, `browser` (extension built into the program), `desktop`; `src-tauri/src/`: `main.rs` dispatch,
+`cli.rs`, and the start-up order of `app.py` in `gui.rs` (migration, settings, desktop refresh, store, manager on
+its own tokio runtime, instance socket, hidden start; lines are kept for the window in `take_pending_lines`).
+- 46 tests in `lider-sys` (every case of `test_app.py`, `test_native_host.py`, `test_browser.py`, `test_desktop.py`
+  except the two UI ones, plus the decisions Q1–Q3, Q5, Q6, Q8) and 2 in `cli.rs`.
+- End to end, with temporary folders: a second start hands over the URL and exits in 23 ms, `--minimized` alone
+  leaves a running LID alone, the host sees the running app; the 1.2 host talks to the 2.x app and the 2.x host to a
+  running 1.2 app.
+- Parity `04-integration-packaging.md`: 43 done, 13 changed; what is left there is UI, packaging and release.
+
 ### Phase 5: main window
 - Theme tokens and the three themes, follow-system, font, density, toolbar labels, icons.
 - Menus (all items, shortcuts, mnemonics, enabled rules), menu bar modes, toolbar with the checked-rows chip,
@@ -336,7 +348,7 @@ D2 and D4 still need a measurement or a test in their phase; record the outcome 
 | D1 | Global D-Bus menu (menu bar mode `native`/`both`) cannot be exported by Tauri | 5 | Keep the three modes; `native` = GTK menu bar in the window. Revisit global menu later. |
 | D2 | Tray left-click | 5 | See §5; decide after testing. |
 | D3 | Frontend framework | 0 | Svelte 5 (small bundle, little runtime). |
-| D4 | One binary or a separate `lider-host` | 4 | Decide from the start-up measurement. |
+| D4 | One binary or a separate `lider-host` | 4 | **Measured 2026-11-06: one binary.** `lider --native-host` (release, linking WebKitGTK) answers `hello` in 23 ms median (1.2: 32 ms; budget 50 ms). |
 | Q1 | `lider --minimized` while running shows the window (it sends `--show`) | 4 | Change: do nothing when already running. |
 | Q2 | IPC socket has no peer uid check; any local user can add downloads | 4 | Change: check `SO_PEERCRED`. |
 | Q3 | IPC read blocks the UI for up to 2 s per slow client | 4 | Fixed by design (async server). |
@@ -344,7 +356,7 @@ D2 and D4 still need a measurement or a test in their phase; record the outcome 
 | Q5 | Host accepts `size: true` as 1; `referer`/`page_url` not URL-checked | 4 | Change: reject non-integers, validate URLs. |
 | Q6 | Host error texts are Python-specific (`repr`, JSON decoder messages) | 4 | Change to fixed texts; the extension only checks `ok`. |
 | Q7 | deb auto-launch misses `/usr/lib/lider/vendor` | 7 | Gone with Python; verify launch from the host. |
-| Q8 | No system host folders for Vivaldi, Opera, LibreWolf; CLI message omits LibreWolf | 4 | Change: add them. |
+| Q8 | No system host folders for Vivaldi, Opera, LibreWolf; CLI message omits LibreWolf | 4 | Change: add them. **Done in part:** LibreWolf is in the message. The system folders are not added, because no official source confirms them (only a Gentoo packager uses `/etc/opt/vivaldi/native-messaging-hosts`); per-user registration covers these browsers. Revisit with a confirmed path. |
 | Q9 | Extension menu actions ignore the on/off switch; `handled` set grows forever | later | Extension change, separate `EXTENSION_VERSION` bump; not part of the port. |
 | Q10 | `../aur-lider` is stale at 1.0 and lacks the browser step | 7 | Update with 2.0. |
 | Q11 | deb Homepage-removal line can never run | 7 | Remove it. |

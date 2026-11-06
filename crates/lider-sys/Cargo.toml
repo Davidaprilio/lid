@@ -8,6 +8,16 @@ authors.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+include_dir = "0.7"
+libc = "0.2"
 lider-core.workspace = true
+regex = "1"
 serde.workspace = true
 serde_json.workspace = true
+shlex = "1"
+zip = { version = "2", default-features = false, features = ["deflate"] }
+
+[dev-dependencies]
+base64 = "0.22"
+sha2 = "0.10"
+tempfile = "3"
