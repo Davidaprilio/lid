@@ -162,6 +162,36 @@ pub fn url_hostname(url: &str) -> Option<String> {
     }
 }
 
+/// `urlsplit(url).path`: what follows the network location, without query and fragment.
+pub fn url_path(url: &str) -> &str {
+    let mut rest = strip_scheme(url);
+    if let Some(after) = rest.strip_prefix("//") {
+        let end = after.find(['/', '?', '#']).unwrap_or(after.len());
+        rest = &after[end..];
+    }
+    let rest = rest.split_once('#').map_or(rest, |(p, _)| p);
+    rest.split_once('?').map_or(rest, |(p, _)| p)
+}
+
+/// `urllib.parse.unquote(text, encoding)` with `errors="replace"`: `%XX` escapes are decoded as bytes in
+/// that encoding (UTF-8 when the label is unknown); a `%` that starts no escape stays as it is.
+pub fn unquote(text: &str, encoding: &str) -> String {
+    if !text.contains('%') {
+        return text.to_string();
+    }
+    let bytes: Vec<u8> = percent_encoding::percent_decode_str(text).collect();
+    let enc =
+        encoding_rs::Encoding::for_label(encoding.trim().as_bytes()).unwrap_or(encoding_rs::UTF_8);
+    // Python treats latin-1 as ISO-8859-1 proper, not windows-1252 as the WHATWG labels do.
+    if encoding.trim().eq_ignore_ascii_case("latin-1")
+        || encoding.trim().eq_ignore_ascii_case("latin1")
+        || encoding.trim().eq_ignore_ascii_case("iso-8859-1")
+    {
+        return bytes.iter().map(|&b| b as char).collect();
+    }
+    enc.decode_without_bom_handling(&bytes).0.into_owned()
+}
+
 /// `urlsplit(url).scheme`, lower-cased, or `""`.
 pub fn url_scheme(url: &str) -> String {
     let rest = strip_scheme(url);
@@ -241,6 +271,16 @@ mod tests {
     }
 
     #[test]
+    fn unquote_like_python() {
+        assert_eq!(unquote("a%20b", "utf-8"), "a b");
+        assert_eq!(unquote("%E2%82%AC.txt", "UTF-8"), "€.txt");
+        assert_eq!(unquote("%E9t%E9", "iso-8859-1"), "été");
+        assert_eq!(unquote("%FF", "utf-8"), "\u{FFFD}");
+        assert_eq!(unquote("100%", "utf-8"), "100%");
+        assert_eq!(unquote("%zz", "utf-8"), "%zz");
+    }
+
+    #[test]
     fn hostname_like_urlsplit() {
         assert_eq!(
             url_hostname("https://CDN.Example.com:8080/x").as_deref(),
@@ -255,6 +295,12 @@ mod tests {
         assert_eq!(url_hostname(""), None);
         assert_eq!(url_hostname("https:///path"), None);
         assert_eq!(url_scheme("FTP://h/x"), "ftp");
+        assert_eq!(
+            url_path("http://h:1/files/a%20b.bin?x=1#f"),
+            "/files/a%20b.bin"
+        );
+        assert_eq!(url_path("http://h"), "");
+        assert_eq!(url_path("/rel/x?q"), "/rel/x");
         assert_eq!(url_scheme("x.zip"), "");
     }
 }

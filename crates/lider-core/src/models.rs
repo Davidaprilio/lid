@@ -286,6 +286,25 @@ mod tests {
         assert!(Download::from_json(serde_json::json!({"id": 1, "url": "u"})).is_err());
     }
 
+    /// Times are floats with full precision (Python writes the shortest exact form); they must survive a
+    /// save and load bit for bit.
+    #[test]
+    fn float_times_round_trip_exactly() {
+        for t in [
+            1793950472.7764683,
+            1793950473.1092653,
+            0.1 + 0.2,
+            1e-7,
+            123456789.98765433,
+        ] {
+            let mut d = Download::new(1, "u", "f", "/s");
+            d.date_added = t;
+            let text = d.to_json().to_string();
+            let back: Download = serde_json::from_str(&text).unwrap();
+            assert_eq!(back.date_added.to_bits(), t.to_bits(), "{t} -> {text}");
+        }
+    }
+
     #[test]
     fn progress() {
         let mut d = Download::new(1, "u", "f", "/s");

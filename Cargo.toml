@@ -15,7 +15,7 @@ rust-version = "1.88"
 lider-core = { path = "crates/lider-core" }
 lider-sys = { path = "crates/lider-sys" }
 serde = { version = "1", features = ["derive"] }
-serde_json = { version = "1", features = ["preserve_order"] }
+serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 indexmap = { version = "2", features = ["serde"] }
 
 [profile.release]

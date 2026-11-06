@@ -7,63 +7,63 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
 ## 1. Engine (`engine.py`)
 
 ### 1.1 Constants
-- [ ] `CHUNK = 1 MiB`: read size when no limiter is active (`engine.py:30`).
-- [ ] `LIMITED_CHUNK = 64 KiB`: read size when the per-file or global limiter has rate > 0 (`:31`, `:409-410`).
-- [ ] `MIN_SPLIT = 256 KiB`: a segment is split only if `remaining >= 2*MIN_SPLIT` (512 KiB) (`:32`, `:359`).
-- [ ] `FATAL_HTTP = {400,401,403,404,405,410,451}`: fails the connection immediately, no retry (`:33`, `:442-444`).
-- [ ] `EngineOptions` defaults: `max_connections=8`, `retries=10`, `retry_delay=3.0`, `temp_dir="/tmp"` (`:187-192`). The manager overrides them from Settings.
+- [x] `CHUNK = 1 MiB`: read size when no limiter is active (`engine.py:30`). — **2.x:** `engine::CHUNK`; reqwest hands over what has arrived (like `read1`), so the constant only bounds the unknown-size read; throughput equals 1.2 (bench below)
+- [x] `LIMITED_CHUNK = 64 KiB`: read size when the per-file or global limiter has rate > 0 (`:31`, `:409-410`). — **2.x:** `engine::LIMITED_CHUNK`; the limiter is charged per received piece
+- [x] `MIN_SPLIT = 256 KiB`: a segment is split only if `remaining >= 2*MIN_SPLIT` (512 KiB) (`:32`, `:359`). — **2.x:** `engine::MIN_SPLIT`, `State::split_largest`
+- [x] `FATAL_HTTP = {400,401,403,404,405,410,451}`: fails the connection immediately, no retry (`:33`, `:442-444`). — **2.x:** `engine::FATAL_HTTP`; tests `http_404_is_fatal_with_its_reason`, `forbidden_is_fatal`
+- [x] `EngineOptions` defaults: `max_connections=8`, `retries=10`, `retry_delay=3.0`, `temp_dir="/tmp"` (`:187-192`). The manager overrides them from Settings. — **2.x:** `EngineOptions::default`
 
 ### 1.2 Filename helpers
-- [ ] `parse_content_disposition` (`:42-49`), case-insensitive:
+- [x] `parse_content_disposition` (`:42-49`), case-insensitive: — **2.x:** `names::parse_content_disposition`; test `content_disposition` (also an iso-8859-1 `filename*`)
   1. RFC 5987 `filename*` first. Regex `filename\*\s*=\s*([\w-]*)'[^']*'([^;]+)`. The value is percent-decoded with the given charset (default utf-8, errors replaced), after stripping whitespace and then `"`.
   2. Otherwise quoted `filename="..."`.
   3. Otherwise unquoted `filename=([^;]+)`, stripped.
   - The plain form is not percent-decoded and has no escape handling. `None` or empty input returns `None`.
-- [ ] `filename_from_url`: basename of the percent-decoded URL path. `"index.html"` if empty, e.g. a trailing `/` (`:52-54`).
-- [ ] `safe_filename` (`:57-60`):
+- [x] `filename_from_url`: basename of the percent-decoded URL path. `"index.html"` if empty, e.g. a trailing `/` (`:52-54`). — **2.x:** `names::filename_from_url`; test `url_names`
+- [x] `safe_filename` (`:57-60`): — **2.x:** `names::safe_filename`; test `safe_names`
   - Replace `/`, `\` and `\x00-\x1f` with `_`.
   - Strip whitespace, then strip leading and trailing `.`.
   - If empty, use `"download"`.
   - Truncate the stem to `240 - len(ext)` characters (code points, not bytes). Python `splitext` semantics: last suffix only, and a leading-dot name has no ext.
-- [ ] `unique_path` (`:63-71`): returns the path unchanged if free. Otherwise `stem (n)ext` with n = 2, 3, … until free, using `splitext` on the full path (`a.tar.gz` becomes `a.tar (2).gz`). Test `test_unique_path`.
+- [x] `unique_path` (`:63-71`): returns the path unchanged if free. Otherwise `stem (n)ext` with n = 2, 3, … until free, using `splitext` on the full path (`a.tar.gz` becomes `a.tar (2).gz`). Test `test_unique_path`. — **2.x:** `names::unique_path`; tests `unique_path_numbers`, `name_taken_at_finish_gets_a_number`
 
 ### 1.3 SpeedLimiter: token bucket, shared by everything under one limit (`:74-97`)
-- [ ] `rate = max(0,int(kbps))*1024` bytes/s. 0 means unlimited, and `consume` returns immediately.
-- [ ] `set_kbps` resets tokens to 0 and the clock to now. It is thread-safe.
-- [ ] `consume(n, stop)`:
+- [x] `rate = max(0,int(kbps))*1024` bytes/s. 0 means unlimited, and `consume` returns immediately. — **2.x:** `limiter::SpeedLimiter`; test `unlimited_never_waits`
+- [x] `set_kbps` resets tokens to 0 and the clock to now. It is thread-safe. — **2.x:** `SpeedLimiter::set_kbps`; test `limited_waits_for_the_bytes`
+- [x] `consume(n, stop)`: — **2.x:** `SpeedLimiter::charge`/`consume` (the wait ends on stop through a `CancellationToken`)
   1. Refill `tokens = min(rate*0.25, tokens + dt*rate)`, so the burst cap is 250 ms worth.
   2. Subtract `tokens -= n` (it may go negative).
   3. Set `delay = -tokens/rate` and sleep outside the lock using `stop.wait(delay)`, so a pause interrupts it.
-- [ ] Global limiter: one instance in the manager (`manager.py:102`), shared by all tasks and their connections.
-- [ ] Per-file limiter: one per task, built from `d.speed_limit_kbps` (`engine.py:223`). Each read is charged to both, global first, then file (`:423-425`).
-- [ ] `DownloadTask.set_speed_limit(kbps)` updates `d.speed_limit_kbps` and the live limiter (`:254-256`).
+- [ ] Global limiter: one instance in the manager (`manager.py:102`), shared by all tasks and their connections. — **2.x:** the engine takes a shared `Arc<SpeedLimiter>` (test `speed_limit`); the manager's single instance comes in phase 3
+- [x] Per-file limiter: one per task, built from `d.speed_limit_kbps` (`engine.py:223`). Each read is charged to both, global first, then file (`:423-425`). — **2.x:** global first, then the file limiter; test `per_file_limit_applies_and_can_change`
+- [x] `DownloadTask.set_speed_limit(kbps)` updates `d.speed_limit_kbps` and the live limiter (`:254-256`). — **2.x:** `DownloadTask::set_speed_limit`
 
 ### 1.4 SpeedMeter (`:100-121`)
-- [ ] Sliding 4 s window of `(monotonic_time, bytes)` samples, pruned on `add` and on `rate`.
-- [ ] `rate = sum(bytes) / max(1.0, now - oldest_sample_time)`. The divisor is at least 1 s and measured from the oldest sample, not the window length. Returns 0 when there are no samples.
-- [ ] One meter per task and one per connection. Test `test_snapshot_reports_speed_per_connection`: the per-connection rates sum to roughly the task rate (±50%).
+- [x] Sliding 4 s window of `(monotonic_time, bytes)` samples, pruned on `add` and on `rate`. — **2.x:** `limiter::SpeedMeter`
+- [x] `rate = sum(bytes) / max(1.0, now - oldest_sample_time)`. The divisor is at least 1 s and measured from the oldest sample, not the window length. Returns 0 when there are no samples. — **2.x:** test `meter_divides_by_at_least_a_second`
+- [x] One meter per task and one per connection. Test `test_snapshot_reports_speed_per_connection`: the per-connection rates sum to roughly the task rate (±50%). — **2.x:** `tests/engine.rs` `snapshot_reports_speed_per_connection`
 
 ### 1.5 HttpClient (`:136-172`)
-- [ ] Built per task from `(settings.user_agent, settings.proxy, settings.timeout)` (`manager.py:109-110`).
-- [ ] Proxy: one string used for both `http` and `https` (`engine.py:141-142`).
+- [ ] Built per task from `(settings.user_agent, settings.proxy, settings.timeout)` (`manager.py:109-110`). — **2.x:** `HttpClient::new(user_agent, proxy, timeout)` exists; building it per task from Settings is the manager's job (phase 3)
+- [~] Proxy: one string used for both `http` and `https` (`engine.py:141-142`). — **2.x:** one proxy for http and https (test `http_proxy_is_used`); environment proxies still apply when none is set (reqwest system proxy); `socks5://` and `socks5h://` now work, which urllib could not do despite the tab's name (PLAN §9 Q17); FTP is never proxied
   - **Quirk:** when `proxy == ""`, urllib's default ProxyHandler still applies, so `http_proxy`/`https_proxy`/`no_proxy` env vars are honoured.
   - FTP is never proxied by the explicit setting.
-- [ ] Timeout: socket timeout per connect and per read, default 30 s.
-- [ ] Redirects: followed automatically by urllib (301/302/303/307/308). Headers are copied to the redirect target, including Authorization, Cookie and Range.
+- [x] Timeout: socket timeout per connect and per read, default 30 s. — **2.x:** connect timeout plus a timeout around each response and each read; test `no_answer_times_out`
+- [x] Redirects: followed automatically by urllib (301/302/303/307/308). Headers are copied to the redirect target, including Authorization, Cookie and Range. — **2.x:** own redirect loop that keeps every header, 10 at most, urllib's loop message; tests `redirects_keep_headers_and_the_name`, `redirect_loop_is_an_error`. As in 1.x, `d.url` is not updated
   - `probe` reports the final URL (`resp.geturl()`), but `d.url` is never updated, so every connection follows the redirects again (`:165`, `:402`).
-- [ ] FTP: for `ftp://` the URL is opened with no headers and no Range (`:146-147`). The response has no `.status`, so it is treated as 200.
-- [ ] Headers on every HTTP(S) request (`:148-151`):
+- [~] FTP: for `ftp://` the URL is opened with no headers and no Range (`:146-147`). The response has no `.status`, so it is treated as 200. — **2.x:** `ftp.rs`: one connection, no range, binary, user/password from the URL or anonymous, size from `SIZE`; test `ftp_download`. A URL naming a folder is an error instead of downloading the listing (PLAN §9 Q17)
+- [x] Headers on every HTTP(S) request (`:148-151`): — **2.x:** test `redirects_keep_headers_and_the_name` checks User-Agent, Accept, Accept-Encoding, Range, Cookie, Referer
   - `User-Agent: <settings.user_agent>`
   - `Accept: */*`
   - `Accept-Encoding: identity` (never compressed)
   - `Range: bytes=<start>-` when ranged. Always open-ended, never `start-end`.
   - Then `headers` passed in are merged last and **can override** the defaults above.
-- [ ] `request_headers(d)` (`:175-182`):
+- [x] `request_headers(d)` (`:175-182`): — **2.x:** `http::request_headers`; test `headers_from_a_download`
   1. Start from a copy of `d.headers` (extra headers such as `Cookie` and `User-Agent` from the browser extension, **(UI)** `main_window.py:989-993`).
   2. `Referer` = `d.referer` if set (overrides).
   3. `Authorization: Basic base64(user:pass)` if `d.username` is set; the password may be empty.
   - There is no cookie jar, no Digest auth and no other auth.
-- [ ] `probe(url, headers, keep_open)` (`:154-172`):
+- [x] `probe(url, headers, keep_open)` (`:154-172`): — **2.x:** `HttpClient::probe`; tests `redirects_keep_headers_and_the_name`, `ftp_download`
   - Sends a **GET** (not HEAD) with `Range: bytes=0-`.
   - If status is 206 and `Content-Range` matches `bytes\s+\d+-\d+/(\d+)`: `size = total` and `resumable = True`.
   - Else if `Content-Length` is present: `size = Content-Length` and `resumable = False`.
@@ -71,12 +71,12 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
   - `filename = safe_filename(CD filename or filename_from_url(final_url))`. `content_type` comes from `Content-Type`.
   - `keep_open=True` keeps the response, which becomes the first connection's stream with no second request.
   - Status ≥ 400 raises HTTPError, which the caller handles.
-- [ ] `ProbeResult` fields: `url` (final), `size`, `resumable`, `filename`, `content_type`, `response` (`:126-133`).
+- [x] `ProbeResult` fields: `url` (final), `size`, `resumable`, `filename`, `content_type`, `response` (`:126-133`). — **2.x:** `http::ProbeResult`
 
 ### 1.6 Connection model (`:195-203`)
-- [ ] Fields: `index`, `segment`, `status` (initially `"Connecting..."`), `received`, `alive`, `thread`, `meter`.
-- [ ] `index = len(connections)+1`, 1-based. The list never shrinks; dead connections stay with `alive=False` (`:344`).
-- [ ] Connection status strings shown in the UI:
+- [x] Fields: `index`, `segment`, `status` (initially `"Connecting..."`), `received`, `alive`, `thread`, `meter`. — **2.x:** `engine::Conn` / `ConnectionInfo` (a tokio task instead of a thread)
+- [x] `index = len(connections)+1`, 1-based. The list never shrinks; dead connections stay with `alive=False` (`:344`). — **2.x:** test `snapshot_reports_speed_per_connection` checks indexes 1..4
+- [x] Connection status strings shown in the UI: — **2.x:** same strings; tests check "Error: server ignored the Range header" and "HTTP 403 Forbidden"
   - `"Connecting..."`
   - `"Receiving data..."`
   - `"Reconnecting (n/retries)..."`
@@ -86,96 +86,96 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
   - `"Error: server ignored the Range header"`
 
 ### 1.7 Run flow (`DownloadTask._run`, `:273-324`)
-1. [ ] Set `d.last_try = now`, `d.error = ""`, `status = CONNECTING`.
-2. [ ] Probe with `request_headers(d)` and keep the response open.
-3. [ ] Resume only when **all** of these hold: `d.segments` is non-empty, `d.resumable` is truthy, `probe.resumable` is true, `probe.size == d.size`, and the part file exists (`:281-287`). The probe response is then closed and connections reopen at their saved `pos`.
-4. [ ] Otherwise start fresh:
+1. [x] Set `d.last_try = now`, `d.error = ""`, `status = CONNECTING`. — **2.x:** `Shared::run`
+2. [x] Probe with `request_headers(d)` and keep the response open. — **2.x:** `Shared::prepare_and_download`
+3. [x] Resume only when **all** of these hold: `d.segments` is non-empty, `d.resumable` is truthy, `probe.resumable` is true, `probe.size == d.size`, and the part file exists (`:281-287`). The probe response is then closed and connections reopen at their saved `pos`. — **2.x:** test `pause_and_resume`
+4. [x] Otherwise start fresh: — **2.x:** test `resume_starts_over_when_the_server_dropped_ranges`
    - Take `d.size`/`d.resumable` from the probe.
    - `segments = [Segment(0, size if size >= 0 else -1, 0)]`.
    - Reuse the probe response for connection #1.
    - **Delete the existing part file** (`:290-295`).
-5. [ ] Recompute `d.downloaded = Σ(pos-start)` (`:296`).
-6. [ ] `splittable = resumable and size > 0` (`:297`).
-7. [ ] Open the part file:
+5. [x] Recompute `d.downloaded = Σ(pos-start)` (`:296`). — **2.x:** done
+6. [x] `splittable = resumable and size > 0` (`:297`). — **2.x:** done
+7. [x] Open the part file: — **2.x:** `OpenOptions` with mode 0o644, `set_len`
    - `mkdir -p temp_dir`.
    - `open(part, O_RDWR|O_CREAT, 0644)`.
    - If `size >= 0`, `ftruncate(size)` pre-sizes it as a sparse file (`:299-302`).
-8. [ ] If stopped during the probe, close the response and skip workers. Otherwise set `status = DOWNLOADING`, spawn workers, and join every connection thread, looping while any is still alive (`:304-315`).
-9. [ ] Errors in `_run`:
+8. [x] If stopped during the probe, close the response and skip workers. Otherwise set `status = DOWNLOADING`, spawn workers, and join every connection thread, looping while any is still alive (`:304-315`). — **2.x:** done
+9. [~] Errors in `_run`: — **2.x:** same flow; OS error texts are Rust's (PLAN §9 Q16)
    - `HTTPError` sets `"HTTP <code> <reason>"`.
    - `OSError`/`HTTPException`/`ValueError` set `str(e.reason or e)`, or the class name if empty (`:316-319`).
    - The fd is always closed. `_finish()` always runs.
-- [ ] Part file location: `<temp_dir>/<part_name>.part`. `part_name` defaults to `str(d.id)`, and media streams pass `"<id>-media-<kind>"` (`:219`, `:236-237`).
+- [x] Part file location: `<temp_dir>/<part_name>.part`. `part_name` defaults to `str(d.id)`, and media streams pass `"<id>-media-<kind>"` (`:219`, `:236-237`). — **2.x:** `DownloadTask::new(.., part_name)`; media streams use it in phase 3
   - The manager's default `temp_dir` is `~/.cache/lider/parts` (`settings.py:137`).
-- [ ] Writes use `os.pwrite(fd, data, offset)` at the segment's `pos`, outside the lock (`:433`).
+- [~] Writes use `os.pwrite(fd, data, offset)` at the segment's `pos`, outside the lock (`:433`). — **2.x:** `FileExt::write_all_at`; when a write fails, the bytes are given back to the segment so the retry writes them again (1.x left a hole of zeros; PLAN §9 Q17)
 
 ### 1.8 Segmentation (`:326-374`)
-- [ ] `limit = max_connections` if splittable, else 1 (`:328`).
-- [ ] Spawn:
+- [x] `limit = max_connections` if splittable, else 1 (`:328`). — **2.x:** `max_connections` below 1 counts as 1
+- [x] Spawn: — **2.x:** `Shared::spawn_workers`; test `segmented_download_is_byte_exact`
   1. One connection per pending (not done) segment, up to `limit`. The first gets the probe response (`:335-336`).
   2. While splittable and fewer than `limit` connections exist, split the largest segment and add a connection for it. Stop when nothing can be split (`:337-341`).
-- [ ] `_split_largest` (caller holds the lock):
+- [x] `_split_largest` (caller holds the lock): — **2.x:** `State::split_largest`, first segment wins a tie like Python's `max`
   - Candidates are segments that are not done **and owned by an alive connection**. Pick the one with the largest `remaining`.
   - Abort if `remaining < 512 KiB`.
   - `mid = pos + remaining//2`. Add a new `Segment(mid, end, mid)` and set the old `end = mid`.
   - Append the new segment and **sort segments by start** (`:352-366`).
-- [ ] `_next_work`: when a connection finishes a segment it first takes an **unowned, not-done** segment (abandoned by a failed connection, or left over on resume). Otherwise it splits the largest if splittable, else gets nothing (`:368-374`).
-- [ ] Worker loop (`:376-391`):
+- [x] `_next_work`: when a connection finishes a segment it first takes an **unowned, not-done** segment (abandoned by a failed connection, or left over on resume). Otherwise it splits the largest if splittable, else gets nothing (`:368-374`). — **2.x:** `State::next_work`
+- [x] Worker loop (`:376-391`): — **2.x:** `Shared::worker`
   - `_fetch`. Any result other than `"done"`, or a stop, sets `segment = None` and ends the worker. A failed connection is not replaced; its segment is abandoned for others to pick up.
   - On `"done"`, take `_next_work()`.
   - On a normal end with status `Receiving…`/`Connecting…`, set status `"Finished"`.
   - `alive = False` in `finally`.
-- [ ] The owner of a split segment notices `want = end - pos <= 0` on its next read, returns `"done"` and closes its open-ended response (`:411-414`).
+- [x] The owner of a split segment notices `want = end - pos <= 0` on its next read, returns `"done"` and closes its open-ended response (`:411-414`). — **2.x:** done
 
 ### 1.9 `_fetch`: reading, retries, fallbacks (`:393-465`)
-- [ ] `attempts` counts per `_fetch` call (per segment assignment) and is **not reset** after progress. Headers are computed once per call.
-- [ ] (Re)connect:
+- [x] `attempts` counts per `_fetch` call (per segment assignment) and is **not reset** after progress. Headers are computed once per call. — **2.x:** `Shared::fetch`
+- [x] (Re)connect: — **2.x:** test `range_ignored_by_a_later_connection_fails_clearly`
   - Set status `"Connecting..."`.
   - `ranged = splittable or seg.pos > 0`.
   - If ranged and the response status is not 206, raise `ResumeNotSupported("server ignored the Range header")`. The connection fails immediately, the error is set and there is **no retry** (`:399-404`, `:437-440`).
-- [ ] Reading:
+- [x] Reading: — **2.x:** done
   - Status `"Receiving data..."`. Use `read1` (whatever has arrived, up to the step size).
   - Each read is `min(step, want)` where `want = end - pos`, or `step` if `end < 0`.
-- [ ] EOF (empty read):
+- [x] EOF (empty read): — **2.x:** tests `unknown_size_streams_to_end`, `dropped_connection_is_retried`
   - Unknown size (`end < 0`): set `seg.end = pos` and `d.size = pos`, return done. This is the stream-to-end mode (test `test_unknown_size_streams_to_end`).
   - Known size: raise `ConnectionError("connection closed by the server")`, which is retried.
-- [ ] Clamp: `allowed = min(len(data), end - pos)`, recomputed after the limiter sleep because a split may have shrunk `end`. Then advance `pos`, `d.downloaded` and `conn.received`, pwrite, and add to the meters (`:426-435`).
-- [ ] Errors:
+- [x] Clamp: `allowed = min(len(data), end - pos)`, recomputed after the limiter sleep because a split may have shrunk `end`. Then advance `pos`, `d.downloaded` and `conn.received`, pwrite, and add to the meters (`:426-435`). — **2.x:** done
+- [~] Errors: — **2.x:** same handling; a bad URL or other invalid input fails the connection with a message instead of killing its thread (1.x quirk; PLAN §9 Q17)
   - Fatal HTTP code: `conn.status = task.error = "HTTP <code> <reason>"`, return failed.
   - Other HTTP codes (5xx, 416, 429…): `err = "HTTP <code>"`, retry.
   - `OSError`/`HTTPException`, including socket timeout and URLError: `err = reason/str/classname`, retry (`:441-447`).
   - **Quirk:** `ValueError` is not caught inside `_fetch`, so the thread dies and `alive=False`.
-- [ ] Retry:
+- [x] Retry: — **2.x:** done
   1. `attempts += 1`. If `attempts > retries`, set `conn.status = "Error: <err>"`, `task.error = err`, return failed. So retries=10 means up to 11 attempts.
   2. **Non-resumable server:** roll back `d.downloaded -= pos-start`, set `pos = start`, `received = 0` and start over.
   3. Status `"Reconnecting (n/retries)..."`, wait `retry_delay` (interruptible) (`:452-464`).
-- [ ] Tests:
+- [x] Tests: — **2.x:** `tests/engine.rs`: `dropped_connection_is_retried`, `server_without_ranges_uses_one_connection`, `closed_port_is_an_error` (+ `http_404_is_fatal_with_its_reason`)
   - `test_dropped_connection_is_retried` (drop after 300 KB, the result is still byte-exact).
   - `test_server_without_ranges_uses_one_connection` (`resumable False`, 1 connection).
   - `test_http_404_is_an_error` (actually a closed port, ending in ERROR with a non-empty `error`).
 
 ### 1.10 Finish (`:467-491`)
-- [ ] `complete = segments non-empty and all done`. Completeness is decided by the segments, not by `task.error`.
-- [ ] If complete and not stopped:
+- [x] `complete = segments non-empty and all done`. Completeness is decided by the segments, not by `task.error`. — **2.x:** `Shared::finish`
+- [x] If complete and not stopped: — **2.x:** rename, or copy and remove across file systems; test `name_taken_at_finish_gets_a_number`
   1. Status `ASSEMBLING`.
   2. `mkdir -p save_dir`.
   3. `target = unique_path(d.path)` for **name collisions at finish time**.
   4. `shutil.move(part, target)`, which also works across filesystems.
   5. `d.filename = basename(target)`, `d.size = d.downloaded`, `d.segments = []`, status `COMPLETE`.
   - On OSError: `d.error = "Cannot save the file: <e>"`, status `ERROR`.
-- [ ] Stopped: `PAUSED`, even if all segments are done. Segments are kept; on the next start `can_resume` holds, there is no pending work, and it completes.
-- [ ] Neither: `d.error = task.error or "Download failed"`, status `ERROR`.
-- [ ] Then the `on_finish(task)` callback runs. The manager queues it for `poll`.
+- [x] Stopped: `PAUSED`, even if all segments are done. Segments are kept; on the next start `can_resume` holds, there is no pending work, and it completes. — **2.x:** test `pause_and_resume`
+- [x] Neither: `d.error = task.error or "Download failed"`, status `ERROR`. — **2.x:** done
+- [x] Then the `on_finish(task)` callback runs. The manager queues it for `poll`. — **2.x:** `DownloadTask::on_finish(closure)`
 
 ### 1.11 Public surface / snapshot (`:234-267`)
-- [ ] `start()` (daemon thread `dl-<id>`), `stop()` (sets the event), `join(timeout)`, `running`, `set_speed_limit`, `error`, `connections`, `meter`, `d`, `part_path`.
-- [ ] `snapshot()` returns:
+- [x] `start()` (daemon thread `dl-<id>`), `stop()` (sets the event), `join(timeout)`, `running`, `set_speed_limit`, `error`, `connections`, `meter`, `d`, `part_path`. — **2.x:** `start(&Handle)`, `stop`, `join(timeout)`, `is_running`, `set_speed_limit`, `error`, `download`, `part_path`, `snapshot`
+- [x] `snapshot()` returns: — **2.x:** `engine::Snapshot`
   - `segments`: a copy of `[Segment]`.
   - `connections`: `[(index, received, status, alive, rate if alive else 0.0)]`.
   - `rate`: task meter rate.
   - `time_left`: `int((size-downloaded)/rate)`, or -1 if rate is 0 or size ≤ 0.
-- [ ] Resume persistence: what is saved per segment is `{start, end, pos}`, plus `d.size`, `d.downloaded`, `d.resumable` in the Download JSON. The manager saves running tasks every >5 s and on every finish (`manager.py:482-484`, `:460-463`).
-- [ ] Tests:
+- [ ] Resume persistence: what is saved per segment is `{start, end, pos}`, plus `d.size`, `d.downloaded`, `d.resumable` in the Download JSON. The manager saves running tasks every >5 s and on every finish (`manager.py:482-484`, `:460-463`). — **2.x:** `{start,end,pos}`, size, downloaded, resumable are in the Download JSON (golden test); the periodic save is the manager's (phase 3)
+- [x] Tests: — **2.x:** `tests/engine.rs`: `segmented_download_is_byte_exact`, `pause_and_resume`, `speed_limit`
   - `test_segmented_download_is_byte_exact`: 5 MiB+123, 8 connections, SHA matches, more than one connection, more than one non-`bytes=0-` Range request.
   - `test_pause_and_resume`: pause after ≥512 KB gives PAUSED with segments and `0 < downloaded < size`. A new task on the same Download completes byte-exact, and **no request after the first resumes from `bytes=0-`**.
   - `test_speed_limit`: 600 KB under a 400 KB/s global limit takes more than 1 s.

@@ -208,7 +208,7 @@ Each phase ends with its parity items ticked and its tests green in CI. Python s
 - `tests/golden.rs`: the 1.2 profile reads back exactly as 1.2 reads it, and what 2.x writes reads back the same.
 - Downgrade check: `tests/golden/check_rust_profile.py` reads the profile written by 2.x with the 1.2 Python code
   and compares it with `expected.json` (also in CI).
-- Parity: 42 items done and 4 changed in `parity/01-core.md` (decisions Q14–Q16 are new and need a yes).
+- Parity: 42 items done and 4 changed in `parity/01-core.md` (decisions Q14–Q16 accepted 2026-11-06).
   Still open from this area: the startup call of the legacy migration (phase 4) and `remember_last` in the UI (phase 6).
 
 ### Phase 2: engine
@@ -218,6 +218,27 @@ Each phase ends with its parity items ticked and its tests green in CI. Python s
 - Port `tests/httpfixture.py` to a Rust test server (ranges, ignore-range, no length, drops, refusals,
   throttling) and port every `test_engine.py` case.
 - Benchmark against 1.2 on the local fixture: at least the same throughput at 8 and 32 connections.
+
+**Status 2026-11-06: done.** `crates/lider-core/src/`: `names` (Content-Disposition, URL names, safe names,
+unique paths), `limiter` (token bucket, speed meter), `http` (reqwest, HTTP/1.1 only, own redirect loop that keeps
+every header, timeout per read, proxy), `ftp` (suppaftp), `engine` (`DownloadTask` on tokio: dynamic segmentation,
+retries, fallbacks, resume, pwrite, finish).
+- `tests/engine.rs` (19 tests) with `tests/fixture/` (port of `httpfixture.py` plus redirects, a hanging path,
+  proxy mode, a range switch and a small FTP server): every `test_engine.py` case plus redirects, 403/404, the
+  Range fallback, name collisions, the per-file limit, FTP, proxy and timeouts. Ran 5 times in a row without a failure.
+- Benchmark (release build, `examples/bench_server.rs` + `examples/bench_download.rs`, 1.2 through the same server,
+  written to tmpfs):
+
+  | Server | Connections | 2.x | 1.2 |
+  |---|---|---|---|
+  | loopback, 1 GiB, no cap | 1 / 8 / 32 | 4453 / 3868 / 3855 MB/s | 3340 / 3799 / 2741 MB/s |
+  | 200 MiB, 20 MB/s per connection | 1 / 8 / 16 | 18 / 146 / 294 MB/s | 18 / 146 / 293 MB/s |
+
+- Parity `01-core.md`: 98 done, 9 changed (decision Q17 is new and needs a yes). Open in the engine section, all
+  waiting for the manager in phase 3: the single global limiter, the client built from Settings, the periodic save.
+- `parity-progress.sh` now also counts numbered items (`1. [ ]`), which adds 15 to the total.
+- Fixed on the way: serde_json's default float parser is not exact, so a `date_added` like 1793950472.7764683
+  came back one bit off after a save. The workspace enables `float_roundtrip`; test `float_times_round_trip_exactly`.
 
 ### Phase 3: manager, queues, scheduler, YouTube
 - manager (every public method and event), queues, scheduler with injected clock, checksum flow
@@ -313,9 +334,10 @@ D2 and D4 still need a measurement or a test in their phase; record the outcome 
 | Q11 | deb Homepage-removal line can never run | 7 | Remove it. |
 | Q12 | Pause All and Stop All do the same; only Stop All has an enabled rule | 5 | Keep both items, give Pause All the same rule. |
 | Q13 | "Grabber projects" tree node is always empty | 5 | Keep as is (parity). |
-| Q14 | A settings value of the wrong JSON type was stored as is and could fail later | 1 | **Proposed in phase 1, built, awaiting confirmation:** that key keeps its default; the rest of the file loads. |
-| Q15 | One unreadable row in `downloads.db` (or `QueueSchedule(**data)` with an unknown key) stopped 1.x from starting | 1 | **Proposed in phase 1, built, awaiting confirmation:** skip the bad row, leave it in the file, report it (the UI can show a note in phase 5); unknown queue keys are kept like download keys. |
-| Q16 | Verifier error text is Python's (`[Errno 2] No such file or directory: '<path>'`) | 1 | **Proposed in phase 1, built, awaiting confirmation:** Rust's OS message plus the path. The text only appears after "Checksum check failed:". |
+| Q14 | A settings value of the wrong JSON type was stored as is and could fail later | 1 | **Accepted 2026-11-06:** that key keeps its default; the rest of the file loads. |
+| Q15 | One unreadable row in `downloads.db` (or `QueueSchedule(**data)` with an unknown key) stopped 1.x from starting | 1 | **Accepted 2026-11-06:** skip the bad row, leave it in the file, report it (the UI can show a note in phase 5); unknown queue keys are kept like download keys. |
+| Q16 | Verifier error text is Python's (`[Errno 2] No such file or directory: '<path>'`) | 1 | **Accepted 2026-11-06:** Rust's OS message plus the path. The text only appears after "Checksum check failed:". |
+| Q17 | Engine edge cases in 1.x: a failed disk write left zeros in the file; invalid input killed a connection's thread; `socks5://` proxies did not work; an `ftp://` folder URL downloaded the listing | 2 | **Proposed in phase 2, built, awaiting confirmation:** give the bytes back and retry the write; fail the connection with a message; SOCKS works; a folder URL is an error. |
 
 ## 10. Prerequisites on this machine
 
