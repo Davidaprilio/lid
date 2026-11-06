@@ -282,7 +282,9 @@ fn rows_cells_and_columns() {
     assert_eq!(
         view::cell_text(&m.downloads[&2], "save_to", None),
         // The OS's own separator before the file name.
-        std::path::Path::new("/home/u/Downloads").join("archive.zip").to_string_lossy()
+        std::path::Path::new("/home/u/Downloads")
+            .join("archive.zip")
+            .to_string_lossy()
     );
 }
 

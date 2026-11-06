@@ -79,6 +79,7 @@ impl InstanceServer {
     ) -> io::Result<InstanceServer> {
         let rt = tokio::runtime::Builder::new_current_thread()
             .enable_io()
+            .enable_time()
             .build()?;
         let pipe = path(name);
         let options = || {
