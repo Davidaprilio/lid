@@ -2355,6 +2355,7 @@ dependencies = [
  "arboard",
  "chrono",
  "encoding_rs",
+ "gtk",
  "indexmap 2.14.2",
  "lider-core",
  "lider-sys",

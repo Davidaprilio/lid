@@ -1,4 +1,5 @@
 // Helpers of the dialog windows: theme, route parameters, closing and sizing the window.
+import { tick } from 'svelte'
 import { invoke } from '@tauri-apps/api/core'
 import { listen } from '@tauri-apps/api/event'
 import { LogicalSize } from '@tauri-apps/api/dpi'
@@ -31,7 +32,8 @@ export function close() {
 
 /** Make the window as tall as its content (dialogs grow and shrink as parts show and hide). */
 export async function fit(width?: number) {
-  await new Promise((r) => requestAnimationFrame(() => r(null)))
+  // Svelte's pending updates, not a frame: a hidden window gets no animation frames.
+  await tick()
   const el = document.querySelector<HTMLElement>('.shell') ?? document.body
   const w = width ?? Math.max(el.scrollWidth, window.innerWidth)
   // The natural height: .shell fills the window (min-height: 100vh), so measure it without that, or a
@@ -41,6 +43,14 @@ export async function fit(width?: number) {
   const h = el.scrollHeight
   el.style.minHeight = min
   await win().setSize(new LogicalSize(w, h))
+  mark('fitted')
+  // The window was hidden until it had its size (windows.rs).
+  invoke('dialog_ready').catch(() => {})
+}
+
+/** LIDER_TIMING=1: a stage of this dialog's start, logged by the backend with the time since the request. */
+export function mark(stage: string) {
+  invoke('dialog_mark', { stage }).catch(() => {})
 }
 
 export function setTitle(title: string) {

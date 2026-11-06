@@ -2,7 +2,6 @@
 // dialog window runs its part and reports back with the "lid://e2e" event.
 import { invoke } from '@tauri-apps/api/core'
 import { emit, listen } from '@tauri-apps/api/event'
-import { Window } from '@tauri-apps/api/window'
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 const all = (sel: string) => Array.from(document.querySelectorAll<HTMLElement>(sel))
@@ -225,7 +224,7 @@ export async function runMain(dispatch: (id: string) => Promise<unknown>, select
     await step(() => dispatch('scheduler'))
     await waitFor('queue node', () => all('.node .title').some((t) => t.textContent === 'E2E queue'))
     log.push('ok  the new queue shows in the sidebar')
-    await until('scheduler closed', async () => (await Window.getByLabel('scheduler')) === null)
+    await until('scheduler closed', async () => !(await invoke<boolean>('dialog_open', { label: 'scheduler' })))
     log.push('ok  the Scheduler window closed')
     await step(() => dispatch('add'))
     await waitFor('added', () => all('.list .row').length === 14 && all('.list .row').some((r) => r.textContent!.includes('archive.zip')))

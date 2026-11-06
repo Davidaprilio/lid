@@ -1,7 +1,6 @@
 // Screenshot scenario (LIDER_E2E=shots, tests/e2e/shots.sh under Xvfb): every window and message box in the
 // three themes, saved by the backend (`e2e_shot`) for the side-by-side review with 1.x (PLAN.md phase 8).
 import { invoke } from '@tauri-apps/api/core'
-import { Window } from '@tauri-apps/api/window'
 import { openDialog } from '../lib/api'
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
@@ -61,7 +60,7 @@ export async function run(dispatch: (id: string) => Promise<unknown>, select: (n
         await openDialog(label, route, title, w, h, false)
         await sleep(name === 'add-file-info' ? 3500 : 1500)
         await invoke('e2e_shot', { label, name: `${theme}--${name}` })
-        await (await Window.getByLabel(label))?.close()
+        await invoke('dialog_close', { label })
         await sleep(300)
       }
       log.push(`ok  ${theme}`)

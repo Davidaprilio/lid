@@ -186,7 +186,11 @@ pub fn ready(app: AppHandle, state: State<'_, AppState>) -> MainView {
     }
     // Look for a newer LID once per run (crate::update).
     static UPDATE_CHECK: std::sync::Once = std::sync::Once::new();
-    UPDATE_CHECK.call_once(|| crate::update::check_at_startup(&app));
+    UPDATE_CHECK.call_once(|| {
+        crate::update::check_at_startup(&app);
+        // A loaded spare window, so the first dialog opens at once (windows.rs).
+        crate::windows::prepare_spare(&app, std::time::Duration::from_secs(2));
+    });
     let offer = std::mem::take(&mut *app::lock(&state.offer_menu));
     if offer && !state.start_hidden {
         // Asked once: remembered before the box shows, so quitting with it open does not ask again (1.x `offer`).
@@ -675,7 +679,7 @@ pub fn set_completion_options(
     window: tauri::WebviewWindow,
     options: crate::windows::CompletionOptions,
 ) {
-    crate::windows::set_completion_options(window.label(), options);
+    crate::windows::set_completion_options(&crate::windows::logical(window.label()), options);
 }
 
 /// Open (or bring forward) one of LID's dialog windows.
@@ -745,7 +749,7 @@ pub fn e2e_env(name: String) -> Option<String> {
 #[tauri::command]
 pub fn e2e_shot(app: AppHandle, label: String, name: String) -> Res<()> {
     let dir = std::env::var("LIDER_E2E_SHOTS").map_err(|_| "not in the screenshot scenario")?;
-    let w = app.get_webview_window(&label).ok_or("no such window")?;
+    let w = crate::windows::get(&app, &label).ok_or("no such window")?;
     let pos = w.outer_position().map_err(|e| e.to_string())?;
     let size = w.outer_size().map_err(|e| e.to_string())?;
     let out = std::path::Path::new(&dir).join(format!("{name}.png"));

@@ -34,5 +34,9 @@ url = "2"
 tokio = { version = "1", features = ["rt-multi-thread"] }
 trash = "5"
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# Dialogs that take over a spare window are made transient for the main window (windows.rs).
+gtk = "0.18"
+
 [dev-dependencies]
 tempfile = "3"

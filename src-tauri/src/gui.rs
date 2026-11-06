@@ -164,6 +164,11 @@ pub fn run(cli: Cli, socket: String) -> ExitCode {
             crate::dialogs::media_default,
             crate::dialogs::media_variant,
             crate::dialogs::ytdlp_offer,
+            crate::windows::dialog_mark,
+            crate::windows::dialog_ready,
+            crate::windows::spare_ready,
+            crate::windows::dialog_open,
+            crate::windows::dialog_close,
             crate::update::update_prefs,
             crate::update::update_set_prefs,
             crate::update::update_check,
@@ -181,6 +186,7 @@ pub fn run(cli: Cli, socket: String) -> ExitCode {
         .on_window_event(|window, e| {
             if let WindowEvent::Destroyed = e {
                 crate::dialogs::window_closed(window.app_handle(), window.label());
+                crate::windows::forget(window.label());
             }
             if window.label() == "main"
                 && let WindowEvent::CloseRequested { api, .. } = e
