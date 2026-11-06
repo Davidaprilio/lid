@@ -530,6 +530,7 @@ async fn resolver_error_is_reported() {
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn merging_without_ffmpeg_says_so() {
+    needs_ffmpeg!(); // to make the test streams
     let m = mt().await;
     let opts = EngineOptions {
         temp_dir: m.dir.join("parts").to_string_lossy().into_owned(),

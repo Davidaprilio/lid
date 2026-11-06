@@ -34,11 +34,21 @@ pub fn is_youtube(url: &str) -> bool {
 
 // --------------------------------------------------------------------------- tools
 
-/// A program on PATH (`shutil.which`).
+/// A program on PATH (`shutil.which`); on Windows `name.exe` (and `.cmd`, `.bat`) as well.
 pub fn which(name: &str) -> Option<PathBuf> {
     let path = std::env::var_os("PATH")?;
+    let names: Vec<String> = if cfg!(windows) {
+        vec![
+            format!("{name}.exe"),
+            format!("{name}.cmd"),
+            format!("{name}.bat"),
+            name.to_string(),
+        ]
+    } else {
+        vec![name.to_string()]
+    };
     std::env::split_paths(&path)
-        .map(|dir| dir.join(name))
+        .flat_map(|dir| names.iter().map(move |n| dir.join(n)).collect::<Vec<_>>())
         .find(|p| is_executable(p))
 }
 
