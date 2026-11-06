@@ -93,6 +93,14 @@
         <span class="big" style="font-size:1.67em">{info.percent}</span>
         <div class="bar" style="flex:1"><div style:width="{Math.round(info.bar * 100)}%"></div></div>
       </div>
+      <div style="display:flex;align-items:center;gap:8px">
+        <button class="ghostBtn" onclick={toggleDetails}>{details ? '<< Hide details' : 'Show details >>'}</button>
+        <span class="grow"></span>
+        <button class="btn" style="min-width:96px" disabled={info.complete} onclick={() => call('progress_button', { id, action: info.button.action })}>
+          {#if info.button.icon}<Icon name={info.button.icon} size={14} {theme} />{/if}{info.button.label}
+        </button>
+        <button class="btn" style="min-width:96px" onclick={cancel}>Cancel</button>
+      </div>
       {#if details}
         <div class="faint">Start positions and download progress by connections</div>
         <SegmentBar size={info.size_total} segments={info.segments} />
@@ -108,14 +116,6 @@
           </table>
         </div>
       {/if}
-    </div>
-    <div class="shell-footer">
-      <button class="ghostBtn" onclick={toggleDetails}>{details ? '<< Hide details' : 'Show details >>'}</button>
-      <span class="grow"></span>
-      <button class="btn" style="min-width:96px" disabled={info.complete} onclick={() => call('progress_button', { id, action: info.button.action })}>
-        {#if info.button.icon}<Icon name={info.button.icon} size={14} {theme} />{/if}{info.button.label}
-      </button>
-      <button class="btn" onclick={cancel}>Cancel</button>
     </div>
   </div>
 {/if}

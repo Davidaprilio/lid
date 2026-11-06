@@ -25,8 +25,17 @@
   $effect(() => {
     checked = box.checkbox?.checked ?? false
     value = box.input?.value ?? ''
-    queueMicrotask(() => { field?.focus(); field?.select() })
+    queueMicrotask(() => {
+      if (field) { field.focus(); field.select() }
+      else root?.querySelector<HTMLButtonElement>(`.footer button[data-id="${defaultButton().id}"]`)?.focus()
+    })
   })
+
+  /** The button Enter presses (and the one with focus): QMessageBox's default button. */
+  function defaultButton() {
+    return box.buttons.find((b) => b.default) ?? box.buttons.find((b) => b.primary && !b.left) ?? box.buttons.find((b) => b.primary) ?? box.buttons[0]
+  }
+  let root: HTMLDivElement | undefined = $state()
 
   function done(button: string) {
     box.resolve({ button, checked, value })
@@ -36,14 +45,15 @@
     if (e.key === 'Escape') { e.stopPropagation(); done('cancel') }
     if (e.key === 'Enter') {
       e.stopPropagation()
-      const p = box.buttons.find((b) => b.default) ?? box.buttons.find((b) => b.primary && !b.left) ?? box.buttons.find((b) => b.primary) ?? box.buttons[0]
-      done(p.id)
+      e.preventDefault()
+      const f = document.activeElement as HTMLElement | null
+      done(f?.dataset.id && root?.contains(f) ? f.dataset.id : defaultButton().id)
     }
   }
 </script>
 
 <!-- svelte-ignore a11y_no_static_element_interactions -->
-<div class="overlay" onkeydown={key}>
+<div class="overlay" bind:this={root} onkeydown={key}>
   <div class="dialog" role="dialog" aria-modal="true">
     <div class="body">
       <div class="head">
@@ -74,11 +84,11 @@
     </div>
     <div class="footer">
       {#each box.buttons.filter((b) => b.left) as b}
-        <button class="btn" class:primary={b.primary} class:dangerBtn={b.danger} onclick={() => done(b.id)}>{#if b.icon}<Icon name={b.icon} size={14} {theme} />{/if} {b.label}</button>
+        <button class="btn" data-id={b.id} class:primary={b.primary} class:dangerBtn={b.danger} onclick={() => done(b.id)}>{#if b.icon}<Icon name={b.icon} size={14} {theme} />{/if} {b.label}</button>
       {/each}
       <span style="flex:1"></span>
       {#each box.buttons.filter((b) => !b.left) as b}
-        <button class="btn" class:primary={b.primary} class:dangerBtn={b.danger} onclick={() => done(b.id)}>{b.label}</button>
+        <button class="btn" data-id={b.id} class:primary={b.primary} class:dangerBtn={b.danger} onclick={() => done(b.id)}>{b.label}</button>
       {/each}
     </div>
   </div>

@@ -60,6 +60,15 @@ pub fn set_completion_options(label: &str, o: CompletionOptions) {
     lock().insert(label.to_string(), o);
 }
 
+/// The narrowest a window may get: the progress window keeps 1.x's 600 px, the others their own width up to 360.
+fn min_width(label: &str, width: f64) -> f64 {
+    if label.starts_with("progress-") {
+        width.min(600.0)
+    } else {
+        width.min(360.0)
+    }
+}
+
 /// Open (or bring forward) a window showing `route`.
 pub fn open(
     app: &AppHandle,
@@ -81,7 +90,7 @@ pub fn open(
     )
     .title(title)
     .inner_size(size.0, size.1)
-    .min_inner_size(size.0.min(360.0), size.1.min(200.0))
+    .min_inner_size(min_width(label, size.0), size.1.min(200.0))
     .disable_drag_drop_handler()
     .center();
     if modal && let Some(main) = app.get_webview_window("main") {

@@ -160,10 +160,15 @@ pub fn run(cli: Cli, socket: String) -> ExitCode {
             crate::dialogs::can_check_hash,
             crate::dialogs::name_choice,
             crate::dialogs::media_default,
+            crate::dialogs::media_variant,
+            crate::dialogs::home_dir,
             crate::dialogs::appimage_name,
         ])
         .on_menu_event(|app, e| crate::commands::run_menu(app, e.id().as_ref()))
         .on_window_event(|window, e| {
+            if let WindowEvent::Destroyed = e {
+                crate::dialogs::window_closed(window.app_handle(), window.label());
+            }
             if window.label() == "main"
                 && let WindowEvent::CloseRequested { api, .. } = e
             {

@@ -34,6 +34,8 @@ pub struct Ui {
     /// "Browser: connected" (any detected browser has the host); None = check again.
     pub browser_ok: Option<bool>,
     pub last_clip: String,
+    /// The clipboard text of the last tick: `None` until the first read, so only a change counts.
+    pub clip_seen: Option<String>,
     /// Exit was chosen (Tasks → Exit or the tray), not the window's close button.
     pub really_quit: bool,
     pub dark_system: bool,
@@ -90,6 +92,7 @@ pub fn new_ui(settings: &Settings) -> Ui {
         visible: vec![],
         browser_ok: None,
         last_clip: String::new(),
+        clip_seen: None,
         really_quit: false,
         dark_system: false,
         global_menu: false,
@@ -585,10 +588,23 @@ pub fn browser_request(app: &AppHandle, req: &serde_json::Map<String, Value>) {
 
 /// The clipboard monitor (1.x `_clipboard_changed`), called with the clipboard's text each tick.
 pub fn clipboard_text(app: &AppHandle, state: &AppState, text: &str) {
+    let text = text.trim();
+    {
+        // Polling stands in for QClipboard.dataChanged: what is there at startup, or while the monitor is
+        // off, is not a change.
+        let mut ui = state.ui();
+        let first = ui.clip_seen.is_none();
+        if ui.clip_seen.as_deref() == Some(text) {
+            return;
+        }
+        ui.clip_seen = Some(text.to_string());
+        if first {
+            return;
+        }
+    }
     if !state.manager().settings.monitor_clipboard {
         return;
     }
-    let text = text.trim();
     {
         let mut ui = state.ui();
         if text == ui.last_clip || !view::is_url(text) {

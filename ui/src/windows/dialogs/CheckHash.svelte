@@ -96,11 +96,17 @@
   }
 
   const kind = $derived(poll?.algorithm || 'SHA-256')
+  // The default button of each state takes the focus (paste into the field with a click).
+  $effect(() => {
+    void st
+    queueMicrotask(() => document.querySelector<HTMLButtonElement>('.shell-footer button.primary')?.focus())
+  })
 </script>
 
 <svelte:window onkeydown={(e) => {
   if (e.key === 'Escape') quit()
-  if (e.key === 'Enter') { if (st === 'ready' && canRun) run(); else if (st === 'running' && valid && value) later(); else if (st === 'mismatch') choose('again'); else if (st !== 'reading') quit() }
+  // Enter presses the default button; a disabled one does nothing (1.x QDialog).
+  if (e.key === 'Enter' && (e.target as HTMLElement).tagName !== 'BUTTON') { if (st === 'ready') { if (canRun) run() } else if (st === 'running') { if (valid && value) later() } else if (st === 'mismatch') choose('again'); else if (st === 'match' || st === 'computed') quit() }
 }} />
 {#if info}
   <Shell {theme} icon="checksum" badge="accent" title="Check hash" subtitle={info.subtitle}>
@@ -155,8 +161,8 @@
       {#if st === 'mismatch'}
         <button class="btn dangerBtn" onclick={() => choose('delete')}><Icon name="delete" size={14} {theme} /> Delete file</button>
         <span class="grow"></span>
-        <button class="btn" onclick={() => choose('keep')}>Keep file</button>
         <button class="btn primary" onclick={() => choose('again')}>Download again</button>
+        <button class="btn" onclick={() => choose('keep')}>Keep file</button>
       {:else if st === 'match' || st === 'computed'}
         <span class="grow"></span>
         <button class="btn" onclick={() => (st = 'ready')}>Check again</button>

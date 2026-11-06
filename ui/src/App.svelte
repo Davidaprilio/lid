@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { Component } from 'svelte'
   import { invoke } from '@tauri-apps/api/core'
+  import { installMnemonics } from './lib/dialog'
   import Main from './windows/Main.svelte'
   import Pending from './windows/Pending.svelte'
   import Add from './windows/dialogs/Add.svelte'
@@ -30,6 +31,7 @@
   }
   const Page = PAGES[page]
   if (page !== 'main') {
+    installMnemonics()
     invoke<string | null>('e2e_script').then((name) => {
       if (name === 'dialogs') import('./dev/e2e-dialogs').then((m) => { m.watchErrors(); m.runDialog(page) })
     })

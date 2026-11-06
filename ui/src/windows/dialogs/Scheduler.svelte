@@ -19,6 +19,8 @@
   let tab = $state(0)
   let openOn = $state(false)
   let date = $state('')
+  /** QDateEdit (yyyy-MM-dd) cannot hold an invalid date; a bad text goes back to the last good one. */
+  const validDate = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(d))
   let nextRun = $state<string | null>(null)
   let selItem = $state<number | null>(null)
   let box = $state<Box | null>(null)
@@ -41,7 +43,7 @@
 
   // The schedule as the tab shows it (once_date is "" when Daily is chosen).
   function stored() {
-    return { ...sch, once_date: sch.daily ? '' : date, open_when_done: openOn ? sch.open_when_done : '', max_parallel: Math.max(1, Math.min(64, Math.round(sch.max_parallel) || 1)) }
+    return { ...sch, once_date: sch.daily ? '' : validDate(date) ? date : sch.once_date || data.today, open_when_done: openOn ? sch.open_when_done : '', max_parallel: Math.max(1, Math.min(64, Math.round(sch.max_parallel) || 1)) }
   }
 
   async function apply() {
@@ -127,8 +129,10 @@
             </div>
           {/each}
         </div>
-        <button class="btn" onclick={newQueue}>New queue</button>
-        <button class="btn" onclick={deleteQueue}>Delete</button>
+        <div style="display:flex;gap:6px">
+          <button class="btn" onclick={newQueue}><u>N</u>ew queue</button>
+          <button class="btn" onclick={deleteQueue}><u>D</u>elete</button>
+        </div>
       </div>
       <div style="flex:1;display:flex;flex-direction:column;gap:8px;min-width:0">
         <div style="display:flex;gap:10px;align-items:center">
@@ -151,10 +155,11 @@
               <div style="padding-left:24px;display:flex;flex-direction:column;gap:6px">
                 <div style="display:flex;align-items:center;gap:8px">
                   <label class="radio"><input type="radio" checked={!sch.daily} disabled={!sch.start_enabled} onchange={() => (sch.daily = false)} /> Once at</label>
-                  <input class="input mono" type="date" bind:value={date} disabled={!sch.start_enabled || sch.daily} />
+                  <input class="input mono" style="width:110px" maxlength="10" bind:value={date} disabled={!sch.start_enabled || sch.daily}
+                    onblur={() => { if (!validDate(date)) date = sch.once_date || data.today }} />
                 </div>
                 <label class="radio"><input type="radio" checked={sch.daily} disabled={!sch.start_enabled} onchange={() => (sch.daily = true)} /> Daily</label>
-                <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:4px 12px;padding-left:24px">
+                <div style="display:grid;grid-template-rows:repeat(3, auto);grid-auto-flow:column;gap:4px 12px;padding-left:24px;justify-content:start">
                   {#each DAYS as d, i}
                     <label class="check"><input type="checkbox" disabled={!sch.start_enabled || !sch.daily} checked={sch.days.includes(i)}
                       onchange={(e) => (sch.days = e.currentTarget.checked ? [...sch.days, i].sort() : sch.days.filter((x: number) => x !== i))} /> {d}</label>
@@ -164,7 +169,7 @@
               {#if sch.periodic}
                 <Row label="Start again every" width={140}>
                   <input class="input mono" type="number" min="0" max="999" style="width:80px" bind:value={sch.every_hours} /><span>hours</span>
-                  <input class="input mono" type="number" min="0" max="59" style="width:80px" bind:value={sch.every_minutes} /><span>minutes</span>
+                  <input class="input mono" type="number" min="0" max="59" style="width:80px" bind:value={sch.every_minutes} /><span>min</span>
                 </Row>
               {/if}
               <div style="display:flex;align-items:center;gap:8px">
@@ -173,7 +178,7 @@
               </div>
               <div style="display:flex;align-items:center;gap:8px">
                 <label class="check" style="flex:1"><input type="checkbox" bind:checked={sch.retries_enabled} /> Number of retries for each file if downloading failed</label>
-                <input class="input mono" type="number" min="0" max="999" style="width:80px" bind:value={sch.retries} />
+                <input class="input mono nospin" type="number" min="0" max="999" style="width:70px" bind:value={sch.retries} />
               </div>
               <label class="check"><input type="checkbox" bind:checked={openOn} /> Open the following file when done:</label>
               {#if openOn}
@@ -184,8 +189,8 @@
               {#if nextRun}<div class="accentBox"><Icon name="clock" size={16} {theme} />{nextRun}</div>{/if}
             {:else}
               <Row label="Download" width={70}><input class="input mono" type="number" min="1" max="64" style="width:80px" bind:value={sch.max_parallel} /><span>files at the same time</span></Row>
-              <div style="display:flex;gap:8px">
-                <div class="list2" style="flex:1;height:300px">
+              <div style="display:flex;flex-direction:column;gap:6px">
+                <div class="list2" style="height:300px">
                   <div class="h"><span style="flex:1">FILE NAME</span><span style="width:90px">SIZE</span><span style="width:110px">STATUS</span></div>
                   {#each data.items as it (it.id)}
                     <!-- svelte-ignore a11y_click_events_have_key_events -->
@@ -196,7 +201,7 @@
                     </div>
                   {/each}
                 </div>
-                <div style="display:flex;flex-direction:column;gap:6px">
+                <div style="display:flex;gap:6px">
                   <button class="roundBtn" title="Move up" onclick={() => moveItem(-1)}><Icon name="up" size={14} {theme} /></button>
                   <button class="roundBtn" title="Move down" onclick={() => moveItem(1)}><Icon name="down-arrow" size={14} {theme} /></button>
                   <button class="roundBtn" title="Delete from queue" onclick={removeItem}><Icon name="remove" size={14} {theme} /></button>
@@ -208,11 +213,11 @@
       </div>
     </div>
     <div class="shell-footer">
-      <button class="btn primary" onclick={startNow}><Icon name="play-white" size={14} {theme} /> Start now</button>
-      <button class="btn" onclick={stopNow}>Stop</button>
+      <button class="btn primary" onclick={startNow}><Icon name="play-white" size={14} {theme} /> <u>S</u>tart now</button>
+      <button class="btn" onclick={stopNow}>S<u>t</u>op</button>
       <span class="grow"></span>
-      <button class="btn" onclick={apply}>Apply</button>
-      <button class="btn" onclick={async () => { await apply(); close() }}>Close</button>
+      <button class="btn" onclick={apply}><u>A</u>pply</button>
+      <button class="btn" onclick={async () => { await apply(); close() }}><u>C</u>lose</button>
     </div>
   </div>
 {/if}

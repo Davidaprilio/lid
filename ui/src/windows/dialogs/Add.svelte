@@ -6,6 +6,7 @@
   import Row from '../../components/form/Row.svelte'
   import Pill from '../../components/form/Pill.svelte'
   import ChecksumEdit from '../../components/form/ChecksumEdit.svelte'
+  import Combo from '../../components/form/Combo.svelte'
   import Icon from '../../components/Icon.svelte'
   import Menu from '../../components/Menu.svelte'
   import Dialog, { type Box } from '../../components/Dialog.svelte'
@@ -61,6 +62,9 @@
   let replace: number | null = null
   let flowUrl = $state('')
   let auth: [string, string] = ['', '']
+  let fileName = ''
+  let checksumEdit: ReturnType<typeof ChecksumEdit> | undefined = $state()
+  let startButton: HTMLButtonElement | undefined = $state()
 
   const categories = $derived<Category[]>(settings?.categories ?? [])
   const catOf = (name: string) => categories.find((c) => c.name === name) ?? categories[0]
@@ -159,6 +163,7 @@
       await submit(check.only_add_to_queue ? 'later' : 'start', '', `${prep.save_dir}/${prep.filename}`, prep.category)
       return
     }
+    fileName = prep.filename
     await showInfo(prep.category, `${prep.save_dir}/${prep.filename}`)
   }
 
@@ -185,10 +190,13 @@
     variant = v
     kind = v.kind
     size = v.size
-    resumable = true
+    resumable = null
     url = info.url
+    fileName = name
     const prep = await call<any>('add_prepare', { url: info.url, filename: name, replacing: true })
     await showInfo(prep.category, `${prep.save_dir}/${name}`)
+    const target = kind === 'video' ? 'Video' : 'Music'
+    if (categories.some((c) => c.name === target)) setCategory(target)
   }
 
   async function showInfo(cat: string, p: string) {
@@ -202,10 +210,11 @@
     page = 'info'
     setTitle('Download File Info')
     await fit(720)
+    startButton?.focus()
   }
 
   function rebuildPaths() {
-    const base = basename(path) || basename(url)
+    const base = basename(path) || fileName
     const own = `${catOf(category).save_dir}/${base}`
     const others = categories.filter((c) => c.name !== category && c.save_dir !== catOf(category).save_dir).map((c) => `${c.save_dir}/${base}`)
     paths = [own, ...others.filter((p, i) => others.indexOf(p) === i)]
@@ -217,10 +226,10 @@
     rebuildPaths()
   }
 
-  function setKind(k: string) {
+  async function setKind(k: string) {
     kind = k
-    const list = media!.variants.filter((v) => v.kind === k)
-    variant = list[0] ?? null
+    const d = await call<Variant | null>('media_variant', { info: media, kind: k })
+    variant = media!.variants.find((v) => JSON.stringify(v) === JSON.stringify(d)) ?? media!.variants.find((v) => v.kind === k) ?? null
     const cat = k === 'video' ? 'Video' : 'Music'
     if (categories.some((c) => c.name === cat)) category = cat
     quality()
@@ -248,7 +257,7 @@
 
   async function submit(action: string, queue: string, p = path, cat = category) {
     if (!p.trim()) return
-    if (!checksumValid) return
+    if (!checksumValid) { checksumEdit?.focus(); return }
     await call('add_download', {
       req: {
         url, path: p.trim(), category: cat, description, referer: media ? '' : req?.referer ?? '',
@@ -285,8 +294,7 @@
 {#if page === 'address'}
   <Shell {theme} icon="add-url" title="Enter new address to download" subtitle="Paste a link. LID reads the file name and size next.">
     <Row label="Address" width={70}>
-      <input class="input mono" list="history" bind:this={addressField} bind:value={address} />
-      <datalist id="history">{#each history as h}<option value={h}></option>{/each}</datalist>
+      <Combo editable link {theme} items={history} bind:value={address} bind:input={addressField} />
     </Row>
     {#if youtube}
       <div class="accentBox"><Icon name="category-video" size={18} {theme} /><span><b>YouTube video detected</b> — choose the resolution or audio only in the next window.</span></div>
@@ -301,13 +309,13 @@
     {/if}
     {#snippet footer()}
       <span class="grow"></span>
-      <button class="btn" onclick={close}>Cancel</button>
-      <button class="btn primary" onclick={okAddress}>OK</button>
+      <button class="btn" onclick={close}><u>C</u>ancel</button>
+      <button class="btn primary" onclick={okAddress}>O<u>K</u></button>
     {/snippet}
   </Shell>
 {:else if page === 'duplicate'}
   <Shell {theme} icon="queue" title="Duplicate download link" subtitle="This file is already in your download list.">
-    <input class="input mono link" readonly tabindex="-1" value={flowUrl} />
+    <div class="combo-like"><Icon name="link" size={15} {theme} /><input class="mono" readonly tabindex="-1" value={flowUrl} /></div>
     <div class="panel">
       <label class="radio"><input type="radio" bind:group={dupChoice} value="number" /> Add the duplicate with a numbered file name</label>
       <label class="radio"><input type="radio" bind:group={dupChoice} value="overwrite" /> Add the duplicate and overwrite the existing file</label>
@@ -328,41 +336,39 @@
       <div style="flex:1;display:flex;flex-direction:column;gap:10px;min-width:0">
         <Row label="URL" width={90}><input class="input mono" value={url} readonly={!!media} oninput={(e) => (url = e.currentTarget.value)} /></Row>
         <Row label="Category" width={90}>
-          <select class="input" style="min-width:200px" value={category} onchange={(e) => setCategory(e.currentTarget.value)}>
-            {#each categories as c}<option value={c.name}>{c.name}</option>{/each}
-          </select>
+          <Combo {theme} style="flex:0 1 auto;min-width:200px" value={category} items={categories.map((c) => ({ value: c.name, icon: catIcon(c.name) }))}
+            onchange={setCategory} />
+          <span class="grow"></span>
           <button class="roundBtn" title="Add category" onclick={() => (newCategory = true)}>+</button>
         </Row>
         <Row label="Save As" width={90}>
-          <input class="input mono" list="paths" bind:value={path} />
-          <datalist id="paths">{#each paths as p}<option value={p}></option>{/each}</datalist>
+          <Combo editable mono {theme} items={paths} bind:value={path} />
           <button class="btn small" style="min-width:36px" onclick={browse}>...</button>
         </Row>
         <div style="padding-left:100px"><label class="check"><input type="checkbox" bind:checked={remember} /> Remember this path for "{category}" category</label></div>
-        <Row label="Description" width={90}><input class="input" bind:value={description} /></Row>
-        {#if !media}
-          <Row label="Checksum" width={90} top>
-            <div style="flex:1;display:flex;flex-direction:column;gap:4px">
-              <ChecksumEdit bind:text={checksumText} bind:algorithm={checksumAlgo} bind:valid={checksumValid} bind:value={checksumValue} />
-            </div>
-          </Row>
-        {/if}
         {#if media}
           <div class="panel">
             <div class="caption">YouTube video</div>
             <div style="font-weight:700" class="wrap">{media.title}</div>
             <div class="muted">{[media.uploader, media.duration ? length(media.duration) : ''].filter(Boolean).join(' · ')}</div>
-            <div style="display:flex;gap:16px">
+            <div style="display:flex;gap:16px;align-items:center">
               <label class="radio"><input type="radio" checked={kind === 'video'} disabled={!media.variants.some((v) => v.kind === 'video')} onchange={() => setKind('video')} /> Video</label>
               <label class="radio"><input type="radio" checked={kind === 'audio'} disabled={!media.variants.some((v) => v.kind === 'audio')} onchange={() => setKind('audio')} /> Audio only</label>
-            </div>
-            <Row label="Quality" width={70}>
-              <select class="input" value={variant ? media.variants.indexOf(variant) : 0}
+              <span class="formLabel" style="margin-left:10px">Quality</span>
+              <select class="input" style="flex:1" value={variant ? media.variants.indexOf(variant) : 0}
                 onchange={(e) => { variant = media!.variants[Number(e.currentTarget.value)]; quality() }}>
                 {#each media.variants as v, i}{#if v.kind === kind}<option value={i}>{v.label}</option>{/if}{/each}
               </select>
-            </Row>
+            </div>
           </div>
+        {/if}
+        <Row label="Description" width={90}><input class="input" bind:value={description} /></Row>
+        {#if !media}
+          <Row label="Checksum" width={90} top>
+            <div style="flex:1;display:flex;flex-direction:column;gap:4px">
+              <ChecksumEdit bind:this={checksumEdit} bind:text={checksumText} bind:algorithm={checksumAlgo} bind:valid={checksumValid} bind:value={checksumValue} />
+            </div>
+          </Row>
         {/if}
       </div>
       <div style="width:116px;flex:none;display:flex;flex-direction:column;align-items:center;gap:8px;padding-top:4px">
@@ -372,12 +378,12 @@
       </div>
     </div>
     {#snippet footer()}
-      <button class="btn" disabled={!checksumValid} onclick={(e) => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); later = { x: r.left, y: r.top - 8 - queues.length * 32 } }}>
-        <Icon name="queue" size={15} {theme} /> Download Later
-      </button>
       <span class="grow"></span>
-      <button class="btn" onclick={close}>Cancel</button>
-      <button class="btn primary" disabled={!checksumValid} onclick={() => submit('start', '')}><Icon name="add-white" size={15} {theme} /> Start Download</button>
+      <button class="btn" disabled={!checksumValid} onclick={(e) => { const r = (e.currentTarget as HTMLElement).getBoundingClientRect(); const h = queues.length * 32 + 14; later = { x: r.left, y: r.bottom + 2 + h <= window.innerHeight ? r.bottom + 2 : r.top - 2 - h } }}>
+        <Icon name="queue" size={15} {theme} /> Download <u>L</u>ater
+      </button>
+      <button class="btn primary" bind:this={startButton} disabled={!checksumValid} onclick={() => submit('start', '')}><Icon name="add-white" size={15} {theme} /> <u>S</u>tart Download</button>
+      <button class="btn" onclick={close}><u>C</u>ancel</button>
     {/snippet}
   </Shell>
 {/if}
@@ -389,7 +395,7 @@
 {/if}
 {#if newCategory}
   <div class="overlay"><div class="dialog" style="max-width:640px;min-width:600px">
-    <CategoryForm category={null} home={categories[0]?.save_dir.replace(/\/Downloads$/, '') ?? ''} {theme} onok={addCategory} oncancel={() => (newCategory = false)} />
+    <CategoryForm category={null} {theme} onok={addCategory} oncancel={() => (newCategory = false)} />
   </div></div>
 {/if}
 {#if box}<Dialog {box} {theme} />{/if}

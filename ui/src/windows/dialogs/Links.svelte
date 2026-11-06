@@ -33,6 +33,9 @@
   let categories = $state<{ name: string; save_dir: string }[]>([])
   let box = $state<Box | null>(null)
   let field: HTMLInputElement | undefined = $state()
+  let selected = $state<Set<number>>(new Set())
+  let anchor = -1
+  let fileWidth = $state(240)
 
   followTheme((t) => (theme = t))
   ;(async () => {
@@ -96,6 +99,41 @@
   async function refill() {
     rows = await call('links_rows', { links, filters: { hide_html: hideHtml, hide_images: hideImages, hide_repeated: hideRepeated } })
     checked = new Set(rows.flatMap((r, i) => (r.checked ? [i] : [])))
+    selected = new Set()
+    anchor = -1
+    // resizeColumnToContents(FILE): icon, gap and the longest name.
+    const g = document.createElement('canvas').getContext('2d')!
+    g.font = getComputedStyle(document.body).font
+    fileWidth = Math.min(480, Math.ceil(Math.max(60, ...rows.map((r) => g.measureText(r.name).width)) + 16 + 6 + 14))
+  }
+
+  /** ExtendedSelection: click, Ctrl+click, Shift+click; Space toggles the checks of the selected rows. */
+  function select(i: number, e: MouseEvent) {
+    if (e.shiftKey && anchor >= 0) {
+      const [a, b] = [Math.min(anchor, i), Math.max(anchor, i)]
+      selected = new Set([...(e.ctrlKey ? selected : []), ...Array.from({ length: b - a + 1 }, (_, k) => a + k)])
+      return
+    }
+    if (e.ctrlKey) { const c = new Set(selected); if (c.has(i)) c.delete(i); else c.add(i); selected = c }
+    else selected = new Set([i])
+    anchor = i
+  }
+  function listKey(e: KeyboardEvent) {
+    if (e.key === ' ' && selected.size) {
+      e.preventDefault()
+      const on = ![...selected].every((i) => checked.has(i))
+      const c = new Set(checked)
+      for (const i of selected) if (on) c.add(i); else c.delete(i)
+      checked = c
+    } else if ((e.key === 'ArrowDown' || e.key === 'ArrowUp') && rows.length) {
+      e.preventDefault()
+      const i = Math.max(0, Math.min(rows.length - 1, anchor + (e.key === 'ArrowDown' ? 1 : -1)))
+      selected = new Set([i])
+      anchor = i
+    } else if (e.key === 'a' && e.ctrlKey) {
+      e.preventDefault()
+      selected = new Set(rows.map((_, i) => i))
+    }
   }
 
   const allState = $derived(checked.size === 0 ? 'none' : checked.size === rows.length ? 'all' : 'some')
@@ -131,17 +169,19 @@
 {:else if page === 'busy'}
   <div class="shell" style="align-items:center;justify-content:center"><div class="muted">Reading the web page…</div></div>
 {:else if page === 'links'}
-  <Shell {theme} icon="grabber" title="Download All Links" subtitle="{rows.length} links found · check the ones to add">
-    <div class="list2" style="height:300px">
+  <Shell {theme} icon="grabber" title="Download All Links" subtitle="{links.length} links found · check the ones to add">
+    <!-- svelte-ignore a11y_no_noninteractive_tabindex a11y_no_static_element_interactions -->
+    <div class="list2" style="height:300px" role="listbox" aria-multiselectable="true" tabindex="0" onkeydown={listKey}>
       <div class="h">
         <!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
         <span style="width:24px" role="button" tabindex="-1" onclick={() => setAll(allState !== 'all')}><input type="checkbox" checked={allState === 'all'} indeterminate={allState === 'some'} /></span>
-        <span style="width:240px">FILE</span><span style="width:70px">TYPE</span><span>ADDRESS</span>
+        <span style="width:{fileWidth}px;flex:none">FILE</span><span style="width:70px">TYPE</span><span>ADDRESS</span>
       </div>
       {#each rows as r, i (i)}
-        <div class="r">
+        <!-- svelte-ignore a11y_click_events_have_key_events -->
+        <div class="r" class:sel={selected.has(i)} role="option" aria-selected={selected.has(i)} tabindex="-1" onclick={(e) => select(i, e)}>
           <span style="width:24px"><input type="checkbox" checked={checked.has(i)} onchange={() => toggle(i)} /></span>
-          <span style="width:240px;display:flex;gap:6px;overflow:hidden" title={r.text}><Icon name={r.icon} size={16} {theme} /><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{r.name}</span></span>
+          <span style="width:{fileWidth}px;flex:none;display:flex;gap:6px;overflow:hidden" title={r.text}><Icon name={r.icon} size={16} {theme} /><span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{r.name}</span></span>
           <span style="width:70px">{#if r.kind}<span class="tpill muted">{r.kind}</span>{/if}</span>
           <span class="mono muted" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title={r.url}>{r.address}</span>
         </div>

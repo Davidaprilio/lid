@@ -17,7 +17,7 @@
   }
 </script>
 
-<Shell {theme} icon="speed" badge="accent" title="Speed Limiter settings" subtitle="Applies to all downloads while the limiter is on">
+<Shell {theme} keys icon="speed" badge="accent" title="Speed Limiter settings" subtitle="Applies to all downloads while the limiter is on">
   <Row label="Maximum speed" width={110}>
     <input class="input mono" type="number" min="1" max="10000000" style="width:120px" bind:value={kbps} />
     <span class="formLabel">KBytes/sec</span>

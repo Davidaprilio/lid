@@ -14,8 +14,9 @@
   followTheme((t) => (theme = t))
   call<any>('complete_info', { id }).then((i) => { if (!i) return close(); info = i; fit(640) })
 
-  async function done() {
-    if (dontShow) await call('complete_dont_show')
+  // Rust applies the box when the window closes, also through its title bar.
+  $effect(() => { call('complete_dont_show', { on: dontShow }) })
+  function done() {
     close()
   }
 
@@ -57,7 +58,7 @@
         <div class="caption">Checksum ({info.kind}) · matches</div>
         <div style="position:relative">
           <input class="input mono" style="width:100%;padding-right:30px" readonly value={info.actual} />
-          <span style="position:absolute;right:8px;top:6px"><Icon name="shield-check" size={16} {theme} /></span>
+          <span class="okText" style="position:absolute;right:9px;top:50%;transform:translateY(-50%);font-weight:700">✓</span>
         </div>
       {/if}
     </div>

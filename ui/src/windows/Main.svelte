@@ -165,7 +165,7 @@
   async function dispatch(id: string) {
     switch (id) {
       case 'add': return openDialog(`add-${Date.now()}`, 'add', 'Enter new address to download', 560, 300)
-      case 'batch': return openDialog('batch', 'batch', 'Add batch download', 620, 520)
+      case 'batch': return openDialog('batch', 'batch', 'Batch download', 620, 520)
       case 'batch_clipboard': return batchFromClipboard()
       case 'grabber': return openDialog('grabber', 'links?grabber=1', 'Grabber', 560, 200)
       case 'export_ef2': return exportList('ef2')
@@ -177,10 +177,10 @@
       case 'find': return showSearch()
       case 'find_next': return findNext()
       case 'scheduler': return openDialog('scheduler', `scheduler?queue=${encodeURIComponent(MAIN_QUEUE)}`, 'Scheduler', 860, 620)
-      case 'limiter_settings': return openDialog('limiter', 'limiter', 'Speed Limiter', 440, 300)
+      case 'limiter_settings': return openDialog('limiter', 'limiter', 'Speed Limiter settings', 440, 300)
       case 'options': return openDialog('options', 'options', 'LID options', 720, 712)
       case 'appearance': return openDialog('options', 'options?tab=Appearance', 'LID options', 720, 712)
-      case 'columns': return openDialog('columns', 'columns', 'Customize columns', 440, 520)
+      case 'columns': return openDialog('columns', 'columns', 'Columns', 440, 520)
       case 'font_choose': return openDialog('font', 'font', 'Choose Font', 460, 520)
       case 'about': return about()
       default: return api.menu(id)
@@ -188,7 +188,7 @@
   }
 
   // ------------------------------------------------------------------ context menus
-  function listMenu(e: MouseEvent) {
+  async function listMenu(e: MouseEvent) {
     if (!v) return
     const ids = v.selected
     const a = v.actions
@@ -198,7 +198,8 @@
     }
     const row = v.rows.find((r) => r.id === ids[0])
     const complete = row?.pill.kind === 'done' || row?.pill.kind === 'verified' || row?.pill.kind === 'mismatch'
-    const canCheck = ids.length === 1 && !!row && (complete || row.pill.progress > 0 || row.pill.kind === 'run')
+    // checkhash.can_check: finished, being checked, has data on disk or runs (an unknown size shows no progress).
+    const canCheck = ids.length === 1 && (await invoke<boolean>('can_check_hash', { id: ids[0] }))
     const queued = v.rows.some((r) => ids.includes(r.id) && r.queue)
     const items: MenuItem[] = [
       { type: 'action', id: 'ctx_open', label: 'Open', enabled: complete },
@@ -268,9 +269,9 @@
         if (id === 'q_start') return api.queue(value!, true)
         if (id === 'q_stop') return api.queue(value!, false)
         if (id === 'q_scheduler') return openDialog('scheduler', `scheduler?queue=${encodeURIComponent(value ?? MAIN_QUEUE)}`, 'Scheduler', 860, 620)
-        if (id === 'cat_add') return openDialog('category', 'category', 'Category', 520, 420)
+        if (id === 'cat_add') return openDialog('category', 'category', 'LID categories', 520, 420)
     if (id === 'find_settings') return openDialog('find', 'find', 'LID Search settings', 460, 340)
-        if (id === 'cat_properties') return openDialog('category', `category?name=${encodeURIComponent(value!)}`, 'Category', 520, 420)
+        if (id === 'cat_properties') return openDialog('category', `category?name=${encodeURIComponent(value!)}`, 'LID categories', 520, 420)
         if (id === 'cat_delete') {
           if (await question('Deleting a category from LID categories list', `Do you really want to delete "${value}" category from LID categories list?`)) {
             await api.deleteCategory(value!)
@@ -285,7 +286,7 @@
     const first = v?.selected[0]
     if (id === 'ctx_check_hash') return openDialog(`checkhash-${first}`, `checkhash?id=${first}`, 'Check hash', 560, 480)
     if (id === 'ctx_properties') return openDialog(`properties-${first}`, `properties?id=${first}`, 'File Properties', 560, 600, false)
-    if (id === 'cat_add') return openDialog('category', 'category', 'Category', 520, 420)
+    if (id === 'cat_add') return openDialog('category', 'category', 'LID categories', 520, 420)
     if (id === 'find_settings') return openDialog('find', 'find', 'LID Search settings', 460, 340)
     return Promise.resolve(dispatch(id))
   }

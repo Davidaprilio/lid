@@ -48,8 +48,8 @@
   }
 </script>
 
-<Shell {theme}>
-  <div>Check the columns to show. Drag or use the buttons to change the order.</div>
+<Shell {theme} keys>
+  <div class="muted">Check the columns to show. Drag or use the buttons to change the order.</div>
   <div style="display:flex;gap:10px">
     <div class="list2" style="flex:1;height:{12 * 30 + 4}px">
       {#each cols as c, i (c[0])}

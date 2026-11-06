@@ -44,3 +44,20 @@ export function setTitle(title: string) {
 export const URL_RE = /^(https?|ftp):\/\/\S+$/i
 
 export const call = invoke
+
+/** Qt mnemonics ("&x"): Alt+x presses the button or check box of the top layer (the window, or the last
+ * overlay) whose underlined letter is x. */
+export function installMnemonics() {
+  window.addEventListener('keydown', (e) => {
+    if (e.defaultPrevented || !e.altKey || e.ctrlKey || !/^[a-z0-9]$/i.test(e.key)) return
+    const overlays = document.querySelectorAll('.overlay')
+    const top: ParentNode = overlays.length ? overlays[overlays.length - 1] : document
+    const hit = Array.from(top.querySelectorAll<HTMLElement>('button u, label u'))
+      .filter((u) => overlays.length || !u.closest('.overlay'))
+      .find((u) => u.textContent!.toLowerCase() === e.key.toLowerCase())
+      ?.closest<HTMLElement>('button, label')
+    if (!hit || (hit as HTMLButtonElement).disabled || hit.querySelector('input:disabled')) return
+    e.preventDefault()
+    hit.click()
+  })
+}

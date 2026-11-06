@@ -2,9 +2,12 @@
   // "Choose Font..." for the download list: a family from fontconfig and a size.
   import Shell from '../../components/form/Shell.svelte'
   import Row from '../../components/form/Row.svelte'
-  import { call, close, followTheme, fit } from '../../lib/dialog'
+  import { emit } from '@tauri-apps/api/event'
+  import { call, close, followTheme, fit, params } from '../../lib/dialog'
   import type { ThemeName } from '../../theme/tokens'
 
+  // From Options the choice goes back to that window and is written on its OK (`?for=options&font=…`).
+  const forOptions = params().get('for') === 'options'
   let theme = $state<ThemeName>('ember')
   let families = $state<string[]>([])
   let family = $state('')
@@ -13,7 +16,7 @@
   followTheme((t) => (theme = t))
   Promise.all([call<string[]>('system_fonts'), call<any>('settings_get')]).then(([f, s]) => {
     families = f
-    const parts = (s.list_font as string).split(',')
+    const parts = ((forOptions ? params().get('font') ?? '' : s.list_font) as string).split(',')
     family = parts[0] || f.find((x) => /^(Noto Sans|Cantarell|DejaVu Sans)$/.test(x)) || f[0] || ''
     size = Number(parts[1]) || 10
     fit(460)
@@ -21,7 +24,8 @@
   const shown = $derived(families.filter((f) => f.toLowerCase().includes(filter.toLowerCase())))
 
   async function ok() {
-    if (family) await call('set_list_font', { family, size })
+    if (family && forOptions) await emit('lid://font-chosen', `${family},${size}`)
+    else if (family) await call('set_list_font', { family, size })
     close()
   }
 </script>

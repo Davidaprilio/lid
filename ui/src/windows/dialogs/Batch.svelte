@@ -2,6 +2,7 @@
   // Batch download (1.x add.BatchDialog): one * in the address, replaced by numbers or letters.
   import Shell from '../../components/form/Shell.svelte'
   import Row from '../../components/form/Row.svelte'
+  import Combo from '../../components/form/Combo.svelte'
   import Dialog, { type Box } from '../../components/Dialog.svelte'
   import { call, close, followTheme, fit, URL_RE } from '../../lib/dialog'
   import type { ThemeName } from '../../theme/tokens'
@@ -20,6 +21,8 @@
   let urls = $state<string[]>([])
   let box = $state<Box | null>(null)
   followTheme((t) => (theme = t))
+  /** QSpinBox ranges: a typed value outside them snaps back in when the field is left. */
+  const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, Math.round(Number(v)) || lo))
   call<string>('clipboard_text').then((t) => { if (URL_RE.test(t.trim())) address = t.trim(); fit(620) })
 
   $effect(() => {
@@ -44,21 +47,21 @@
   }
 </script>
 
-<Shell {theme} icon="add-url" title="Batch download" subtitle="Add a numbered series of files: put one asterisk in the address, e.g. https://www.example.com/pictures/img*.jpg">
-  <Row label="Address" width={70}><input class="input mono" bind:value={address} /></Row>
+<Shell {theme} keys icon="add-url" title="Batch download" subtitle="Add a numbered series of files: put one asterisk in the address, e.g. https://www.example.com/pictures/img*.jpg">
+  <Row label="Address" width={70}><Combo editable link {theme} items={[]} bind:value={address} /></Row>
   <div class="panel">
     <div class="caption">Replace asterisk with</div>
     <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap">
       <label class="radio"><input type="radio" bind:group={mode} value="numbers" /> Numbers</label>
       <label class="radio"><input type="radio" bind:group={mode} value="letters" /> Letters</label>
       <span>From</span>
-      {#if mode === 'numbers'}<input class="input mono" type="number" min="0" max="999999" style="width:80px" bind:value={numFrom} />
+      {#if mode === 'numbers'}<input class="input mono nospin" type="number" min="0" max="999999" style="width:80px" bind:value={numFrom} onblur={() => (numFrom = clamp(numFrom, 0, 999999))} />
       {:else}<input class="input mono" maxlength="1" style="width:80px" bind:value={letFrom} />{/if}
       <span>To</span>
-      {#if mode === 'numbers'}<input class="input mono" type="number" min="0" max="999999" style="width:80px" bind:value={numTo} />
+      {#if mode === 'numbers'}<input class="input mono nospin" type="number" min="0" max="999999" style="width:80px" bind:value={numTo} onblur={() => (numTo = clamp(numTo, 0, 999999))} />
       {:else}<input class="input mono" maxlength="1" style="width:80px" bind:value={letTo} />{/if}
       <span>Wildcard size</span>
-      <input class="input mono" type="number" min="1" max="9" style="width:80px" bind:value={width} disabled={mode !== 'numbers'} />
+      <input class="input mono nospin" type="number" min="1" max="9" style="width:80px" bind:value={width} onblur={() => (width = clamp(width, 1, 9))} disabled={mode !== 'numbers'} />
     </div>
   </div>
   <label class="check"><input type="checkbox" bind:checked={useAuth} /> Use <u>a</u>uthorization</label>

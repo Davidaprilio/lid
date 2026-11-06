@@ -5,20 +5,22 @@
   import Row from '../../components/form/Row.svelte'
   import TagInput from '../../components/form/TagInput.svelte'
   import { untrack } from 'svelte'
+  import { invoke } from '@tauri-apps/api/core'
   import type { ThemeName } from '../../theme/tokens'
 
   export interface Category { name: string; extensions: string[]; save_dir: string; sites: string[]; remember_last: boolean }
-  let { category, home, theme, onok, oncancel }: {
-    category: Category | null; home: string; theme: ThemeName; onok: (c: Category) => void; oncancel: () => void
+  let { category, theme, onok, oncancel }: {
+    category: Category | null; theme: ThemeName; onok: (c: Category) => void; oncancel: () => void
   } = $props()
   // The form edits a copy taken when it opens.
-  const start = untrack(() => ({ category, home }))
+  const start = untrack(() => ({ category }))
   const isNew = start.category === null
   let name = $state(start.category?.name ?? '')
   let exts = $state<string[]>(start.category?.extensions ?? [])
   let useSites = $state((start.category?.sites.length ?? 0) > 0)
   let sites = $state<string[]>(start.category?.sites ?? [])
-  let folder = $state(start.category?.save_dir ?? `${start.home}/Downloads/New`)
+  let folder = $state(start.category?.save_dir ?? '')
+  if (!start.category) invoke<string>('home_dir').then((h) => { if (!folder) folder = `${h}/Downloads/New` })
   let remember = $state(start.category?.remember_last ?? false)
   const lower = (n: string) => n.toLowerCase()
   const icon = $derived(isNew ? 'folder' : ['compressed', 'documents', 'music', 'programs', 'video'].includes(lower(start.category!.name)) ? `category-${lower(start.category!.name)}` : 'folder')
@@ -38,7 +40,7 @@
   }
 </script>
 
-<Shell {theme} {icon} tile title="LID categories" subtitle={isNew ? 'New category' : `Edit the ${start.category!.name} category`}>
+<Shell {theme} keys {oncancel} {icon} tile title="LID categories" subtitle={isNew ? 'New category' : `Edit the ${start.category!.name} category`}>
   <Row label="Category name" width={110}>
     <input class="input" bind:value={name} readonly={start.category?.name === 'General'} />
   </Row>

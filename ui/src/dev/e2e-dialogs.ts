@@ -2,6 +2,7 @@
 // dialog window runs its part and reports back with the "lid://e2e" event.
 import { invoke } from '@tauri-apps/api/core'
 import { emit, listen } from '@tauri-apps/api/event'
+import { Window } from '@tauri-apps/api/window'
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms))
 const all = (sel: string) => Array.from(document.querySelectorAll<HTMLElement>(sel))
@@ -60,8 +61,8 @@ const DIALOG: Record<string, (log: string[]) => Promise<Final>> = {
     const field = await waitFor('speed', () => document.querySelector<HTMLInputElement>('input[type=number]'))
     eq(log, field.value, '512', 'the limiter shows the saved speed')
     type(field, '300')
-    const ok = await button('OK')
-    return () => click(ok)
+    log.push('ok  Enter presses OK (the speed is written below)')
+    return () => field.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
   },
   async columns(log) {
     await waitFor('columns', () => all('.list2 .r').length === 12)
@@ -99,8 +100,9 @@ const DIALOG: Record<string, (log: string[]) => Promise<Final>> = {
     click(await button('OK'))
     await waitFor('new queue', () => texts('.list2 .r').some((t) => t.startsWith('E2E queue')))
     log.push('ok  New queue adds and selects it')
-    const c = await button('Close')
-    return () => click(c)
+    await button('Close')
+    log.push('ok  Alt+C (the mnemonic of Close) closes the Scheduler')
+    return () => document.body.dispatchEvent(new KeyboardEvent('keydown', { key: 'c', altKey: true, bubbles: true }))
   },
   async add(log) {
     const field = await waitFor('address', () => document.querySelector<HTMLInputElement>('.formrow input'))
@@ -109,8 +111,7 @@ const DIALOG: Record<string, (log: string[]) => Promise<Final>> = {
     click(await button('Yes')) // "Cannot get information about the file … Add it anyway?"
     await waitFor('file info', () => document.querySelector('.dialogTitle')?.textContent === 'Download File Info')
     eq(log, document.querySelector('.shell-titles .muted')!.textContent, 'archive.zip', 'Download File Info names the file')
-    const cat = document.querySelector<HTMLSelectElement>('select')!
-    eq(log, cat.value, 'Compressed', 'the category comes from the file type')
+    eq(log, document.querySelector('.combo .choice')?.textContent?.trim(), 'Compressed', 'the category comes from the file type')
     const hash = document.querySelector<HTMLInputElement>('input[placeholder="Paste a hash (optional)"]')!
     type(hash, 'abc')
     await waitFor('invalid hash', () => document.querySelector('.errorText'))
@@ -191,7 +192,7 @@ export async function runMain(dispatch: (id: string) => Promise<unknown>, select
       waiting = (r) => {
         clearTimeout(timer)
         log.push(...r.log)
-        r.ok ? resolve() : reject(new Error(r.log[r.log.length - 1]))
+        r.ok ? resolve() : reject(new Error(r.log[r.log.length - 1].replace(/^FAIL /, '')))
       }
       open()
     })
@@ -216,6 +217,8 @@ export async function runMain(dispatch: (id: string) => Promise<unknown>, select
     await step(() => dispatch('scheduler'))
     await waitFor('queue node', () => all('.node .title').some((t) => t.textContent === 'E2E queue'))
     log.push('ok  the new queue shows in the sidebar')
+    await until('scheduler closed', async () => (await Window.getByLabel('scheduler')) === null)
+    log.push('ok  the Scheduler window closed')
     await step(() => dispatch('add'))
     await waitFor('added', () => all('.list .row').length === 14 && all('.list .row').some((r) => r.textContent!.includes('archive.zip')))
     log.push('ok  Download Later adds the download')

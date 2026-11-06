@@ -15,7 +15,7 @@ use lider_core::settings::{Category, ColumnState, Settings};
 use lider_core::view;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
-use tauri::{AppHandle, State};
+use tauri::{AppHandle, Manager, State};
 
 use crate::app::{self, AppState};
 
@@ -339,6 +339,12 @@ pub fn media_default(state: State<'_, AppState>, info: MediaInfo) -> Option<(Var
     let v = info.default_variant(&kind, &quality)?.clone();
     let name = media::suggested_filename(&info, &v);
     Some((v, name))
+}
+
+/// The quality preselected when the user switches between Video and Audio only (1.x `_fill_quality`).
+#[tauri::command]
+pub fn media_variant(info: MediaInfo, kind: String) -> Option<Variant> {
+    info.default_variant(&kind, "").cloned()
 }
 
 #[derive(Serialize)]
@@ -719,10 +725,33 @@ pub fn complete_info(state: State<'_, AppState>, id: i64) -> Option<Value> {
 }
 
 #[tauri::command]
-pub fn complete_dont_show(app: AppHandle, state: State<'_, AppState>) {
-    state.manager().settings.show_complete_dialog = false;
-    save(&state);
-    push(&app, &state);
+pub fn complete_dont_show(window: tauri::WebviewWindow, on: bool) {
+    let mut set = DONT_SHOW.lock().unwrap_or_else(|e| e.into_inner());
+    if on {
+        set.insert(window.label().to_owned());
+    } else {
+        set.remove(window.label());
+    }
+}
+
+/// Complete windows whose "Don't show this dialog again" is checked; applied when the window closes,
+/// whichever way (1.x `_complete_closed`).
+static DONT_SHOW: LazyLock<Mutex<std::collections::HashSet<String>>> =
+    LazyLock::new(Default::default);
+
+/// A dialog window went away (also through its title bar).
+pub fn window_closed(app: &AppHandle, label: &str) {
+    stop_checks_of(label);
+    if DONT_SHOW
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .remove(label)
+    {
+        let state = app.state::<AppState>();
+        state.manager().settings.show_complete_dialog = false;
+        save(&state);
+        push(app, &state);
+    }
 }
 
 /// What to do with a file that does not match its checksum: again, delete (to the Trash) or keep.
@@ -756,7 +785,9 @@ pub fn mismatch_choice(
 
 // ------------------------------------------------------------------ check hash
 
-static CHECKS: LazyLock<Mutex<HashMap<u64, Arc<Verifier>>>> = LazyLock::new(Default::default);
+/// Running checks by token, with the label of the window that started them.
+type Checks = HashMap<u64, (Arc<Verifier>, String)>;
+static CHECKS: LazyLock<Mutex<Checks>> = LazyLock::new(Default::default);
 static NEXT: AtomicU64 = AtomicU64::new(1);
 
 /// The menu item "Check hash…" is enabled: finished, being checked, has data or runs.
@@ -770,16 +801,19 @@ pub fn can_check(m: &lider_core::manager::DownloadManager, d: &Download) -> bool
 pub fn checkhash_info(state: State<'_, AppState>, id: i64) -> Option<Value> {
     let m = state.manager();
     let d = m.get(id)?;
-    let finished = d.status == Status::Complete;
+    let finished = matches!(d.status, Status::Complete | Status::Verifying);
     let subtitle = if finished || d.size <= 0 {
-        format!("{} · {}", d.filename, fmt::size(d.size.max(d.downloaded)))
+        let n = if d.size > 0 { d.size } else { d.downloaded };
+        format!("{} · {}", d.filename, fmt::size(n))
     } else {
-        format!(
-            "{} · {} of {}",
-            d.filename,
-            fmt::size(d.downloaded),
-            fmt::size(d.size)
-        )
+        // "12.3 of 40 MB": the number of the downloaded part without its unit.
+        let done = fmt::size(d.downloaded);
+        let number = done
+            .split_whitespace()
+            .next()
+            .unwrap_or_default()
+            .to_owned();
+        format!("{} · {} of {}", d.filename, number, fmt::size(d.size))
     };
     Some(json!({
         "filename": d.filename,
@@ -796,7 +830,12 @@ pub fn checkhash_info(state: State<'_, AppState>, id: i64) -> Option<Value> {
 
 /// Start reading the file; `checksum` is "algo:hex" or "algo:" to only compute. Returns a token.
 #[tauri::command]
-pub fn checkhash_start(state: State<'_, AppState>, id: i64, checksum: String) -> Res<u64> {
+pub fn checkhash_start(
+    window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
+    id: i64,
+    checksum: String,
+) -> Res<u64> {
     let path = state
         .manager()
         .downloads
@@ -805,7 +844,7 @@ pub fn checkhash_start(state: State<'_, AppState>, id: i64, checksum: String) ->
         .ok_or("no such download")?;
     let v = Arc::new(Verifier::new(path, &checksum, true, id));
     let token = NEXT.fetch_add(1, Ordering::Relaxed);
-    lock_checks().insert(token, v.clone());
+    lock_checks().insert(token, (v.clone(), window.label().to_owned()));
     std::thread::Builder::new()
         .name(format!("checkhash-{id}"))
         .spawn(move || {
@@ -815,13 +854,13 @@ pub fn checkhash_start(state: State<'_, AppState>, id: i64, checksum: String) ->
     Ok(token)
 }
 
-fn lock_checks() -> std::sync::MutexGuard<'static, HashMap<u64, Arc<Verifier>>> {
+fn lock_checks() -> std::sync::MutexGuard<'static, Checks> {
     CHECKS.lock().unwrap_or_else(|e| e.into_inner())
 }
 
 #[tauri::command]
 pub fn checkhash_poll(token: u64) -> Option<Value> {
-    let v = lock_checks().get(&token).cloned()?;
+    let v = lock_checks().get(&token).map(|c| c.0.clone())?;
     let out = v.outcome();
     let total = std::fs::metadata(&v.path)
         .map(|m| m.len() as i64)
@@ -843,9 +882,20 @@ pub fn checkhash_poll(token: u64) -> Option<Value> {
 /// Stop reading (Stop, or the window closes); nothing is saved.
 #[tauri::command]
 pub fn checkhash_stop(token: u64) {
-    if let Some(v) = lock_checks().remove(&token) {
+    if let Some((v, _)) = lock_checks().remove(&token) {
         v.skip();
     }
+}
+
+/// A Check hash window went away (also through its title bar): stop what it was reading, like 1.x `done()`.
+pub fn stop_checks_of(label: &str) {
+    lock_checks().retain(|_, (v, owner)| {
+        let keep = owner != label;
+        if !keep {
+            v.skip();
+        }
+        keep
+    });
 }
 
 #[tauri::command]
@@ -1108,7 +1158,8 @@ pub fn options_apply(
     settings_patch(app.clone(), state.clone(), settings)?;
     let s = &state.sys;
     if launch != lider_sys::desktop::autostart_enabled(s) {
-        lider_sys::desktop::set_autostart(s, launch).map_err(|e| e.to_string())?;
+        // 1.x ignores an OSError here: OK still closes the window.
+        let _ = lider_sys::desktop::set_autostart(s, launch);
     }
     if let Some(on) = menu
         && !lider_sys::desktop::system_installed(s)
@@ -1281,6 +1332,12 @@ pub fn download_get(state: State<'_, AppState>, id: i64) -> Option<Download> {
 pub fn can_check_hash(state: State<'_, AppState>, id: i64) -> bool {
     let m = state.manager();
     m.downloads.get(&id).is_some_and(|d| can_check(&m, d))
+}
+
+/// The user's home folder (a new category's folder is `$HOME/Downloads/New`).
+#[tauri::command]
+pub fn home_dir() -> String {
+    lider_core::paths::home_dir().to_string_lossy().into_owned()
 }
 
 /// The AppImage's file name, for "… runs on its own".

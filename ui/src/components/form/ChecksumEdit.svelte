@@ -6,6 +6,8 @@
   let { text = $bindable(''), algorithm = $bindable('auto'), hint = HINT, valid = $bindable(true), value = $bindable(''), disabled = false }: {
     text?: string; algorithm?: string; hint?: string; valid?: boolean; value?: string; disabled?: boolean
   } = $props()
+  let field: HTMLInputElement | undefined = $state()
+  export function focus() { field?.focus() }
   let title = $state('')
   let error = $state('')
 
@@ -31,7 +33,7 @@
   </select>
   <div style="position:relative;flex:1">
     <input class="input mono" style="width:100%" style:padding-right={title ? '86px' : null} placeholder="Paste a hash (optional)"
-      bind:value={text} aria-invalid={!valid} {disabled} />
+      bind:this={field} bind:value={text} aria-invalid={!valid} {disabled} />
     {#if title}<span class="tpill accent" style="position:absolute;right:6px;top:50%;transform:translateY(-50%)">{title}</span>{/if}
   </div>
 </div>

@@ -24,6 +24,9 @@ input, textarea, select, button { font: inherit; color: inherit; }
 .okText { color: var(--ok); }
 .badText, .errorText { color: var(--bad); }
 .link { color: var(--actx); }
+/* a read-only address with the leading link icon (widgets.link_field) */
+.combo-like { display: flex; align-items: center; gap: 6px; background: var(--input); border: 1px solid var(--line2); border-radius: 8px; min-height: 28px; padding: 0 9px; }
+.combo-like input { flex: 1; min-width: 0; border: 0; background: none; outline: none; color: inherit; padding: 4px 0; }
 .sectionTitle { color: var(--fa); font-weight: 700; letter-spacing: 1px; text-transform: uppercase; font-size: 11px; }
 .icon { display: inline-flex; align-items: center; justify-content: center; color: var(--ink); flex: none; }
 .icon svg { display: block; }
@@ -186,6 +189,8 @@ table.small tr:nth-child(even) td { background: var(--alt); }
   background: var(--input); border: 1px solid var(--line2); border-radius: 8px; padding: 4px 9px; min-height: 28px;
 }
 .input:focus { border-color: var(--ac); }
+/* QSpinBox.NoButtons */
+.input.nospin::-webkit-inner-spin-button, .input.nospin::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .input[aria-invalid='true'] { border-color: var(--bad); }
 .btn {
   background: var(--btn); border: 1px solid var(--line2); border-radius: 16px; padding: 6px 14px; font-weight: 600; cursor: pointer;

@@ -185,6 +185,12 @@ pub fn ready(app: AppHandle, state: State<'_, AppState>) -> MainView {
     }
     let offer = std::mem::take(&mut *app::lock(&state.offer_menu));
     if offer && !state.start_hidden {
+        // Asked once: remembered before the box shows, so quitting with it open does not ask again (1.x `offer`).
+        {
+            let mut m = state.manager();
+            m.settings.menu_offered = true;
+            let _ = lider_core::settings::save(&m.settings, &state.dirs);
+        }
         app::request(&app, app::UiRequest::OfferMenu);
     }
     let view = app::main_view(&state, true);
@@ -633,11 +639,6 @@ pub fn shutdown_now(app: AppHandle, state: State<'_, AppState>) {
 /// The answer to "Add LID to the application menu?" (asked once either way).
 #[tauri::command]
 pub fn menu_offer_answer(state: State<'_, AppState>, add: bool) -> Res<()> {
-    {
-        let mut m = state.manager();
-        m.settings.menu_offered = true;
-        let _ = lider_core::settings::save(&m.settings, &state.dirs);
-    }
     if add {
         lider_sys::desktop::add_to_menu(&state.sys).map_err(|e| e.to_string())?;
     }

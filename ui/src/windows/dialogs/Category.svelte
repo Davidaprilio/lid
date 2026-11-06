@@ -7,10 +7,8 @@
   const name = params().get('name')
   let theme = $state<ThemeName>('ember')
   let cat = $state<Category | null | undefined>(undefined)
-  let home = $state('')
   followTheme((t) => (theme = t))
   call<any>('settings_get').then((s) => {
-    home = s.categories[0].save_dir.replace(/\/Downloads$/, '')
     cat = name ? s.categories.find((c: Category) => c.name === name) ?? null : null
     fit(640)
   })
@@ -22,5 +20,5 @@
 </script>
 
 {#if cat !== undefined}
-  <CategoryForm category={cat} {home} {theme} onok={ok} oncancel={close} />
+  <CategoryForm category={cat} {theme} onok={ok} oncancel={close} />
 {/if}

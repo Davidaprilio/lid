@@ -25,6 +25,7 @@
   let valid = $state(true)
   let value = $state('')
   let box = $state<Box | null>(null)
+  let okButton: HTMLButtonElement | undefined = $state()
 
   followTheme((t) => (theme = t))
   async function load(first: boolean) {
@@ -41,7 +42,7 @@
       username = d.username
       password = d.password
       text = d.checksum ? d.checksum.split(':')[1] : ''
-      fit(680)
+      fit(680).then(() => okButton?.focus())
     }
   }
   load(true)
@@ -50,7 +51,7 @@
 
   function warn(t: string) {
     return new Promise<void>((resolve) => {
-      box = { title: 'LID', text: t, icon: 'info', badge: 'bad', buttons: [{ id: 'ok', label: 'OK', primary: true }], resolve: () => { box = null; resolve() } }
+      box = { title: 'File Properties', text: t, icon: 'info', badge: 'bad', buttons: [{ id: 'ok', label: 'OK', primary: true }], resolve: () => { box = null; resolve() } }
     })
   }
 
@@ -69,7 +70,7 @@
       return warn(r.error)
     }
     try {
-      await call('properties_apply', { id, patch: { filename, save_dir: saveDir, url, description, referer, username, password, checksum: value } })
+      await call('properties_apply', { id, patch: { filename, save_dir: saveDir, url, description, referer: referer.trim(), username, password, checksum: value } })
       close()
     } catch (e) {
       warn(String(e))
@@ -93,7 +94,7 @@
         <Row label="Type" width={100}><span>{info.type}</span></Row>
         <Row label="Size" width={100}><span class="mono">{info.size}</span></Row>
         {#if info.variant}<Row label="YouTube" width={100}><span>{info.variant}</span></Row>{/if}
-        <Row label="Save To" width={100}><input class="input mono" bind:value={saveDir} /><button class="btn" onclick={browse}>Browse...</button></Row>
+        <Row label="Save To" width={100}><input class="input mono" bind:value={saveDir} /><button class="btn" onclick={browse}><u>B</u>rowse...</button></Row>
         <Row label="Address" width={100}><input class="input mono" bind:value={url} readonly={info.youtube} /></Row>
         <Row label="Description" width={100}><input class="input" bind:value={description} /></Row>
       </div>
@@ -108,8 +109,9 @@
         </Row>
       </div>
       <div class="panel">
+        <div class="caption">Web page and authorization</div>
         <Row label="Parent page" width={100}>
-          {#if info.download.parent_page}<span style="user-select:text;overflow-wrap:anywhere">{info.download.parent_page}</span>{:else}<span class="muted">Unknown</span>{/if}
+          <span class="mono {info.download.parent_page ? 'link' : 'muted'}" style="user-select:text;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0">{info.download.parent_page || 'Unknown'}</span>
         </Row>
         <Row label="Referer" width={100}><input class="input mono" bind:value={referer} /></Row>
         <div style="display:flex;gap:10px">
@@ -121,7 +123,7 @@
     <div class="shell-footer">
       <span class="faint" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{info.footer}</span>
       <button class="btn" disabled={!info.complete} onclick={() => call('act_open', { id })}>Open</button>
-      <button class="btn primary" onclick={ok}>OK</button>
+      <button class="btn primary" bind:this={okButton} onclick={ok}>OK</button>
     </div>
   </div>
 {/if}

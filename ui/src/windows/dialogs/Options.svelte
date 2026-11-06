@@ -7,6 +7,8 @@
   import TagInput from '../../components/form/TagInput.svelte'
   import Icon from '../../components/Icon.svelte'
   import CategoryForm from './CategoryForm.svelte'
+  import { listen } from '@tauri-apps/api/event'
+  import Combo from '../../components/form/Combo.svelte'
   import { call, close, followTheme, params } from '../../lib/dialog'
   import { openDialog } from '../../lib/api'
   import { token, TITLES, type ThemeName } from '../../theme/tokens'
@@ -54,7 +56,9 @@
 
   function updateFont() {
     const parts = (s.list_font as string).split(',')
-    fontLabel = parts[0] ? `${parts[0]} · ${parts[1] ?? 10} pt` : 'System default · 10 pt'
+    // The list's own default: the window font (13 px), in points.
+    const pt = Math.round(parseFloat(getComputedStyle(document.body).fontSize) * 0.75)
+    fontLabel = parts[0] ? `${parts[0]} · ${parts[1] ?? pt} pt` : `System default · ${pt} pt`
   }
 
   // Save to: switching category keeps the edits of the previous one.
@@ -101,41 +105,48 @@
     'show_complete_dialog', 'duplicate_action', 'user_agent', 'verify_checksum', 'checksum_from_clipboard', 'checksum_mismatch',
     'max_connections', 'retries', 'theme', 'follow_system', 'dark_theme', 'density', 'toolbar_labels', 'menubar', 'show_categories',
     'show_details', 'show_statusbar', 'tray_icon', 'close_to_tray', 'start_minimized']
-  let fontReset = false
 
   async function ok() {
     storeCat()
     const patch: Record<string, unknown> = Object.fromEntries(KEYS.map((k) => [k, s[k]]))
     Object.assign(patch, {
       launch_on_startup: launch,
-      auto_capture_types: fileTypes.join(' ').toUpperCase(),
+      auto_capture_types: fileTypes.join(' '),
       no_auto_sites: noSites.join(' '),
       categories: cats,
       server_limits: Object.fromEntries(limits),
       proxy: useProxy ? proxy.trim() : '',
       retries: Math.max(0, Math.min(100, Math.round(Number(s.retries) || 0))),
     })
-    if (fontReset) patch.list_font = ''
+    patch.list_font = s.list_font
     if (!String(s.temp_dir).trim()) delete patch.temp_dir
     if (!String(s.user_agent).trim()) delete patch.user_agent
     await call('options_apply', { settings: patch, menu: desk.system_installed ? null : inMenu })
     close()
   }
 
-  // The font window writes the font itself; show what it chose when this window gets the focus again.
+  // The font window sends its choice back; like the other fields it is written on OK.
   $effect(() => {
-    const f = async () => { if (s) { s.list_font = (await call<any>('settings_get')).list_font; if (!fontReset) updateFont() } }
-    window.addEventListener('focus', f)
-    return () => window.removeEventListener('focus', f)
+    const off = listen<string>('lid://font-chosen', (e) => { if (s) { s.list_font = e.payload; updateFont() } })
+    return () => { off.then((f) => f()) }
   })
 
+  const catIcon = (name: string) => (['compressed', 'documents', 'music', 'programs', 'video'].includes(name.toLowerCase()) ? `category-${name.toLowerCase()}` : 'folder')
   const preview = (t: ThemeName) => ({ win: token(t, 'win'), pane: token(t, 'pane'), ac: token(t, 'ac'), line: token(t, 'line'), tx: token(t, 'tx'), track: token(t, 'track') })
   const header = (icon: string, title: string) => ({ icon, title })
   const HEAD = [header('general', 'Desktop Integration'), header('filetypes', 'Downloaded file types'), header('saveto', 'Categories, file types, folders'),
     header('folder-download', 'Default download settings'), header('connection', 'Connections and Limits'), header('proxy', 'Proxy'), header('general', 'Appearance')]
 </script>
 
-<svelte:window onkeydown={(e) => { if (editCat || editLimit) return; if (e.key === 'Escape') close() }} />
+<svelte:window onkeydown={(e) => {
+  if (editCat || e.defaultPrevented) return
+  if (editLimit) {
+    if (e.key === 'Escape') editLimit = null
+    else if (e.key === 'Enter' && (e.target as HTMLElement).tagName !== 'BUTTON') { e.preventDefault(); saveLimit() }
+    return
+  }
+  if (e.key === 'Escape') close()
+}} />
 {#if s}
   <div class="shell">
     <div style="padding-top:10px"><TabStrip names={TABS} bind:active={tab} /></div>
@@ -169,9 +180,8 @@
         <fieldset class="group">
           <legend>Save to...</legend>
           <Row label="Category" width={80}>
-            <select class="input" style="min-width:200px" value={catIndex} onchange={(e) => selectCat(Number(e.currentTarget.value))}>
-              {#each cats as c, i}<option value={i}>{c.name}</option>{/each}
-            </select>
+            <Combo {theme} style="flex:0 1 auto;min-width:200px" value={String(catIndex)} onchange={(v) => selectCat(Number(v))}
+              items={cats.map((c, i) => ({ value: String(i), label: c.name, icon: catIcon(c.name) }))} />
             <button class="btn" onclick={() => { storeCat(); editCat = { cat: null, index: -1 } }}>New</button>
             <button class="btn" onclick={() => { storeCat(); editCat = { cat: cats[catIndex], index: catIndex } }}>Edit...</button>
           </Row>
@@ -273,8 +283,8 @@
         </Row>
         <Row label="List font" width={110}>
           <input class="input" readonly value={fontLabel} />
-          <button class="btn" onclick={() => openDialog('font', 'font', 'Choose Font', 460, 520)}>Change...</button>
-          <button class="ghostBtn" onclick={() => { s.list_font = ''; fontReset = true; updateFont() }}>Reset</button>
+          <button class="btn" onclick={() => openDialog('font-options', `font?for=options&font=${encodeURIComponent(s.list_font)}`, 'Choose Font', 460, 520)}>Change...</button>
+          <button class="ghostBtn" onclick={() => { s.list_font = ''; updateFont() }}>Reset</button>
         </Row>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px 18px">
           <label class="check"><input type="checkbox" bind:checked={s.show_categories} /> Show Categories panel</label>
@@ -295,7 +305,7 @@
 {/if}
 {#if editCat}
   <div class="overlay"><div class="dialog" style="max-width:640px;min-width:600px">
-    <CategoryForm category={editCat.cat} home={cats[0]?.save_dir.replace(/\/Downloads$/, '') ?? ''} {theme} onok={savedCat} oncancel={() => (editCat = null)} />
+    <CategoryForm category={editCat.cat} {theme} onok={savedCat} oncancel={() => (editCat = null)} />
   </div></div>
 {/if}
 {#if editLimit}
