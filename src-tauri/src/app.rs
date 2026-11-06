@@ -348,7 +348,8 @@ pub enum UiRequest {
     Shutdown,
     /// Closing with downloads running: keep, background or stop.
     ConfirmClose {
-        running: Vec<String>,
+        /// Each running download as (category icon, file name, "NN%" or the size so far).
+        running: Vec<(String, String, String)>,
         background: bool,
         exiting: bool,
     },
@@ -634,12 +635,19 @@ pub fn save_settings(app: &AppHandle, state: &AppState) {
     let _ = lider_core::settings::save(&m.settings, &state.dirs);
 }
 
-/// Names of the downloads that are running or being checked.
-fn busy(m: &DownloadManager) -> Vec<String> {
+/// The downloads that are running or being checked, as the closing dialog lists them.
+fn busy(m: &DownloadManager) -> Vec<(String, String, String)> {
     m.downloads
         .values()
         .filter(|d| m.is_running(d.id) || d.status == Status::Verifying)
-        .map(|d: &Download| d.filename.clone())
+        .map(|d: &Download| {
+            let done = if d.size > 0 {
+                format!("{:.0}%", d.progress() * 100.0)
+            } else {
+                lider_core::fmt::size(d.downloaded)
+            };
+            (view::category_icon(&d.category), d.filename.clone(), done)
+        })
         .collect()
 }
 

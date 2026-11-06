@@ -1282,3 +1282,13 @@ pub fn can_check_hash(state: State<'_, AppState>, id: i64) -> bool {
     let m = state.manager();
     m.downloads.get(&id).is_some_and(|d| can_check(&m, d))
 }
+
+/// The AppImage's file name, for "… runs on its own".
+#[tauri::command]
+pub fn appimage_name(state: State<'_, AppState>) -> Option<String> {
+    state.sys.appimage.as_ref().and_then(|p| {
+        std::path::Path::new(p)
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+    })
+}

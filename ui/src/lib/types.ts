@@ -37,5 +37,5 @@ export type UiRequest =
   | { kind: 'complete'; id: number }
   | { kind: 'mismatch'; id: number }
   | { kind: 'shutdown' }
-  | { kind: 'confirm_close'; running: string[]; background: boolean; exiting: boolean }
+  | { kind: 'confirm_close'; running: [string, string, string][]; background: boolean; exiting: boolean }
   | { kind: 'offer_menu' }

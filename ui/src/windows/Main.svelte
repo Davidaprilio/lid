@@ -269,6 +269,7 @@
         if (id === 'q_stop') return api.queue(value!, false)
         if (id === 'q_scheduler') return openDialog('scheduler', `scheduler?queue=${encodeURIComponent(value ?? MAIN_QUEUE)}`, 'Scheduler', 860, 620)
         if (id === 'cat_add') return openDialog('category', 'category', 'Category', 520, 420)
+    if (id === 'find_settings') return openDialog('find', 'find', 'LID Search settings', 460, 340)
         if (id === 'cat_properties') return openDialog('category', `category?name=${encodeURIComponent(value!)}`, 'Category', 520, 420)
         if (id === 'cat_delete') {
           if (await question('Deleting a category from LID categories list', `Do you really want to delete "${value}" category from LID categories list?`)) {
@@ -277,6 +278,20 @@
         }
       },
     }
+  }
+
+  // The UI scenarios use the same paths as the menus and the context menus.
+  function e2eDispatch(id: string): Promise<unknown> {
+    const first = v?.selected[0]
+    if (id === 'ctx_check_hash') return openDialog(`checkhash-${first}`, `checkhash?id=${first}`, 'Check hash', 560, 480)
+    if (id === 'ctx_properties') return openDialog(`properties-${first}`, `properties?id=${first}`, 'File Properties', 560, 600, false)
+    if (id === 'cat_add') return openDialog('category', 'category', 'Category', 520, 420)
+    if (id === 'find_settings') return openDialog('find', 'find', 'LID Search settings', 460, 340)
+    return Promise.resolve(dispatch(id))
+  }
+  function e2eSelect(name: string) {
+    const row = v?.rows.find((r) => r.cells.includes(name))
+    if (row) api.select([row.id], row.id)
   }
 
   // ------------------------------------------------------------------ requests from the backend
@@ -313,23 +328,37 @@
     if (!cancelled) await api.shutdownNow()
   }
 
-  async function confirmClose(running: string[], background: boolean, exiting: boolean) {
-    const names = running.slice(0, 5).join('\n') + (running.length > 5 ? `\n… and ${running.length - 5} more` : '')
-    const buttons = [
-      ...(background ? [{ id: 'background', label: 'Keep downloading in the background', primary: true }] : []),
-      { id: 'stop', label: exiting ? 'Stop and exit' : 'Stop and close', primary: !background },
-      { id: 'keep', label: 'Cancel' },
-    ]
-    const r = await ask({ title: 'Downloads are still running', text: `${running.length} download(s) are still running:\n${names}`, icon: 'info', buttons })
+  async function confirmClose(running: [string, string, string][], background: boolean, exiting: boolean) {
+    // 1.x closing.CloseWhileDownloadingDialog.
+    const n = running.length
+    const what = exiting ? 'Exiting' : 'Closing the window'
+    const them = n === 1 ? 'it' : 'them'
+    const r = await ask({
+      title: n === 1 ? '1 download is still running' : `${n} downloads are still running`,
+      text: background
+        ? `${what} stops ${them}. LID can keep downloading in the background, with an icon in the system tray.`
+        : `${what} stops ${them}. Unfinished downloads can be resumed later.`,
+      icon: 'queue', badge: 'accent',
+      items: running.slice(0, 3),
+      more: n > 3 ? `and ${n - 3} more` : undefined,
+      buttons: [
+        { id: 'stop', label: exiting ? 'Stop and exit' : 'Stop and close', danger: true, left: true },
+        ...(background ? [{ id: 'background', label: 'Continue in background', primary: true }] : []),
+        { id: 'keep', label: 'Keep downloading', default: true },
+      ],
+    })
     await api.closeChoice((r.button === 'cancel' ? 'keep' : r.button) as 'keep' | 'background' | 'stop')
   }
 
   async function offerMenu() {
+    // 1.x menu.AddToMenuDialog; the offer is made once whatever the answer.
+    const name = (await invoke<string | null>('appimage_name')) || 'LID'
     const r = await ask({
       title: 'Add LID to the application menu?',
-      text: 'This AppImage runs on its own, so the application menu does not list LID yet.\n\nLID keeps the entry pointed at the AppImage you start, also after you move or update it, and it disappears when the AppImage is deleted. You can change this later in Options → General.',
+      text: `${name} runs on its own, so the application menu does not list LID yet.`,
+      note: 'LID keeps the entry pointed at the AppImage you start, also after you move or update it, and it disappears when the AppImage is deleted. You can change this later in Options → General.',
       icon: 'general', badge: 'accent',
-      buttons: [{ id: 'add', label: 'Add to menu', primary: true }, { id: 'later', label: 'Not now' }],
+      buttons: [{ id: 'later', label: 'Not now' }, { id: 'add', label: 'Add to menu', primary: true }],
     })
     await api.menuOffer(r.button === 'add').catch(() => {})
   }
@@ -391,7 +420,8 @@
       detailsHeight = first.appearance.details_height
       searchText = first.search.query
       invoke<string | null>('e2e_script').then((name) => {
-        if (name) import('../dev/e2e').then((m) => m.run())
+        if (name === 'main') import('../dev/e2e').then((m) => m.run())
+        if (name === 'dialogs') import('../dev/e2e-dialogs').then((m) => m.runMain(e2eDispatch, e2eSelect))
       })
     })
     const up = (e: KeyboardEvent) => { if (e.key === 'Alt') altHeld = false }

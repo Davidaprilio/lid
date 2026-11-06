@@ -8,7 +8,11 @@
     text: string
     icon?: string
     badge?: 'accent' | 'bad' | 'ok'
-    buttons: { id: string; label: string; primary?: boolean }[]
+    buttons: { id: string; label: string; primary?: boolean; danger?: boolean; left?: boolean; icon?: string; default?: boolean }[]
+    /** A list in a panel under the text: icon, name, a muted value. */
+    items?: [string, string, string][]
+    more?: string
+    note?: string
     checkbox?: { label: string; checked: boolean }
     input?: { label: string; value: string }
     resolve: (r: { button: string; checked: boolean; value: string }) => void
@@ -32,7 +36,7 @@
     if (e.key === 'Escape') { e.stopPropagation(); done('cancel') }
     if (e.key === 'Enter') {
       e.stopPropagation()
-      const p = box.buttons.find((b) => b.primary) ?? box.buttons[0]
+      const p = box.buttons.find((b) => b.default) ?? box.buttons.find((b) => b.primary && !b.left) ?? box.buttons.find((b) => b.primary) ?? box.buttons[0]
       done(p.id)
     }
   }
@@ -49,6 +53,15 @@
           <div class="text">{box.text}</div>
         </div>
       </div>
+      {#if box.items?.length}
+        <div class="panel" style="gap:6px">
+          {#each box.items as [icon, name, extra]}
+            <div style="display:flex;gap:8px;align-items:center"><Icon name={icon} size={16} {theme} /><span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{name}</span><span class="muted mono">{extra}</span></div>
+          {/each}
+          {#if box.more}<div class="faint">{box.more}</div>{/if}
+        </div>
+      {/if}
+      {#if box.note}<div class="noteBox">{box.note}</div>{/if}
       {#if box.input}
         <label style="display:flex;flex-direction:column;gap:4px">
           <span class="muted">{box.input.label}</span>
@@ -60,8 +73,12 @@
       {/if}
     </div>
     <div class="footer">
-      {#each box.buttons as b}
-        <button class="btn" class:primary={b.primary} onclick={() => done(b.id)}>{b.label}</button>
+      {#each box.buttons.filter((b) => b.left) as b}
+        <button class="btn" class:primary={b.primary} class:dangerBtn={b.danger} onclick={() => done(b.id)}>{#if b.icon}<Icon name={b.icon} size={14} {theme} />{/if} {b.label}</button>
+      {/each}
+      <span style="flex:1"></span>
+      {#each box.buttons.filter((b) => !b.left) as b}
+        <button class="btn" class:primary={b.primary} class:dangerBtn={b.danger} onclick={() => done(b.id)}>{b.label}</button>
       {/each}
     </div>
   </div>
