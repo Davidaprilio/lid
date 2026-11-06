@@ -9,7 +9,7 @@ edition = "2024"
 license = "MIT"
 authors = ["David Aprilio"]
 repository = "https://github.com/Davidaprilio/lid"
-rust-version = "1.88"
+rust-version = "1.90"
 
 [workspace.dependencies]
 lider-core = { path = "crates/lider-core" }

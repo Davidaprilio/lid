@@ -20,6 +20,25 @@ pub fn join<S: AsRef<str>>(args: &[S]) -> String {
         .join(" ")
 }
 
+/// Start a program detached from LID (own session, no stdio).
+pub fn spawn_detached(program: &str, args: &[String]) -> std::io::Result<()> {
+    use std::os::unix::process::CommandExt;
+    use std::process::{Command, Stdio};
+    let mut c = Command::new(program);
+    c.args(args)
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null());
+    // SAFETY: setsid is async-signal-safe.
+    unsafe {
+        c.pre_exec(|| {
+            libc::setsid();
+            Ok(())
+        });
+    }
+    c.spawn().map(|_| ())
+}
+
 /// `shlex.split` (POSIX rules); `None` for unbalanced quotes.
 pub fn split(s: &str) -> Option<Vec<String>> {
     shlex::split(s)

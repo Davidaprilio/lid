@@ -326,3 +326,34 @@ fn details_pane() {
     assert_eq!(view::of(2_566_914_048, 6_098_812_928), "2.39 / 5.68 GB");
     assert_eq!(view::of(512, 6_098_812_928), "512 Bytes / 5.68 GB");
 }
+
+#[test]
+fn unique_names_and_add_many() {
+    let rt = Runtime::new().unwrap();
+    let mut m = manager(&rt);
+    let tmp = tempfile::tempdir().unwrap();
+    let dir = tmp.path().to_string_lossy().into_owned();
+    for c in &mut m.settings.categories {
+        c.save_dir = dir.clone();
+    }
+    std::fs::write(tmp.path().join("a.zip"), "").unwrap();
+    assert_eq!(view::unique_name(&m, &dir, "a.zip"), "a (2).zip");
+    let n = view::add_many(
+        &mut m,
+        &[
+            ("https://x/a.zip".into(), "https://x/".into(), "".into()),
+            ("https://x/a.zip".into(), "".into(), "".into()),
+        ],
+        "",
+        "",
+    );
+    assert_eq!(n, 2);
+    let names: Vec<String> = m
+        .queue_items(MAIN_QUEUE)
+        .iter()
+        .map(|d| d.filename.clone())
+        .collect();
+    assert_eq!(names, ["a (2).zip", "a (3).zip"]);
+    assert_eq!(m.queue_items(MAIN_QUEUE)[0].referer, "https://x/");
+    assert_eq!(m.queue_items(MAIN_QUEUE)[0].category, "Compressed");
+}

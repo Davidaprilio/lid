@@ -16,71 +16,15 @@ use lider_core::paths::{Dirs, migrate_legacy_dirs};
 use lider_core::store::Store;
 use lider_sys::env::SysEnv;
 use lider_sys::ipc::InstanceServer;
-use tauri::{Emitter, Manager};
+use tauri::{Emitter, Manager, WindowEvent};
 
+use crate::app::{self, AppState};
 use crate::cli::Cli;
-
-/// State shared by the commands.
-pub struct AppState {
-    pub manager: Mutex<DownloadManager>,
-    /// Lines from other starts and the browser, kept until the window takes them.
-    pub pending: Mutex<Vec<String>>,
-    /// The first-start "add to the application menu?" question is due.
-    pub offer_menu: bool,
-    pub start_hidden: bool,
-    _engine: tokio::runtime::Runtime,
-    _server: Option<InstanceServer>,
-}
-
-#[derive(serde::Serialize)]
-struct AppInfo {
-    name: &'static str,
-    long_name: &'static str,
-    version: &'static str,
-}
-
-#[tauri::command]
-fn app_info() -> AppInfo {
-    AppInfo {
-        name: lider_core::APP_NAME,
-        long_name: lider_core::APP_LONG_NAME,
-        version: lider_core::VERSION,
-    }
-}
-
-#[derive(serde::Serialize)]
-struct StartupInfo {
-    offer_menu: bool,
-    start_hidden: bool,
-    downloads: usize,
-}
-
-/// What the window needs to know when it opens.
-#[tauri::command]
-fn startup_info(state: tauri::State<'_, AppState>) -> StartupInfo {
-    StartupInfo {
-        offer_menu: state.offer_menu,
-        start_hidden: state.start_hidden,
-        downloads: state
-            .manager
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .downloads
-            .len(),
-    }
-}
-
-/// URLs, `--show` and browser requests received so far (the window drains them once it is ready, and
-/// listens for `lid://instance-line` afterwards).
-#[tauri::command]
-fn take_pending_lines(state: tauri::State<'_, AppState>) -> Vec<String> {
-    std::mem::take(&mut *state.pending.lock().unwrap_or_else(|e| e.into_inner()))
-}
 
 pub fn run(cli: Cli, socket: String) -> ExitCode {
     let dirs = Dirs::from_env();
     migrate_legacy_dirs(&dirs);
-    let settings = lider_core::settings::load(&dirs);
+    let mut settings = lider_core::settings::load(&dirs);
     let sys = SysEnv::from_process();
     let _ = lider_sys::desktop::refresh(&sys);
     let engine = match tokio::runtime::Builder::new_multi_thread()
@@ -103,6 +47,10 @@ pub fn run(cli: Cli, socket: String) -> ExitCode {
     };
     let offer_menu = lider_sys::desktop::should_offer(&sys, settings.menu_offered);
     let start_hidden = (cli.minimized || settings.start_minimized) && settings.tray_icon;
+    if settings.speed_limiter_on_startup {
+        settings.speed_limiter_on = true;
+    }
+    let ui = app::new_ui(&settings);
     let manager = match DownloadManager::new(settings, store, engine.handle().clone()) {
         Ok(m) => m,
         Err(e) => {
@@ -112,22 +60,74 @@ pub fn run(cli: Cli, socket: String) -> ExitCode {
     };
 
     let result = tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
-            app_info,
-            startup_info,
-            take_pending_lines
+            crate::commands::app_info,
+            crate::commands::ready,
+            crate::commands::view,
+            crate::commands::menu_action,
+            crate::commands::ui_filter,
+            crate::commands::ui_select,
+            crate::commands::ui_check,
+            crate::commands::ui_toggle_all,
+            crate::commands::ui_clear_checks,
+            crate::commands::ui_header_click,
+            crate::commands::ui_column_width,
+            crate::commands::ui_pane_sizes,
+            crate::commands::ui_search,
+            crate::commands::ui_search_close,
+            crate::commands::ui_search_flags,
+            crate::commands::ui_find_next,
+            crate::commands::targets_info,
+            crate::commands::act_remove,
+            crate::commands::act_delete_completed,
+            crate::commands::act_activate,
+            crate::commands::act_details_button,
+            crate::commands::act_open_window,
+            crate::commands::act_download_limit,
+            crate::commands::act_open,
+            crate::commands::act_open_folder,
+            crate::commands::act_open_with,
+            crate::commands::act_set_queue,
+            crate::commands::act_queue,
+            crate::commands::act_add_many,
+            crate::commands::act_start_main_queue,
+            crate::commands::copy_text,
+            crate::commands::clipboard_text,
+            crate::commands::export_list,
+            crate::commands::import_list,
+            crate::commands::set_list_font,
+            crate::commands::system_fonts,
+            crate::commands::close_choice,
+            crate::commands::shutdown_now,
+            crate::commands::menu_offer_answer,
+            crate::commands::recheck_browser,
+            crate::commands::save_settings,
+            crate::commands::browser_request,
+            crate::commands::set_completion_options,
         ])
+        .on_menu_event(|app, e| crate::commands::run_menu(app, e.id().as_ref()))
+        .on_window_event(|window, e| {
+            if window.label() == "main"
+                && let WindowEvent::CloseRequested { api, .. } = e
+            {
+                let app = window.app_handle();
+                let state = app.state::<AppState>();
+                if !app::close_requested(app, state.inner()) {
+                    api.prevent_close();
+                }
+            }
+        })
         .setup(move |app| {
             let handle = app.handle().clone();
             let server = InstanceServer::bind(&socket, move |line| {
-                if let Some(state) = handle.try_state::<AppState>() {
-                    state
-                        .pending
-                        .lock()
-                        .unwrap_or_else(|e| e.into_inner())
-                        .push(line.clone());
+                let state = handle.state::<AppState>();
+                if *app::lock(&state.ready) {
+                    app::on_line(&handle, &line);
+                } else {
+                    app::lock(&state.pending).push(line);
                 }
-                let _ = handle.emit("lid://instance-line", line);
             });
             let server = match server {
                 Ok(s) => Some(s),
@@ -135,21 +135,50 @@ pub fn run(cli: Cli, socket: String) -> ExitCode {
                 Err(_) if lider_sys::ipc::send_lines(&cli.urls, &socket) => std::process::exit(0),
                 Err(_) => None,
             };
+            let window_state = manager.settings.window_state;
             app.manage(AppState {
                 manager: Mutex::new(manager),
+                ui: Mutex::new(ui),
                 pending: Mutex::new(cli.urls.clone()),
-                offer_menu,
+                ready: Mutex::new(false),
+                offer_menu: Mutex::new(offer_menu),
                 start_hidden,
+                dirs,
+                sys,
                 _engine: engine,
-                _server: server,
+                _server: Mutex::new(server),
             });
+            let state = app.state::<AppState>();
+            {
+                let dark = crate::system::prefers_dark().unwrap_or(false);
+                let mut ui = state.ui();
+                ui.dark_system = dark;
+                ui.global_menu = crate::system::global_menu_available();
+            }
+            crate::tray::ensure(app.handle(), state.inner());
             if let Some(w) = app.get_webview_window("main") {
-                if start_hidden {
+                let _ = w.set_title(&format!(
+                    "{} {}",
+                    lider_core::APP_LONG_NAME,
+                    lider_core::VERSION
+                ));
+                if let Some(ws) = window_state {
+                    let _ = w.set_size(tauri::LogicalSize::new(ws.width as f64, ws.height as f64));
+                    let _ = w.set_position(tauri::LogicalPosition::new(ws.x as f64, ws.y as f64));
+                    if ws.maximized {
+                        let _ = w.maximize();
+                    }
+                }
+                let hidden = start_hidden && crate::tray::exists(app.handle());
+                if hidden {
                     let _ = w.hide();
                 } else {
                     let _ = w.show();
                 }
             }
+            crate::pump::apply_menubar(app.handle(), state.inner());
+            crate::pump::start(app.handle().clone());
+            let _ = app.emit("lid://started", ());
             Ok(())
         })
         .run(tauri::generate_context!());

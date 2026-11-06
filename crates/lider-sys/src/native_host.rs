@@ -11,7 +11,6 @@
 //! - `{"type": "show"}` -> bring the LID window forward
 
 use std::io::{self, Read, Write};
-use std::process::{Command, Stdio};
 use std::sync::LazyLock;
 use std::time::{Duration, Instant};
 
@@ -206,23 +205,8 @@ pub fn launch_command() -> Vec<String> {
 
 /// Start a program detached from the browser (own session, no stdio).
 fn spawn_detached(cmd: &[String]) -> bool {
-    use std::os::unix::process::CommandExt;
-    let Some((program, args)) = cmd.split_first() else {
-        return false;
-    };
-    let mut c = Command::new(program);
-    c.args(args)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::null());
-    // SAFETY: setsid is async-signal-safe.
-    unsafe {
-        c.pre_exec(|| {
-            libc::setsid();
-            Ok(())
-        });
-    }
-    c.spawn().is_ok()
+    cmd.split_first()
+        .is_some_and(|(program, args)| sh::spawn_detached(program, args).is_ok())
 }
 
 /// Send to the running LID; start it and retry for up to `wait` when it is not running.

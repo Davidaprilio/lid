@@ -791,3 +791,54 @@ pub fn details(m: &DownloadManager, d: &Download, snap: Option<&Snapshot>) -> De
         },
     }
 }
+
+/// A file name not used by another download in `save_dir` nor by a file there: `name`, `name (2)`, …
+pub fn unique_name(m: &DownloadManager, save_dir: &str, name: &str) -> String {
+    let taken: HashSet<&str> = m
+        .downloads
+        .values()
+        .filter(|d| d.save_dir == save_dir)
+        .map(|d| d.filename.as_str())
+        .collect();
+    let ext = crate::pyutil::splitext_ext(name);
+    let stem = &name[..name.len() - ext.len()];
+    let mut candidate = name.to_string();
+    let mut n = 2;
+    while taken.contains(candidate.as_str())
+        || std::path::Path::new(save_dir).join(&candidate).exists()
+    {
+        candidate = format!("{stem} ({n}){ext}");
+        n += 1;
+    }
+    candidate
+}
+
+/// Add addresses to the Main queue (batch, drop, import): a safe name from the URL, the category's
+/// folder, a free name. Returns how many were added.
+pub fn add_many(
+    m: &mut DownloadManager,
+    items: &[(String, String, String)],
+    username: &str,
+    password: &str,
+) -> usize {
+    for (url, referer, description) in items {
+        let name = crate::names::safe_filename(&crate::names::filename_from_url(url));
+        let cat = crate::categories::classify(&m.settings, &name, url).clone();
+        let unique = unique_name(m, &cat.save_dir, &name);
+        m.add(
+            url,
+            &unique,
+            crate::manager::NewDownload {
+                save_dir: Some(cat.save_dir.clone()),
+                category: Some(cat.name.clone()),
+                description: description.clone(),
+                referer: referer.clone(),
+                username: username.into(),
+                password: password.into(),
+                queue: MAIN_QUEUE.into(),
+                ..Default::default()
+            },
+        );
+    }
+    items.len()
+}

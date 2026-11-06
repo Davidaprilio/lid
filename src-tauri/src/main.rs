@@ -1,8 +1,15 @@
 //! The `lider` binary. Like `lider/app.py` in 1.x, it picks the process mode from argv before any GUI
 //! code runs: the native messaging host and the browser-integration CLI must never start the webview.
 
+mod app;
 mod cli;
+mod commands;
 mod gui;
+mod menu;
+mod pump;
+mod system;
+mod tray;
+mod windows;
 
 use std::process::ExitCode;
 
