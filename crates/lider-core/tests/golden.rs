@@ -56,6 +56,8 @@ fn downloads_json(store: &Store) -> Value {
     Value::Array(downloads.iter().map(|d| d.to_json()).collect())
 }
 
+// The 1.2 profile was written on Linux; its default paths are Unix paths.
+#[cfg(unix)]
 #[test]
 fn reads_the_1_2_profile_like_1_2() {
     let tmp = tempfile::tempdir().unwrap();
