@@ -747,7 +747,10 @@ pub fn e2e_shot(app: AppHandle, label: String, name: String) -> Res<()> {
     let out = std::path::Path::new(&dir).join(format!("{name}.png"));
     let status = std::process::Command::new("import")
         .args(["-window", "root", "-crop"])
-        .arg(format!("{}x{}+{}+{}", size.width, size.height, pos.x, pos.y))
+        .arg(format!(
+            "{}x{}+{}+{}",
+            size.width, size.height, pos.x, pos.y
+        ))
         .args(["+repage"])
         .arg(&out)
         .status()

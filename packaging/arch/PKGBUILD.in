@@ -12,7 +12,7 @@ optdepends=('yt-dlp: download YouTube videos'
             'ffmpeg: join YouTube video and audio, convert to MP3'
             'nodejs: unlock YouTube streams (or deno or bun)'
             'deno: unlock YouTube streams')
-options=('!lto')
+options=('!lto' '!debug')
 source=("@SOURCE@")
 sha256sums=('@SHA256@')
 _src=lider-@SRCVERSION@
