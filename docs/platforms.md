@@ -10,7 +10,8 @@ lider-sys
   browser.rs, native_host.rs, sh.rs                    ── portable
   platform/mod.rs      ports: Instance, Desktop, BrowserHosts, Shell; Os = the adapter of this build
   platform/linux/      the Linux adapter (what 1.x and 2.x do)
-  platform/unsupported.rs   every other OS for now: compiles, services say "not supported yet"
+  platform/windows/    the Windows adapter (named pipe, registry, Explorer)
+  platform/unsupported.rs   every other OS for now (macOS): compiles, services say "not supported yet"
 src-tauri                                              ── uses `lider_sys::platform::prelude::*` only
 ```
 
@@ -19,7 +20,7 @@ and pointing `Os` at it under `#[cfg(target_os = "<os>")]`. Nothing else changes
 
 ## What each port needs
 
-| Port | Linux (done) | Windows (to do) | macOS (to do) |
+| Port | Linux (done) | Windows (done, needs a try on a real machine) | macOS (to do) |
 |---|---|---|---|
 | `Instance`: one LID per user, lines to the running one | abstract Unix socket `lider-<uid>`, `SO_PEERCRED` | named pipe `\\.\pipe\lider-<user SID>`, owner check on the pipe | Unix socket in `$TMPDIR`, `getpeereid` |
 | `Desktop`: menu entry, autostart | `.desktop` files that follow a moved AppImage | Start-menu shortcut, `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` (mostly the installer's job) | Login Items (`SMAppService`); the menu is the `.app` in /Applications |
@@ -39,5 +40,7 @@ notarised `.app`/DMG.
 ## Checks
 
 - `cargo test --workspace` on Linux runs the adapter's tests (`platform/linux/*`).
-- The "Windows" job in `.github/workflows/rust.yml` compiles `lider-core` and `lider-sys` for Windows, so
-  the ports and the portable code keep building there while the adapter is written.
+- The `windows` job in `.github/workflows/rust.yml` runs the core and adapter tests on Windows (named
+  pipe, registry hosts, autostart), clippy, and builds the per-user NSIS installer as an artifact
+  (`LID_<version>_x64-setup.exe`, about 5 MB). Not yet: yt-dlp.exe in the installer, signing, and the
+  installer in the release workflow.
