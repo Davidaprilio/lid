@@ -1,6 +1,6 @@
 name: Build packages
 
-# Push a tag like v1.0 (matching lider/__init__.py) to build every package and publish a release.
+# Push a tag like v2.0.0 (matching the version in Cargo.toml) to build every package and publish a release.
 # "Run workflow" on the Actions tab builds the packages without publishing anything.
 # Optional repository secrets AMO_JWT_ISSUER / AMO_JWT_SECRET sign the Firefox add-on on tag pushes.
 on:
@@ -11,47 +11,53 @@ on:
 permissions:
   contents: write
 
+env:
+  # System libraries Tauri builds against (WebKitGTK, GTK, tray, SVG).
+  TAURI_DEPS: libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev
+
 jobs:
   test:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Libraries for Qt (offscreen) and ffmpeg
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3 ffmpeg
-      - run: python -m pip install "PySide6-Essentials==6.11.1" "yt-dlp==2026.8.19"
       - name: Tag must match the version
         if: startsWith(github.ref, 'refs/tags/v')
         run: |
-          version="$(sed -n 's/^__version__ = "\(.*\)"/\1/p' lider/__init__.py)"
+          version="$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)"
           if [ "${GITHUB_REF_NAME#v}" != "$version" ]; then
-            echo "::error::Tag $GITHUB_REF_NAME does not match __version__ $version in lider/__init__.py"
+            echo "::error::Tag $GITHUB_REF_NAME does not match version $version in Cargo.toml"
             exit 1
           fi
+      - name: System libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends $TAURI_DEPS ffmpeg
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - name: Tests
-        env:
-          QT_QPA_PLATFORM: offscreen
-        run: python -m unittest discover -s tests -t . -v
+        run: cargo test --workspace --locked
       - name: Browser extension tests
         run: node --test tests/js/capture.test.cjs
 
+  # The AppImage and the .deb are built on the oldest supported Ubuntu, so they run on newer systems too.
   appimage:
     needs: test
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-      - name: Build tools (uv, desktop-file-validate for appimagetool)
+      - name: Build tools and libraries
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends desktop-file-utils
-          python -m pip install "uv==0.12.17"
+          sudo apt-get install -y --no-install-recommends $TAURI_DEPS file desktop-file-utils
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - run: cargo install tauri-cli --version "~2.12" --locked
       - run: ./packaging/build.sh appimage
       - uses: actions/upload-artifact@v4
         with:
@@ -61,12 +67,21 @@ jobs:
 
   deb:
     needs: test
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - name: Libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends $TAURI_DEPS
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - uses: pnpm/action-setup@v4
         with:
-          python-version: "3.12"
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
       - run: ./packaging/build.sh deb
       - uses: actions/upload-artifact@v4
         with:
@@ -80,13 +95,17 @@ jobs:
     container: archlinux:latest
     steps:
       - name: Build tools
-        run: pacman -Syu --noconfirm --needed base-devel git python sudo
+        run: |
+          pacman -Syu --noconfirm --needed base-devel git sudo rust nodejs pnpm \
+            webkit2gtk-4.1 gtk3 libayatana-appindicator
       - uses: actions/checkout@v4
       - name: Arch package and AUR files
         run: |
           useradd -m builder
           chown -R builder "$GITHUB_WORKSPACE"
-          version="$(sed -n 's/^__version__ = "\(.*\)"/\1/p' lider/__init__.py)"
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          sudo -u builder git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          version="$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)"
           sudo -u builder ./packaging/build.sh arch
           sudo -u builder env AUR_SOURCE_URL="https://github.com/$GITHUB_REPOSITORY/releases/download/v$version/lider-$version.tar.gz" \
             ./packaging/build.sh aur
@@ -104,9 +123,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
@@ -139,12 +157,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         # An existing release (a draft made beforehand with gh release create vX --draft, or a tag
-        # that was moved) only gets its files replaced; a draft stays a draft.
+        # that was moved) only gets its files replaced; a draft stays a draft. A version with a "-"
+        # (2.0.0-alpha.1) is published as a pre-release.
         run: |
           if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
             gh release upload "$GITHUB_REF_NAME" dist/* --repo "$GITHUB_REPOSITORY" --clobber
           else
-            gh release create "$GITHUB_REF_NAME" dist/* \
+            pre=()
+            case "$GITHUB_REF_NAME" in *-*) pre=(--prerelease) ;; esac
+            gh release create "$GITHUB_REF_NAME" dist/* "${pre[@]}" \
               --repo "$GITHUB_REPOSITORY" \
               --title "LID ${GITHUB_REF_NAME#v}" \
               --generate-notes

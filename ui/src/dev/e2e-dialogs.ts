@@ -54,6 +54,12 @@ const DIALOG: Record<string, (log: string[]) => Promise<Final>> = {
     await waitFor('appearance tab', () => all('.tabstrip .tab.on')[0]?.textContent === 'Appearance')
     log.push('ok  View → Appearance... opens the Appearance tab')
     click(await button('Compact'))
+    // 1.x test_options_general_page: the menu box starts enabled and unchecked; OK writes the autostart.
+    click(all('.tabstrip .tab').find((t) => t.textContent === 'General')!)
+    const menu = await checkbox('Show LID in the application menu')
+    eq(log, [menu.disabled, menu.checked], [false, false], 'Options → General: the menu box is enabled and unchecked')
+    const launch = await checkbox('Launch LID on startup')
+    if (!launch.checked) click(launch)
     const ok = await button('OK')
     return () => click(ok)
   },
@@ -202,6 +208,8 @@ export async function runMain(dispatch: (id: string) => Promise<unknown>, select
     await step(() => dispatch('appearance'))
     await until('density', async () => (await settings()).density === 'compact')
     log.push('ok  Options OK writes the density')
+    await until('autostart', async () => (await settings()).launch_on_startup === true && (await invoke<any>('desktop_state')).autostart === true)
+    log.push('ok  Options OK writes the autostart entry and launch_on_startup')
     await step(() => dispatch('limiter_settings'))
     await until('speed', async () => (await settings()).speed_limit_kbps === 300)
     log.push('ok  the limiter writes its speed')

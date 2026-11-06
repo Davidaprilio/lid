@@ -3,8 +3,10 @@
 //! yt-dlp is used only to read the video page (title, formats, direct stream URLs). The streams themselves
 //! are fetched by LID's multi-connection engine (see `media_task`) and joined or converted with ffmpeg.
 //!
-//! 1.x imported yt-dlp as a Python module. 2.x runs it as a program (`yt-dlp --dump-single-json`), found on
-//! PATH, in `~/.local/bin`, or as `python3 -m yt_dlp` when only the module is installed.
+//! 1.x imported yt-dlp as a Python module. 2.x runs it as a program (`yt-dlp --dump-single-json`). It looks,
+//! in this order, for the user's own copy in `~/.local/bin` (pip --user or a download, so it can be updated
+//! without waiting for LID), the copy a package ships (`<prefix>/lib/lider/yt-dlp` next to
+//! `<prefix>/bin/lider`: deb and AppImage), PATH (the distribution's), and `python3 -m yt_dlp`.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -61,17 +63,31 @@ impl YtDlp {
     }
 }
 
+/// The copy shipped next to the program: `<prefix>/bin/lider` → `<prefix>/lib/lider/yt-dlp`.
+pub fn bundled_beside(exe: &Path) -> PathBuf {
+    exe.parent()
+        .and_then(Path::parent)
+        .unwrap_or(Path::new("/"))
+        .join("lib/lider/yt-dlp")
+}
+
 fn find_yt_dlp() -> Option<YtDlp> {
     let plain = |program: PathBuf| YtDlp {
         program,
         prefix: vec![],
     };
-    if let Some(p) = which("yt-dlp") {
-        return Some(plain(p));
-    }
     let local = crate::paths::home_dir().join(".local/bin/yt-dlp");
     if is_executable(&local) {
         return Some(plain(local));
+    }
+    if let Ok(exe) = std::env::current_exe() {
+        let shipped = bundled_beside(&exe);
+        if is_executable(&shipped) {
+            return Some(plain(shipped));
+        }
+    }
+    if let Some(p) = which("yt-dlp") {
+        return Some(plain(p));
     }
     let python = which("python3")?;
     let ok = Command::new(&python)

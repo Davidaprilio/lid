@@ -196,6 +196,34 @@ mod tests {
         assert!(!send_lines(&["x".into()], &n));
     }
 
+    /// Port of test_native_host.py `test_send_request_and_is_running`.
+    #[test]
+    fn send_request_and_is_running() {
+        let n = name("request");
+        assert!(!is_running(&n));
+        let got = Arc::new(Mutex::new(Vec::<String>::new()));
+        let g = got.clone();
+        let _server = InstanceServer::bind(&n, move |l| g.lock().unwrap().push(l)).unwrap();
+        assert!(is_running(&n));
+        assert!(send_request(&serde_json::json!({"action": "show"}), &n));
+        let end = Instant::now() + Duration::from_secs(5);
+        while !got
+            .lock()
+            .unwrap()
+            .iter()
+            .any(|l| l == r#"{"action":"show"}"#)
+            && Instant::now() < end
+        {
+            thread::sleep(Duration::from_millis(10));
+        }
+        assert!(
+            got.lock()
+                .unwrap()
+                .iter()
+                .any(|l| l == r#"{"action":"show"}"#)
+        );
+    }
+
     #[test]
     fn json_request_is_one_compact_line() {
         let n = name("json");

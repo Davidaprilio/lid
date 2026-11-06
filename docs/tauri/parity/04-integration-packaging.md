@@ -5,7 +5,7 @@ Everything below was read line by line. Paths are relative to the repository roo
 ---
 
 ## 0. Identity and constants
-- [ ] App version `__version__ = "1.2.0"`. `APP_NAME="LID"`, `APP_LONG_NAME="Linux Internet Downloader"`, `PACKAGE_NAME="lider"` (`lider/__init__.py:3-6`). This is the only place the version is defined: `pyproject.toml:21`, `build.sh:26` and `release.yml:30,89` all read it with `sed -n 's/^__version__ = "\(.*\)"/\1/p'`. The port needs one equivalent version source, and CI and build must parse it. — **2.x:** names are `lider_core::APP_NAME` etc.; the version lives in the workspace `Cargo.toml` (2.0.0-alpha.1); build.sh and the release workflow read it in phase 7
+- [x] App version `__version__ = "1.2.0"`. `APP_NAME="LID"`, `APP_LONG_NAME="Linux Internet Downloader"`, `PACKAGE_NAME="lider"` (`lider/__init__.py:3-6`). This is the only place the version is defined: `pyproject.toml:21`, `build.sh:26` and `release.yml:30,89` all read it with `sed -n 's/^__version__ = "\(.*\)"/\1/p'`. The port needs one equivalent version source, and CI and build must parse it. — **2.x:** the names are `lider_core::APP_NAME` etc.; the version is set only in `[workspace.package]` of `Cargo.toml`; `build.sh` and `release.yml` read it with `sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p'`, `lider-pack version` prints it
 - [x] The command and package are named `lider`. The desktop file name is `lider` (`app.py:83`) and the icon name is `lider`. — **2.x:** done
 - [x] Native messaging host name: `io.github.davidaprilio.lid` (`browser.py:24`, `background.js:6`). — **2.x:** `browser::HOST_NAME`; test `background_uses_the_same_host_name`
 - [x] Extension version `EXTENSION_VERSION = "1.0.0"` is separate from the app version (`browser.py:27`). — **2.x:** `browser::EXTENSION_VERSION`
@@ -36,7 +36,7 @@ Everything below was read line by line. Paths are relative to the repository roo
   8. The first-start "add to menu" offer runs only when the window is shown, through `QTimer.singleShot(0)` (`app.py:124-127`).
   9. Each argv URL is added after the event loop starts with `win.add_url(u, ask_address=False)` (`app.py:128-129`).
   10. On exit: close the server, close the store, return `app.exec()` rc.
-- [ ] **Exit codes:** — **2.x:** GUI, native host and CLI codes as 1.x (no argparse error code, see the GUI arguments); the build.sh rows come in phase 7
+- [x] **Exit codes:** — **2.x:** GUI, native host and CLI codes as 1.x (no argparse error code, see the GUI arguments); `build.sh` without a target exits 1, `aur` without `AUR_SOURCE_URL` exits 2 (checked)
 
   | Mode | Code | Meaning |
   |---|---|---|
@@ -58,7 +58,7 @@ Everything below was read line by line. Paths are relative to the repository roo
     - `  registered for <name>` for each browser
     - `Extension for <family>: <folder>` for each family, sorted (exports the extension)
     - `Load that folder as an unpacked extension (see Options -> General -> Browser integration).`
-- [ ] **Environment variables:** — **2.x:** LIDER_SOCKET_NAME, LIDER_LAUNCH, LIDER_NETWORK_TESTS, APPIMAGE, XDG_*, MOZ_LEGACY_HOME as 1.x; the packaging variables come in phase 7, the Qt/Python ones go away
+- [~] **Environment variables:** — **2.x:** LIDER_SOCKET_NAME, LIDER_LAUNCH, LIDER_NETWORK_TESTS, APPIMAGE, XDG_*, MOZ_LEGACY_HOME and the build settings as 1.x; `QT_QPA_PLATFORM` and the `PYTHON*` variables have no meaning without Python and Qt (Q20); the AppImage's `AppRun` is linuxdeploy's
 
   | Variable | Read in | Effect |
   |---|---|---|
@@ -184,7 +184,7 @@ Everything below was read line by line. Paths are relative to the repository roo
 
   - `$XDG_CONFIG_HOME` defaults to `~/.config` (`:82-85`). With the test `home` override, `<home>/.config` is used.
   - **Gecko side choice** (`_paths`, `:93-106`): use the legacy home folder when it exists or `MOZ_LEGACY_HOME` is set. Otherwise use the XDG folder (Firefox 147+).
-- [ ] **System-wide host folders**, written by the deb and Arch packages (`SYSTEM_HOST_DIRS`, `:110-114`): — **2.x:** same four Chromium folders and the Mozilla one. Vivaldi, Opera and LibreWolf folders (decision Q8) are NOT added: no official source confirms their system paths; per-user registration covers them
+- [x] **System-wide host folders**, written by the deb and Arch packages (`SYSTEM_HOST_DIRS`, `:110-114`): — **2.x:** same four Chromium folders and the Mozilla one, written into the deb and the Arch package by `lider-pack system-files` (checked in both). Vivaldi, Opera and LibreWolf folders (decision Q8) are NOT added: no official source confirms their system paths; per-user registration covers them
   - Chromium family: `/etc/opt/chrome/native-messaging-hosts`, `/etc/chromium/native-messaging-hosts`, `/etc/opt/edge/native-messaging-hosts`, `/etc/opt/brave/native-messaging-hosts`
   - Firefox: `/usr/lib/mozilla/native-messaging-hosts`
   - **QUIRK:** there are no system folders for Vivaldi, Opera or LibreWolf.
@@ -329,20 +329,20 @@ Everything below was read line by line. Paths are relative to the repository roo
 - [x] **Settings loading** ignores unknown keys, falls back to defaults on any error, and has shims (`dark_mode`, `toolbar_large`, and appending new columns). See `:188-213`. This matters because the native host reads the same file. — **2.x:** phase 1
 
 ## 7. Browser extension (`lider/browser_extension/`)
-- [ ] **Manifests**: both are MV3, named "LID Integration", short name "LID", description "Send downloads, links and videos from the browser to LID (Linux Internet Downloader).", version 1.0.0, icons 16/32/48/128 PNG, action title "LID" with popup `popup.html` and icons 16/32.
+- [x] **Manifests**: both are MV3, named "LID Integration", short name "LID", description "Send downloads, links and videos from the browser to LID (Linux Internet Downloader).", version 1.0.0, icons 16/32/48/128 PNG, action title "LID" with popup `popup.html` and icons 16/32. — **2.x:** unchanged: the same files are compiled into `lider` (`include_dir`); the release zips hold the same files as 1.2's builder (compared), `web-ext lint` is clean and `node --test tests/js/capture.test.cjs` passes
   - Permissions: `downloads`, `contextMenus`, `cookies`, `nativeMessaging`, `storage`, `scripting`. Host permissions: `<all_urls>`.
   - Content script on `https://www.youtube.com/*` and `https://m.youtube.com/*`: `youtube.js` and `youtube.css`, `document_idle`.
   - Chromium only: `key` (the public key that gives the fixed id), `minimum_chrome_version "109"`, `background.service_worker "background.js"` (`manifest.chromium.json`).
   - Firefox only: `background.scripts ["capture.js","background.js"]`, `gecko.id lid@davidaprilio.github.io`, `strict_min_version "140.0"`, `data_collection_permissions.required ["none"]`, `gecko_android.strict_min_version "142.0"` (`manifest.firefox.json`).
-- [ ] **Store variant** (§4): no `key`, no `content_scripts`, no `youtube.*` files, the short store description. Because `HAS_YOUTUBE` is false (`background.js:10`), the "Download this video" menu item and `video` messages are disabled.
-- [ ] **background.js: messaging and config:**
+- [x] **Store variant** (§4): no `key`, no `content_scripts`, no `youtube.*` files, the short store description. Because `HAS_YOUTUBE` is false (`background.js:10`), the "Download this video" menu item and `video` messages are disabled. — **2.x:** unchanged: the same files are compiled into `lider` (`include_dir`); the release zips hold the same files as 1.2's builder (compared), `web-ext lint` is clean and `node --test tests/js/capture.test.cjs` passes
+- [x] **background.js: messaging and config:** — **2.x:** unchanged: the same files are compiled into `lider` (`include_dir`); the release zips hold the same files as 1.2's builder (compared), `web-ext lint` is clean and `node --test tests/js/capture.test.cjs` passes
   - In Chrome it loads `capture.js` with `importScripts` (`:4`).
   - `send()` wraps `sendNativeMessage(HOST, msg)`. It resolves to `{ok:false,error:lastError.message | "no reply from LID" | exception message}` (`:30-41`).
   - `call()` promisifies callback APIs and swallows `lastError` (`:17-28`).
   - The hello config is cached for `CONFIG_TTL = 30000` ms. `getConfig(true)` forces a refresh. A failed reply sets `config=null` and `lastError`, then updates the badge (`:48-56`).
   - `getConfig(true)` runs on `onInstalled`, on `onStartup`, and when the background script loads (`:156-163,250`).
   - The `enabled` flag lives in `chrome.storage.local`. A missing value means enabled (`:43-46`).
-- [ ] **Badge and title** (`:58-64`):
+- [x] **Badge and title** (`:58-64`): — **2.x:** unchanged: the same files are compiled into `lider` (`include_dir`); the release zips hold the same files as 1.2's builder (compared), `web-ext lint` is clean and `node --test tests/js/capture.test.cjs` passes
 
   | State | Badge text | Badge colour | Title |
   |---|---|---|---|
@@ -350,10 +350,10 @@ Everything below was read line by line. Paths are relative to the repository roo
   | enabled, no config | `!` | `#B91C1C` | `LID: <lastError or "not connected">` |
   | enabled, connected | empty | `#B91C1C` | `LID` |
 
-- [ ] **Forwarding cookies, referrer and user agent:**
+- [x] **Forwarding cookies, referrer and user agent:** — **2.x:** unchanged: the same files are compiled into `lider` (`include_dir`); the release zips hold the same files as 1.2's builder (compared), `web-ext lint` is clean and `node --test tests/js/capture.test.cjs` passes
   - `cookieHeader(url)` is `cookies.getAll({url})` joined as `"name=value; name2=value2"` (`:66-69`).
   - `handOver(info)` sends `{type:"download", ...info, cookies, user_agent: navigator.userAgent}`. On failure it sets `lastError`, clears the config and updates the badge (`:71-84`).
-- [ ] **Taking over downloads** (`captureDownload`, `:88-110`):
+- [x] **Taking over downloads** (`captureDownload`, `:88-110`): — **2.x:** unchanged: the same files are compiled into `lider` (`include_dir`); the release zips hold the same files as 1.2's builder (compared), `web-ext lint` is clean and `node --test tests/js/capture.test.cjs` passes
   - It skips items already handled, items not `in_progress`, items started by this extension, and everything while the switch is off.
   - `url = finalUrl || url`, and `name` is the basename of `item.filename`, splitting on `/` or `\`.
   - It calls `LIDCapture.shouldCapture(config, url, name)`.
@@ -362,7 +362,7 @@ Everything below was read line by line. Paths are relative to the repository roo
   - On success, `dropBrowserCopy`: `cancel`, then `search`. If the item is `complete` and `exists!==false`, `removeFile` (Firefox may already have finished). Then `erase` (`:114-121`).
   - Chrome uses `onDeterminingFilename` and holds `suggest()` until LID answers, returning `true` for the async call. Firefox uses `onCreated` (`:128-136`).
   - **QUIRK:** the `handled` set is never cleared until the service worker restarts.
-- [ ] **Capture rules** (`capture.js`):
+- [x] **Capture rules** (`capture.js`): — **2.x:** unchanged: the same files are compiled into `lider` (`include_dir`); the release zips hold the same files as 1.2's builder (compared), `web-ext lint` is clean and `node --test tests/js/capture.test.cjs` passes
   - `extensionOf`: basename, then strip `?`/`#`, then the text after the last dot only when the dot index is above 0 (dotfiles give `""`), lowercased.
   - `fileNameFromUrl`: `decodeURIComponent` of the last path segment; errors give `""`.
   - Types are shell wildcards matched case-insensitively, `*` meaning `.*` and `?` meaning `.`, anchored at both ends.
@@ -370,7 +370,7 @@ Everything below was read line by line. Paths are relative to the repository roo
   - `shouldCapture` is false when there is no config or `capture` is off, when the URL is invalid, or when the protocol is not `http:`, `https:` or `ftp:`. **`blob:` and `data:` therefore stay in the browser.** It is also false for a skipped host.
   - The extension is taken from the browser's file name first, otherwise from the URL. The result is whether it matches the configured types.
   - The module exports to `module.exports` (for the node tests) or `globalThis.LIDCapture`.
-- [ ] **Context menus** (`:139-154`). `removeAll` runs first, then the menus are created on install and on startup:
+- [x] **Context menus** (`:139-154`). `removeAll` runs first, then the menus are created on install and on startup: — **2.x:** unchanged: the same files are compiled into `lider` (`include_dir`); the release zips hold the same files as 1.2's builder (compared), `web-ext lint` is clean and `node --test tests/js/capture.test.cjs` passes
 
   | id | Title | Contexts | Notes |
   |---|---|---|---|
@@ -379,22 +379,22 @@ Everything below was read line by line. Paths are relative to the repository roo
   | `lid-all` | "Download all links with LID" | page, frame | |
   | `lid-video-page` | "Download this video with LID" | page, video | only with YouTube; `documentUrlPatterns` `*://*.youtube.com/watch*`, `*://*.youtube.com/shorts/*` |
 
-- [ ] **Menu clicks** (`:197-211`). `page = info.pageUrl || tab.url`.
+- [x] **Menu clicks** (`:197-211`). `page = info.pageUrl || tab.url`. — **2.x:** unchanged: the same files are compiled into `lider` (`include_dir`); the release zips hold the same files as 1.2's builder (compared), `web-ext lint` is clean and `node --test tests/js/capture.test.cjs` passes
   - `lid-link`: `handOver({url: linkUrl||srcUrl, referer: page, page_url: page})`, which adds cookies for the link URL and the user agent.
   - `lid-video-page`: `send({type:"download", url: page, page_url: page})`, with no cookies or user agent.
   - `lid-all` and `lid-selection`: `scripting.executeScript(collectLinks, [onlySelection])` in `frameIds: [frameId||0]`. When there are items, it sends `{type:"links", items, referer: page, page_url: page, cookies: cookieHeader(page), user_agent}`.
   - **QUIRK:** menu actions ignore the on/off switch and LID's capture setting.
-- [ ] **`collectLinks`**, which runs inside the page (`:166-186`):
+- [x] **`collectLinks`**, which runs inside the page (`:166-186`): — **2.x:** unchanged: the same files are compiled into `lider` (`include_dir`); the release zips hold the same files as 1.2's builder (compared), `web-ext lint` is clean and `node --test tests/js/capture.test.cjs` passes
   - It collects `a[href]` (href and textContent, kind `a`), `img[src]` (currentSrc or src, alt, kind `img`), and `video, audio` (currentSrc or src, title) together with their child `source[src]`.
   - URLs are deduplicated and must match `/^(https?|ftp):/i`.
   - In selection mode an element must intersect one of the selection ranges.
   - Text is trimmed, runs of whitespace collapse to one space, and it is cut to 300 characters. At most 5000 items.
-- [ ] **Runtime messages** from the popup and content script (`:215-248`). The sender is not checked.
+- [x] **Runtime messages** from the popup and content script (`:215-248`). The sender is not checked. — **2.x:** unchanged: the same files are compiled into `lider` (`include_dir`); the release zips hold the same files as 1.2's builder (compared), `web-ext lint` is clean and `node --test tests/js/capture.test.cjs` passes
   - `{type:"video",url}` (YouTube builds only) goes through `sendVideo`. In-flight requests are deduplicated per URL with a Map, and the message sent is `{type:"download",url,page_url:url}`. The native reply is passed back.
   - `{type:"status"}` forces `getConfig(true)` and replies `{connected,enabled,version,capture,running,error:lastError}`.
   - `{type:"set-enabled",enabled}` stores the flag, updates the badge and replies `{ok:true}`.
   - `{type:"show"}` sends `{type:"show"}` to the host and passes the reply back.
-- [ ] **Popup** (`popup.html`, `popup.js`, `popup.css`):
+- [x] **Popup** (`popup.html`, `popup.js`, `popup.css`): — **2.x:** unchanged: the same files are compiled into `lider` (`include_dir`); the release zips hold the same files as 1.2's builder (compared), `web-ext lint` is clean and `node --test tests/js/capture.test.cjs` passes
   - Header: icon 32 shown at 24 px, "LID", "Linux Internet Downloader".
   - `#status` starts as "Checking…". There is a switch "Take over browser downloads", a `#hint`, a button "Open LID", and a hidden secondary button "Get LID".
   - **Connected:** "Connected to LID `<version>`" with class `ok`. Hint "Downloads of the file types set in LID go to LID.", or when capture is off, "Capture is off in LID: Options → General → Browser integration."
@@ -403,7 +403,7 @@ Everything below was read line by line. Paths are relative to the repository roo
     - Linux: "LID helper not found". Hint "This extension works with LID, a download manager for Linux. Install LID, then in LID open Options → General → Set up browsers… and install the helper for this browser." The button links to releases/latest.
   - Changing the switch sends `set-enabled`. "Get" opens a tab, then closes the popup. "Open LID" sends `show`, then closes the popup.
   - CSS: 280 px wide, light and dark tokens through `prefers-color-scheme`.
-- [ ] **YouTube button** (`youtube.js`, `youtube.css`):
+- [x] **YouTube button** (`youtube.js`, `youtube.css`): — **2.x:** unchanged: the same files are compiled into `lider` (`include_dir`); the release zips hold the same files as 1.2's builder (compared), `web-ext lint` is clean and `node --test tests/js/capture.test.cjs` passes
   - It works on video pages: path `/watch` or starting with `/shorts/`. On other pages the button is removed.
   - **Watch page on www:** it waits for `ytd-watch-metadata ytd-menu-renderer`, retrying every 500 ms up to `WAIT_TRIES=20` (10 s), then falls back to the floating button.
   - **Template choice:** a visible `:scope > div button` with an SVG icon part, not inside an element whose tag matches `/like/i`, not inside `#lid-download`. One with a text label is preferred.
@@ -415,22 +415,22 @@ Everything below was read line by line. Paths are relative to the repository roo
   - **Navigation:** `yt-navigate-finish` and `popstate` call `refresh()`, which resets the retry count and removes a cloned (non-floating) button.
 
 ## 8. Desktop file, packaging and release
-- [ ] **Repo `lider.desktop`:**
+- [~] **Repo `lider.desktop`:** — **2.x:** same keys and scheme handlers; `Categories=Network;FileTransfer;` without `Qt;` (Q20 f)
   - Keys: Type Application, Name LID, GenericName Download Manager, Comment "Linux Internet Downloader: accelerated multi-connection downloads", `X-GNOME-FullName=Linux Internet Downloader`, `Exec=lider %U`, Icon lider, Terminal false, `Categories=Network;FileTransfer;Qt;`, MimeType http/https/ftp scheme handlers.
   - It has no marker. The port must keep the handlers for the http, https and ftp schemes.
-- [ ] **`pyproject.toml`:**
+- [~] **`pyproject.toml`:** — **2.x:** replaced by the workspace `Cargo.toml`: the program is the `lider` binary, and the extension and icons are compiled into it; `pyproject.toml` leaves with the Python code in phase 8 (Q20 g)
   - Python 3.10 or newer, requires `PySide6>=6.5`, optional extra `youtube = yt-dlp>=2026.8.19`.
   - Script `lider = lider.app:main`.
   - Package data: icons SVG, `browser_extension/*`, `browser_extension/icons/*`.
-- [ ] **`build.sh` overview** (`packaging/build.sh`):
+- [x] **`build.sh` overview** (`packaging/build.sh`): — **2.x:** same targets, usage text and exit code, defaults, `SUMMARY`, work folder and cache; the pins are now yt-dlp 2026.08.19, web-ext 10.7.0 and appimagetool 1.9.0 (the Python and PySide6 pins are gone)
   - Targets: `appimage`, `deb`, `arch`, `aur`, `extension`, `sdist`, `all` (all builds appimage, deb, arch and extension). No argument prints usage from lines 2-17 and exits 1 (`:279-288`).
   - Defaults: `MAINTAINER="David Aprilio <david1.aprilio4@gmail.com>"`, `PKG_LICENSE=MIT`, `PROJECT_URL=https://github.com/Davidaprilio/lid`.
   - `SUMMARY="Linux Internet Downloader (LID): fast multi-connection downloads"`.
   - Pinned versions: Python 3.12, `PySide6-Essentials==6.11.1`, `yt-dlp==2026.8.19`, `web-ext@10.7.0`, appimagetool 1.9.0.
   - Work folder `build/packaging`. Cache `~/.cache/lider-build`.
-- [ ] **sdist** (`:44-54`): `dist/lider-<v>.tar.gz` holding `lider/` (without `__pycache__`), `pyproject.toml`, `README.md`, `LICENSE` and `lider.desktop`. It is reproducible: `--sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner`. It does not contain `packaging/`.
-- [ ] **`install_tree`** (`:57-68`) lays out: app under `<pydir>/lider` (dirs 755, files 644), `/usr/bin/lider` launcher, `/usr/share/applications/lider.desktop`, `/usr/share/icons/hicolor/scalable/apps/lider.svg`, `/usr/share/doc/lider/README.md`.
-- [ ] **deb** (`:96-160`). Output `dist/lider_<v>-1_amd64.deb`.
+- [~] **sdist** (`:44-54`): `dist/lider-<v>.tar.gz` holding `lider/` (without `__pycache__`), `pyproject.toml`, `README.md`, `LICENSE` and `lider.desktop`. It is reproducible: `--sort=name --mtime=@0 --owner=0 --group=0 --numeric-owner`. It does not contain `packaging/`. — **2.x:** `dist/lider-<v>.tar.gz` with the Rust sources, `Cargo.lock`, the built frontend `ui/dist`, the licence list `third-party/`, the extension and icons, README, LICENSE and the desktop file (Q20 g); reproducible with the same tar flags (two builds give the same bytes); no `packaging/`
+- [x] **`install_tree`** (`:57-68`) lays out: app under `<pydir>/lider` (dirs 755, files 644), `/usr/bin/lider` launcher, `/usr/share/applications/lider.desktop`, `/usr/share/icons/hicolor/scalable/apps/lider.svg`, `/usr/share/doc/lider/README.md`. — **2.x:** `install_tree` lays out `/usr/bin/lider` (the binary), the browser helper and host manifests, the exported extension, the desktop entry, the scalable icon and the README; modes 755/644
+- [~] **deb** (`:96-160`). Output `dist/lider_<v>-1_amd64.deb`. — **2.x:** `dist/lider_<v>-1_amd64.deb` assembled with tar and `ar rcD` as before, `md5sums`, `/etc` conffiles, DEP-5 `copyright`, third-party licences in `/usr/share/doc/lider/third-party/`; `Depends` is libc6 (from the newest glibc symbol), WebKitGTK 4.1, GTK 3 and an appindicator library; yt-dlp is one file in `/usr/lib/lider/yt-dlp`; `Recommends` unchanged; the Homepage-deletion line is gone (Q11); pre-release versions use `~` (Q20 c, e)
   - App in `/usr/lib/lider/lider`. PySide6 abi3 wheels for cp310, `manylinux_2_34_x86_64`, in `/usr/lib/lider/vendor`. yt-dlp in `/usr/lib/lider/ytdlp`, installed with `--no-deps`. The `bin/` folders are removed.
   - `/usr/bin/lider` is a Python script that puts `/usr/lib/lider` and `vendor` first on the path, and puts `ytdlp` right after the user site-packages, so a `pip install --user` yt-dlp wins (`:106-118`).
   - Browser files come from `write_system_files(root, /usr/lib/lider/lider-native-host, /usr/bin/python3, /usr/lib/lider)`. PySide6 is trimmed.
@@ -439,10 +439,10 @@ Everything below was read line by line. Paths are relative to the repository roo
   - `DEBIAN/md5sums` covers `usr/`. `DEBIAN/conffiles` lists every file under `/etc`, which are the host manifests.
   - The package is assembled with `ar rcD` over `debian-binary` ("2.0"), `control.tar.xz` and `data.tar.xz` (`./usr` and `./etc`), using reproducible tar flags.
   - **QUIRK:** the Homepage-deletion line (`:145`) can never run, because `PROJECT_URL` always has its default.
-- [ ] **postinst and prerm:**
+- [~] **postinst and prerm:** — **2.x:** none: there is nothing to byte-compile or clean (Q20 c)
   - `postinst configure` runs `python3 -m compileall -q /usr/lib/lider/lider /usr/lib/lider/ytdlp || true`.
   - `prerm` deletes every `__pycache__` under `/usr/lib/lider`.
-- [ ] **Arch** (`:163-181`, `arch/PKGBUILD.in`):
+- [~] **Arch** (`:163-181`, `arch/PKGBUILD.in`): — **2.x:** `build_arch` builds the sdist, fills the template and runs `makepkg -f --nodeps --noconfirm`; the PKGBUILD builds with cargo only (`prepare` runs `cargo fetch --locked`, `build` is `--frozen`, `check` runs the core tests), depends `webkit2gtk-4.1 gtk3 libayatana-appindicator`, same optdepends, installs the binary, the system host files, desktop file, icon, README, LICENSE and third-party licences; `arch=x86_64` and `pkgver` without `-` (Q20 d, e); built here and its binary passed the UI scenarios
   - `build_arch` builds the sdist, fills in the template (`@VERSION@ @MAINTAINER@ @LICENSE@ @SUMMARY@ @URL@ @SOURCE@ @SHA256@`), and runs `makepkg -f --nodeps --noconfirm` with `PKGDEST=dist`. Output `lider-<v>-1-any.pkg.tar.zst`.
   - PKGBUILD:
     - `arch=any`
@@ -455,20 +455,20 @@ Everything below was read line by line. Paths are relative to the repository roo
     - The package goes into the system site-packages, byte-compiled with `-s $pkgdir`.
     - `write_system_files($pkgdir, /usr/lib/lider/lider-native-host, /usr/bin/python)`, without a PYTHONPATH.
     - `/usr/bin/lider` launcher, desktop file, icon, README, and the licence at `/usr/share/licenses/lider/LICENSE`.
-- [ ] **AUR** (`:183-198`):
+- [x] **AUR** (`:183-198`): — **2.x:** same: needs `AUR_SOURCE_URL` (exit 2 with the example), writes `dist/aur/PKGBUILD` with `lider-<v>.tar.gz::<url>` and the sdist's sha256, then `.SRCINFO` (checked)
   - Requires `AUR_SOURCE_URL`; otherwise it prints an example and exits 2.
   - Writes `dist/aur/PKGBUILD` with `source=lider-$pkgver.tar.gz::<url>` and the sha256 of the local sdist, then runs `makepkg --printsrcinfo > .SRCINFO`.
-- [ ] **Sibling `../aur-lider/`** (a separate AUR checkout next to this repository):
+- [ ] **Sibling `../aur-lider/`** (a separate AUR checkout next to this repository): — **2.x:** to do at the first 2.x release: copy `PKGBUILD` and `.SRCINFO` from the release's `lider-<v>-aur.tar.gz` to `../aur-lider` and push (Q10, David pushes)
   - Contents: `PKGBUILD`, `.SRCINFO`, and a `.gitignore` that ignores everything except `PKGBUILD`, `.SRCINFO` and `.gitignore`. There is one commit, `3a6e761 lider 1.0-1: initial upload`.
   - **Stale:** it is at version 1.0, with source `.../download/v1.0/lider-1.0.tar.gz` and sha256 `93cc5ffd…8e9576`. Its `package()` has **no** `write_system_files` step, so 1.0 has no system host manifests. Otherwise it matches the template.
   - Publishing: clone `ssh://aur@aur.archlinux.org/lider.git` (`packaging/README.md:100-106`).
-- [ ] **Extension build** (`:201-221`):
+- [x] **Extension build** (`:201-221`): — **2.x:** same steps; the zips and `firefox-updates.json` come from `lider-pack extensions`; `web-ext lint` is clean; signing and the `firefox-updates.json` rule unchanged
   - It removes old `dist/lid-extension-*` and `firefox-updates.json`, then runs `build_extensions`.
   - It runs `npx web-ext@10.7.0 lint --source-dir work/firefox --self-hosted` and keeps the last 15 lines of output.
   - When `AMO_JWT_ISSUER` and `AMO_JWT_SECRET` are set, it runs `web-ext sign --channel unlisted` on `firefox-unlisted` and copies the result to `dist/lid-extension-firefox.xpi`.
   - Without the keys it **deletes `firefox-updates.json`**.
   - Store-submission rule: `key.pem` must never be committed. On the first Chrome Web Store upload it can be zipped in to keep the id. Otherwise add the store id to `CHROMIUM_EXTENSION_IDS`, and the id must ship in a LID release before submission (`packaging/README.md:157-169`, `listing.md:6-20`).
-- [ ] **AppImage** (`:224-277`). Output `dist/Lider-<v>-x86_64.AppImage`.
+- [~] **AppImage** (`:224-277`). Output `dist/Lider-<v>-x86_64.AppImage`. — **2.x:** `dist/Lider-<v>-x86_64.AppImage`: `cargo tauri build --bundles appimage` lays out the AppDir with WebKitGTK and linuxdeploy's GTK `AppRun`; LID adds yt-dlp (`usr/lib/lider/yt-dlp`), `lider.desktop` with `Exec=lider %U`, `lider.svg`, `.DirIcon`, the usr/share entry and icon, and the licences, then packs it with appimagetool 1.9.0 `--appimage-extract-and-run --no-appstream` (Q20 a, b). The UI scenarios pass on the AppImage, and `--native-host` answers through it
   - Python 3.12 from python-build-standalone via `uv` (`UV_PYTHON_INSTALL_DIR=cache`), copied to `AppDir/usr/python`, with `EXTERNALLY-MANAGED` removed.
   - pip installs PySide6-Essentials and yt-dlp, and `lider/` is copied into site-packages.
   - Trimmed: test, idlelib, tkinter, turtledemo, ensurepip, the Tcl/Tk libraries, include, the PySide6 QML and qtwebengine translations, and the designer tools. pip is uninstalled and the code is byte-compiled.
@@ -476,8 +476,8 @@ Everything below was read line by line. Paths are relative to the repository roo
   - AppDir layout: `AppRun`, a root `lider.desktop` (with `Exec=lider %U`), `lider.svg`, `.DirIcon` linking to `lider.svg`, and the usr share desktop file and icon.
   - Packed with `ARCH=x86_64 appimagetool --appimage-extract-and-run --no-appstream`.
   - `AppRun`: `HERE=$(dirname $(readlink -f $0))`, `export PYTHONNOUSERSITE=1`, `unset PYTHONHOME PYTHONPATH`, `exec $HERE/usr/python/bin/python3 -m lider "$@"`.
-- [ ] **Licence files** in `packaging/licenses/`: `GPL-3.0-only.txt`, `LGPL-3.0-only.txt`, `PySide6-NOTICE.txt`. With Rust and Tauri these Qt/PySide notices go away; replace them with notices for the Rust crates and WebKitGTK.
-- [ ] **Release workflow** (`.github/workflows/release.yml`):
+- [x] **Licence files** in `packaging/licenses/`: `GPL-3.0-only.txt`, `LGPL-3.0-only.txt`, `PySide6-NOTICE.txt`. With Rust and Tauri these Qt/PySide notices go away; replace them with notices for the Rust crates and WebKitGTK. — **2.x:** the Qt/PySide notices are removed; `lider-pack licenses` writes `THIRD-PARTY.md` and the licence texts of the 355 crates and 3 npm packages in `lider`; the AppImage adds `system-libraries/` with the licence files of the distribution packages its libraries come from
+- [ ] **Release workflow** (`.github/workflows/release.yml`): — **2.x:** rewritten: same triggers, jobs, artifacts, `SHA256SUMS` and release step; the tag is checked against `Cargo.toml`; AppImage and deb build on Ubuntu 22.04; a tag with `-` publishes a pre-release (Q20 e); the Arch file name changes (Q20 d). Still to run on GitHub: one "Run workflow" after the branch is pushed
   - Triggers: a `v*` tag push, or `workflow_dispatch` (builds only, no release). Permission `contents: write`.
   - **`test`** (ubuntu-24.04, Python 3.12):
     - apt installs `libegl1 libgl1 libxkbcommon0 libfontconfig1 libdbus-1-3 ffmpeg`; pip installs PySide6-Essentials 6.11.1 and yt-dlp 2026.8.19.
@@ -505,8 +505,8 @@ Everything below was read line by line. Paths are relative to the repository roo
     - `[lid-extension-firefox.xpi, firefox-updates.json]`, only when signed
     - `SHA256SUMS`
   - The links in `browser.py`, `popup.js` and the Firefox `update_url` all depend on these exact file names under `releases/latest/download/`.
-- [ ] **`.gitignore`:** `__pycache__/`, `*.pyc`, `/build/`, `/dist/`, `*.egg-info/`, `.venv/`. `CLAUDE.md` is kept out through `.git/info/exclude`. `dist/` currently holds 1.0 and 1.1 builds and the extension zips.
-- [ ] **Edge store material** (`packaging/store/edge/`):
+- [x] **`.gitignore`:** `__pycache__/`, `*.pyc`, `/build/`, `/dist/`, `*.egg-info/`, `.venv/`. `CLAUDE.md` is kept out through `.git/info/exclude`. `dist/` currently holds 1.0 and 1.1 builds and the extension zips. — **2.x:** `/target/`, `/ui/node_modules/`, `/ui/dist/` and `/src-tauri/gen/` added; the Python entries leave in phase 8
+- [x] **Edge store material** (`packaging/store/edge/`): — **2.x:** every quoted string is in 2.x ("Set up browsers...", "Install for checked browsers", "Connected to LID <version>", "Download File Info", "Take over browser downloads", the Edge manifest path); `listing.md` now points at `crates/lider-sys/src/browser.rs`
   - `listing.md` holds the submission sheet: permission justifications, description, and certification steps that quote these UI strings: "Options → General → Set up browsers…", "Install for checked browsers", "Connected to LID `<VERSION>`", the "Download File Info" window, "Take over browser downloads", and the user manifest path `~/.config/microsoft-edge/NativeMessagingHosts/io.github.davidaprilio.lid.json`.
   - `privacy.md` states that the data stays local in `~/.local/share/lider` and that the host is removed through Options → General → Set up browsers… → Remove.
   - The privacy URL points at the `redesign` branch.
@@ -515,57 +515,57 @@ Everything below was read line by line. Paths are relative to the repository roo
 
 ## 9. Tests in scope (one line each)
 **`tests/test_app.py`**
-- [ ] `test_nobody_listening`: `send_to_running` returns False when no server is on the name.
-- [ ] `test_lines_reach_the_running_instance`: two URLs, then `[]`, arrive as `["https://a/1.zip","https://b/2.zip","--show"]`. A second server on the same name raises `OSError`. After close, the send fails.
+- [x] `test_nobody_listening`: `send_to_running` returns False when no server is on the name. — **2.x:** `lider-sys` `ipc::tests::nobody_listening`
+- [x] `test_lines_reach_the_running_instance`: two URLs, then `[]`, arrive as `["https://a/1.zip","https://b/2.zip","--show"]`. A second server on the same name raises `OSError`. After close, the send fails. — **2.x:** `lider-sys` `ipc::tests::lines_reach_the_running_instance`
 
 **`tests/test_browser.py`**
-- [ ] `test_chromium_key_gives_the_registered_extension_id`: sha256(base64-decoded key)[:32], hex mapped to a-p, equals `CHROMIUM_EXTENSION_ID`.
-- [ ] `test_firefox_id_matches`: the gecko id in the Firefox manifest equals `FIREFOX_EXTENSION_ID`.
-- [ ] `test_manifests_reference_existing_files`: every icon, popup, background and content-script file in both manifests exists, and `nativeMessaging` is present.
-- [ ] `test_background_uses_the_same_host_name`: `background.js` contains `"io.github.davidaprilio.lid"`.
-- [ ] `test_store_variant_has_no_youtube_and_no_key`: the full build has `key` and `content_scripts`. The store build has neither, no `youtube.js`, version equal to `EXTENSION_VERSION`, and no "YouTube" in the description.
-- [ ] `test_update_url_only_for_the_self_distributed_firefox_build`: the listed build has no `update_url`, and the unlisted build has `FIREFOX_UPDATES_URL`.
-- [ ] `test_release_files_are_reproducible`: two builds are byte-identical and produce exactly 4 files. The store zip has `manifest.json` but no `youtube.js`. The updates JSON has `EXTENSION_VERSION` and a link ending `/v<__version__>/lid-extension-firefox.xpi`.
-- [ ] `test_host_accepts_every_known_chromium_id`: `allowed_origins` lists every id in `CHROMIUM_EXTENSION_IDS`, in order, as `chrome-extension://<id>/`.
-- [ ] `test_detect_install_uninstall`: with Brave and `~/.mozilla` present, detection gives `["Brave","Firefox"]`. The wrapper is executable and runs `lider.native_host`. The Brave manifest has both Chromium origins and the path. The Firefox manifest has `allowed_extensions`. `is_installed` goes true, then false after uninstall.
-- [ ] `test_firefox_in_the_xdg_config_folder`: without `~/.mozilla` but with `~/.config/mozilla/firefox`, the manifest goes to `~/.config/mozilla/native-messaging-hosts`, `~/.mozilla` is not created, and install and uninstall both work.
-- [ ] `test_appimage_wrapper_runs_the_appimage`: with `APPIMAGE="/opt/apps/Lider 1.0.AppImage"`, the wrapper contains `exec '/opt/apps/Lider 1.0.AppImage' --native-host`.
-- [ ] `test_export_extension_per_family`: the Firefox export has the gecko id in `manifest.json`, no `manifest.*.json` files, and `background.js`.
-- [ ] `test_system_files_for_packages`: the host script contains `PYTHONPATH=/usr/lib/lider exec /usr/bin/python3 -m lider.native_host`. The Chrome system manifest path is `/usr/lib/lider/lider-native-host`. The Mozilla system manifest exists, and so does `usr/share/lider/browser-extension/chromium/manifest.json`.
+- [x] `test_chromium_key_gives_the_registered_extension_id`: sha256(base64-decoded key)[:32], hex mapped to a-p, equals `CHROMIUM_EXTENSION_ID`. — **2.x:** `lider-sys` `browser::tests::chromium_key_gives_the_registered_extension_id`
+- [x] `test_firefox_id_matches`: the gecko id in the Firefox manifest equals `FIREFOX_EXTENSION_ID`. — **2.x:** `lider-sys` `browser::tests::firefox_id_matches`
+- [x] `test_manifests_reference_existing_files`: every icon, popup, background and content-script file in both manifests exists, and `nativeMessaging` is present. — **2.x:** `lider-sys` `browser::tests::manifests_reference_existing_files`
+- [x] `test_background_uses_the_same_host_name`: `background.js` contains `"io.github.davidaprilio.lid"`. — **2.x:** `lider-sys` `browser::tests::background_uses_the_same_host_name`
+- [x] `test_store_variant_has_no_youtube_and_no_key`: the full build has `key` and `content_scripts`. The store build has neither, no `youtube.js`, version equal to `EXTENSION_VERSION`, and no "YouTube" in the description. — **2.x:** `lider-sys` `browser::tests::store_variant_has_no_youtube_and_no_key`
+- [x] `test_update_url_only_for_the_self_distributed_firefox_build`: the listed build has no `update_url`, and the unlisted build has `FIREFOX_UPDATES_URL`. — **2.x:** `lider-sys` `browser::tests::update_url_only_for_the_self_distributed_firefox_build`
+- [x] `test_release_files_are_reproducible`: two builds are byte-identical and produce exactly 4 files. The store zip has `manifest.json` but no `youtube.js`. The updates JSON has `EXTENSION_VERSION` and a link ending `/v<__version__>/lid-extension-firefox.xpi`. — **2.x:** `lider-sys` `browser::tests::release_files_are_reproducible`
+- [x] `test_host_accepts_every_known_chromium_id`: `allowed_origins` lists every id in `CHROMIUM_EXTENSION_IDS`, in order, as `chrome-extension://<id>/`. — **2.x:** `lider-sys` `browser::tests::host_accepts_every_known_chromium_id`
+- [x] `test_detect_install_uninstall`: with Brave and `~/.mozilla` present, detection gives `["Brave","Firefox"]`. The wrapper is executable and runs `lider.native_host`. The Brave manifest has both Chromium origins and the path. The Firefox manifest has `allowed_extensions`. `is_installed` goes true, then false after uninstall. — **2.x:** `lider-sys` `browser::tests::detect_install_uninstall`
+- [x] `test_firefox_in_the_xdg_config_folder`: without `~/.mozilla` but with `~/.config/mozilla/firefox`, the manifest goes to `~/.config/mozilla/native-messaging-hosts`, `~/.mozilla` is not created, and install and uninstall both work. — **2.x:** `lider-sys` `browser::tests::firefox_in_the_xdg_config_folder`
+- [x] `test_appimage_wrapper_runs_the_appimage`: with `APPIMAGE="/opt/apps/Lider 1.0.AppImage"`, the wrapper contains `exec '/opt/apps/Lider 1.0.AppImage' --native-host`. — **2.x:** `lider-sys` `browser::tests::appimage_wrapper_runs_the_appimage`
+- [x] `test_export_extension_per_family`: the Firefox export has the gecko id in `manifest.json`, no `manifest.*.json` files, and `background.js`. — **2.x:** `lider-sys` `browser::tests::export_extension_per_family`
+- [x] `test_system_files_for_packages`: the host script contains `PYTHONPATH=/usr/lib/lider exec /usr/bin/python3 -m lider.native_host`. The Chrome system manifest path is `/usr/lib/lider/lider-native-host`. The Mozilla system manifest exists, and so does `usr/share/lider/browser-extension/chromium/manifest.json`. — **2.x:** `lider-sys` `browser::tests::system_files_for_packages` (the host script is `exec /usr/bin/lider --native-host "$@"`, decision D4)
 
 **`tests/test_desktop.py`** (`APPIMAGE="/opt/apps/Lider 1.2.0.AppImage"`, XDG folders in a temp dir, `SYSTEM_ENTRY` and `_update_menus` patched)
-- [ ] `test_exec_quoting`: plain paths stay as they are, spaces get double quotes, `$` and `"` become `\\$` and `\\"` inside quotes, `%` becomes `%%`.
-- [ ] `test_menu_entry_runs_the_appimage`: `Exec="<appimage>" %U`, `TryExec=<appimage>` unquoted, `Icon=lider`, and autostart `Exec="<appimage>" --minimized`.
-- [ ] `test_entry_passes_desktop_file_validate`: `desktop-file-validate` reports no "error" (skipped when the tool is missing).
-- [ ] `test_add_and_remove`: add creates the entry at `data/applications/lider.desktop` and an icon identical to `app.svg`. Remove deletes both.
-- [ ] `test_autostart`: on and off toggles `config/autostart/lider.desktop`.
-- [ ] `test_refresh_follows_a_moved_appimage`: no change gives `[]`. After `APPIMAGE` moves, the result is `["menu","autostart","browser helper"]`, the new Exec is unquoted, the wrapper has `exec <new> --native-host`, and `listed_elsewhere` is False.
-- [ ] `test_refresh_leaves_missing_files_alone`: `refresh()` creates nothing.
-- [ ] `test_a_checkout_does_not_take_over_the_entries`: with no `APPIMAGE` and no `lider` on PATH, `argv[0]=="env"`, `refresh()==[]`, and the entry is unchanged.
-- [ ] `test_an_entry_from_a_menu_editor_is_left_alone`: an unmarked entry is not rewritten.
-- [ ] `test_an_old_autostart_entry_is_fixed`: an old autostart with `python3 -m lider` is rewritten (`["autostart"]`) to the AppImage Exec.
-- [ ] `test_package_entry_takes_over`: when the system entry exists, refresh reports "menu" and removes the user entry.
-- [ ] `test_offer_once_and_only_to_an_appimage`: `should_offer` is true on a fresh start and false after `menu_offered`, when another `.desktop` file has the AppImage path, or without `APPIMAGE`.
-- [ ] `test_options_general_page`: the menu checkbox starts enabled and unchecked. Accepting writes the menu entry and the autostart, and sets `launch_on_startup`. With a system entry, the checkbox is disabled and checked, and launch is checked.
+- [x] `test_exec_quoting`: plain paths stay as they are, spaces get double quotes, `$` and `"` become `\\$` and `\\"` inside quotes, `%` becomes `%%`. — **2.x:** `lider-sys` `desktop::tests::exec_quoting`
+- [x] `test_menu_entry_runs_the_appimage`: `Exec="<appimage>" %U`, `TryExec=<appimage>` unquoted, `Icon=lider`, and autostart `Exec="<appimage>" --minimized`. — **2.x:** `lider-sys` `desktop::tests::menu_entry_runs_the_appimage`
+- [x] `test_entry_passes_desktop_file_validate`: `desktop-file-validate` reports no "error" (skipped when the tool is missing). — **2.x:** `lider-sys` `desktop::tests::entry_passes_desktop_file_validate`
+- [x] `test_add_and_remove`: add creates the entry at `data/applications/lider.desktop` and an icon identical to `app.svg`. Remove deletes both. — **2.x:** `lider-sys` `desktop::tests::add_and_remove`
+- [x] `test_autostart`: on and off toggles `config/autostart/lider.desktop`. — **2.x:** `lider-sys` `desktop::tests::autostart`
+- [x] `test_refresh_follows_a_moved_appimage`: no change gives `[]`. After `APPIMAGE` moves, the result is `["menu","autostart","browser helper"]`, the new Exec is unquoted, the wrapper has `exec <new> --native-host`, and `listed_elsewhere` is False. — **2.x:** `lider-sys` `desktop::tests::refresh_follows_a_moved_appimage`
+- [x] `test_refresh_leaves_missing_files_alone`: `refresh()` creates nothing. — **2.x:** `lider-sys` `desktop::tests::refresh_leaves_missing_files_alone`
+- [x] `test_a_checkout_does_not_take_over_the_entries`: with no `APPIMAGE` and no `lider` on PATH, `argv[0]=="env"`, `refresh()==[]`, and the entry is unchanged. — **2.x:** `lider-sys` `desktop::tests::a_checkout_does_not_take_over_the_entries`
+- [x] `test_an_entry_from_a_menu_editor_is_left_alone`: an unmarked entry is not rewritten. — **2.x:** `lider-sys` `desktop::tests::an_entry_from_a_menu_editor_is_left_alone`
+- [x] `test_an_old_autostart_entry_is_fixed`: an old autostart with `python3 -m lider` is rewritten (`["autostart"]`) to the AppImage Exec. — **2.x:** `lider-sys` `desktop::tests::an_old_autostart_entry_is_fixed` (an entry with `python3 -m lider` is rewritten)
+- [x] `test_package_entry_takes_over`: when the system entry exists, refresh reports "menu" and removes the user entry. — **2.x:** `lider-sys` `desktop::tests::package_entry_takes_over`
+- [x] `test_offer_once_and_only_to_an_appimage`: `should_offer` is true on a fresh start and false after `menu_offered`, when another `.desktop` file has the AppImage path, or without `APPIMAGE`. — **2.x:** `lider-sys` `desktop::tests::offer_once_and_only_to_an_appimage`
+- [x] `test_options_general_page`: the menu checkbox starts enabled and unchecked. Accepting writes the menu entry and the autostart, and sets `launch_on_startup`. With a system entry, the checkbox is disabled and checked, and launch is checked. — **2.x:** e2e `LIDER_E2E=dialogs`: the menu box is enabled and unchecked in a checkout, and OK writes the autostart entry and `launch_on_startup`; the system-entry case is `desktop::tests::package_entry_takes_over` and the `system_installed` rule of `desktop_state`
 
 **`tests/test_native_host.py`**
-- [ ] `test_round_trip`: write, then read, a message with non-ASCII keys.
-- [ ] `test_end_of_input`: empty input reads as None.
-- [ ] `test_oversized_message_is_refused`: a 64 MiB header raises `ValueError`.
-- [ ] `test_hello_reports_the_capture_settings`: the saved settings `capture=False`, `types="ZIP ISO"` and `sites="example.com"` come back as `(True, False, ["ZIP","ISO"], ["example.com"], running False)`.
-- [ ] `test_download_is_forwarded_with_only_known_fields`: unknown fields are dropped and the `javascript:` `page_url` is removed. The forwarded line is exactly `{action,url,referer,cookies,user_agent,size}` and the reply is `{"ok":true}`.
-- [ ] `test_bad_urls_are_rejected`: `javascript:`, `file:`, empty and null URLs give `ok:false`. A links request with only a `data:` item gives `"invalid request"`.
-- [ ] `test_links_are_cleaned`: an unknown kind becomes "a", a missing text becomes "", `chrome://` and non-dict items are dropped, and `page_url` is kept.
-- [ ] `test_starts_lid_when_it_is_not_running`: with `Popen` patched to start a fake server, `deliver` retries and the `{"action":"show"}` request arrives.
-- [ ] `test_unknown_type`: `format-disk` gives `ok:false`.
-- [ ] `test_host_process_speaks_native_messaging`: a `python -m lider.native_host` subprocess with two frames gives a hello `ok` with `ZIP` in types, then an unknown type `ok:false`. Exit code 0, and no PySide6 in stderr.
-- [ ] `test_native_host_does_not_load_qt`: importing `lider.native_host` loads no PySide6 modules.
-- [ ] `test_send_request_and_is_running`: `is_running` is false, then true with the fake server, and `send_request` returns True.
+- [x] `test_round_trip`: write, then read, a message with non-ASCII keys. — **2.x:** `lider-sys` `native_host::tests::round_trip`
+- [x] `test_end_of_input`: empty input reads as None. — **2.x:** `lider-sys` `native_host::tests::end_of_input`
+- [x] `test_oversized_message_is_refused`: a 64 MiB header raises `ValueError`. — **2.x:** `lider-sys` `native_host::tests::oversized_message_is_refused`
+- [x] `test_hello_reports_the_capture_settings`: the saved settings `capture=False`, `types="ZIP ISO"` and `sites="example.com"` come back as `(True, False, ["ZIP","ISO"], ["example.com"], running False)`. — **2.x:** `lider-sys` `native_host::tests::hello_reports_the_capture_settings`
+- [x] `test_download_is_forwarded_with_only_known_fields`: unknown fields are dropped and the `javascript:` `page_url` is removed. The forwarded line is exactly `{action,url,referer,cookies,user_agent,size}` and the reply is `{"ok":true}`. — **2.x:** `lider-sys` `native_host::tests::download_is_forwarded_with_only_known_fields`
+- [x] `test_bad_urls_are_rejected`: `javascript:`, `file:`, empty and null URLs give `ok:false`. A links request with only a `data:` item gives `"invalid request"`. — **2.x:** `lider-sys` `native_host::tests::bad_urls_are_rejected`
+- [x] `test_links_are_cleaned`: an unknown kind becomes "a", a missing text becomes "", `chrome://` and non-dict items are dropped, and `page_url` is kept. — **2.x:** `lider-sys` `native_host::tests::links_are_cleaned`
+- [x] `test_starts_lid_when_it_is_not_running`: with `Popen` patched to start a fake server, `deliver` retries and the `{"action":"show"}` request arrives. — **2.x:** `lider-sys` `native_host::tests::starts_lid_when_it_is_not_running`
+- [x] `test_unknown_type`: `format-disk` gives `ok:false`. — **2.x:** `lider-sys` `native_host::tests::unknown_type`
+- [x] `test_host_process_speaks_native_messaging`: a `python -m lider.native_host` subprocess with two frames gives a hello `ok` with `ZIP` in types, then an unknown type `ok:false`. Exit code 0, and no PySide6 in stderr. — **2.x:** `src-tauri/tests/native_host.rs`: the real `lider --native-host` answers hello (with `ZIP`) and an unknown type, exits 0
+- [x] `test_native_host_does_not_load_qt`: importing `lider.native_host` loads no PySide6 modules. — **2.x:** the same test runs the helper with no `DISPLAY` and no `WAYLAND_DISPLAY`: it starts no GUI toolkit
+- [x] `test_send_request_and_is_running`: `is_running` is false, then true with the fake server, and `send_request` returns True. — **2.x:** `lider-sys` `ipc::tests::send_request_and_is_running`
 
 **`tests/js/capture.test.cjs`** (config types `ZIP ISO R0* MP4`, skip `example.org`)
-- [ ] "file extension from names and URLs": `.ISO` gives `iso`, `a.tar.gz` gives `gz`, `.bashrc` gives `""`, and `My%20File.zip?x=1` gives `My File.zip`.
-- [ ] "captures listed types, wildcards included": `a.zip` from the URL, `mp4` from the browser's file name when the URL has none, `part.r01` through `R0*`, and `.html` is not captured.
-- [ ] "respects the switch, schemes and excluded sites": `capture:false`, a null config, `blob:`, and `dl.example.org` are not captured, while `notexample.org` is.
+- [x] "file extension from names and URLs": `.ISO` gives `iso`, `a.tar.gz` gives `gz`, `.bashrc` gives `""`, and `My%20File.zip?x=1` gives `My File.zip`. — **2.x:** unchanged file; `node --test tests/js/capture.test.cjs` passes (CI and release workflow)
+- [x] "captures listed types, wildcards included": `a.zip` from the URL, `mp4` from the browser's file name when the URL has none, `part.r01` through `R0*`, and `.html` is not captured. — **2.x:** same
+- [x] "respects the switch, schemes and excluded sites": `capture:false`, a null config, `blob:`, and `dl.example.org` are not captured, while `notexample.org` is. — **2.x:** same
 
 **Other suites** (not in scope; port or replace them): `test_engine`, `test_manager`, `test_media` (the live test needs `LIDER_NETWORK_TESTS=1`, and media tests skip without ffmpeg), `test_search`, `test_ui`, and the fixture `tests/httpfixture.py`.
 

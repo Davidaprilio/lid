@@ -346,6 +346,21 @@ its own tokio runtime, instance socket, hidden start; lines are kept for the win
 - Release workflow: same triggers, version check against Cargo.toml, same artifacts and `SHA256SUMS`,
   Firefox signing unchanged. Update `../aur-lider` (§9 Q10).
 
+**Status 2026-11-06: done, except the first run on GitHub and the AUR push (both after David pushes).**
+- `packaging/build.sh` keeps its targets, usage, defaults and exit codes; it reads the version from `Cargo.toml`.
+  The program is `cargo build --release --locked -p lider --features tauri/custom-protocol` after `pnpm build`.
+- `crates/lider-sys/src/bin/lider-pack.rs` (build tool only) writes the extension zips, the system host files
+  and the licence list (`THIRD-PARTY.md` and texts for 355 crates and 3 npm packages), so packaging needs no Python.
+- Built here and checked: deb 45 MB (control, conffiles, layout), AppImage 156 MB (the UI scenarios pass on it,
+  `--native-host` answers through it), Arch package 7.7 MB from the reproducible sdist (its binary passes the UI
+  scenarios), AUR files, extension zips (same files as 1.2's builder, `web-ext lint` clean).
+- Q7 checked: the system wrapper `/usr/lib/lider/lider-native-host` starts `/usr/bin/lider --minimized` when LID
+  is not running. Q11: the dead Homepage line is gone.
+- New tests: `src-tauri/tests/native_host.rs` (the real helper, no display), `ipc::send_request_and_is_running`,
+  the yt-dlp location, and Options → General in the dialogs scenario.
+- `.github/workflows/release.yml` rewritten (AppImage and deb on Ubuntu 22.04, Arch in a container); it has not
+  run on GitHub yet. Q20 lists the package differences.
+
 ### Phase 8: parity audit and cut-over
 - Every parity item is `[x]` or `[~]`; side-by-side screenshot review of every window in the three themes.
 - Beta AppImage for a week of daily use, including an upgrade from a real 1.2 profile.
@@ -409,7 +424,8 @@ D2 and D4 still need a measurement or a test in their phase; record the outcome 
 | Q16 | Verifier error text is Python's (`[Errno 2] No such file or directory: '<path>'`) | 1 | **Accepted 2026-11-06:** Rust's OS message plus the path. The text only appears after "Checksum check failed:". |
 | Q17 | Engine edge cases in 1.x: a failed disk write left zeros in the file; invalid input killed a connection's thread; `socks5://` proxies did not work; an `ftp://` folder URL downloaded the listing | 2 | **Accepted 2026-11-06:** give the bytes back and retry the write; fail the connection with a message; SOCKS works; a folder URL is an error. |
 | Q18 | 1.x message boxes (QMessageBox, QInputDialog) are separate windows | 5 | **Accepted 2026-11-06:** draw them over the main window (the window comes forward when needed). Real dialogs stay windows. |
-| Q19 | 1.x opens nested dialogs (the category editor and server limit from Options, + Add category from Download File Info, questions inside a dialog) as more windows | 6 | **Proposed:** draw them over the dialog that opens them, like Q18; every dialog opened from the main window or the tray stays its own window. Awaiting David's yes. |
+| Q19 | 1.x opens nested dialogs (the category editor and server limit from Options, + Add category from Download File Info, questions inside a dialog) as more windows | 6 | **Accepted 2026-11-06:** draw them over the dialog that opens them, like Q18; every dialog opened from the main window or the tray stays its own window. |
+| Q20 | Packaging without Python and Qt changes some package details | 7 | **Proposed:** (a) yt-dlp 2026.08.19 is bundled as the standalone `yt-dlp_linux` in the AppImage and the deb (`/usr/lib/lider/yt-dlp`); LID prefers `~/.local/bin/yt-dlp`, then the bundled copy, then PATH, then `python3 -m yt_dlp` (1.x: the deb preferred the user's copy, the AppImage always used its own). (b) The AppImage is laid out by the Tauri bundler (linuxdeploy with its GTK plugin and `AppRun`) and carries WebKitGTK: ~150 MB built on Arch, against 93 MB for 1.2. (c) The deb has no maintainer scripts (nothing to byte-compile) and depends on the system WebKitGTK. (d) The Arch package is `arch=x86_64` (compiled), so its file is `lider-<v>-1-x86_64.pkg.tar.zst`. (e) Pre-release versions are spelled `2.0.0~alpha.1` (deb) and `2.0.0alpha.1` (pacman), and a tag with `-` becomes a GitHub pre-release. (f) The desktop entry drops `Qt;` from `Categories`. (g) The source tarball carries the Rust sources, the built frontend and the licence list. Awaiting David's yes. |
 
 ## 10. Prerequisites on this machine
 

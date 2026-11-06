@@ -28,10 +28,9 @@
   "bundle": {
     "active": true,
     "targets": [
-      "deb",
       "appimage"
     ],
-    "category": "Network",
+    "category": "Utility",
     "shortDescription": "Multi-connection download manager for Linux",
     "icon": [
       "icons/32x32.png",

@@ -566,3 +566,16 @@ fn live_probe_real_video() {
     assert!(!info.title.is_empty());
     assert!(info.variants.iter().any(|v| v.kind == "video"));
 }
+
+#[test]
+fn the_package_copy_of_yt_dlp_sits_next_to_the_program() {
+    // deb: /usr/bin/lider; AppImage: $APPDIR/usr/bin/lider.
+    assert_eq!(
+        lider_core::media::bundled_beside(Path::new("/usr/bin/lider")),
+        Path::new("/usr/lib/lider/yt-dlp")
+    );
+    assert_eq!(
+        lider_core::media::bundled_beside(Path::new("/tmp/.mount_Lider/usr/bin/lider")),
+        Path::new("/tmp/.mount_Lider/usr/lib/lider/yt-dlp")
+    );
+}

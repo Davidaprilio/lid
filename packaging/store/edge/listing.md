@@ -6,7 +6,7 @@ Policies: <https://learn.microsoft.com/legal/microsoft-edge/extensions/developer
 ## 0. Order of work (the extension id)
 
 The store gives the extension its own id. The LID helper only answers the ids listed in
-`CHROMIUM_EXTENSION_IDS` (`lider/browser.py`), so a store copy cannot reach a LID release that
+`CHROMIUM_EXTENSION_IDS` (`crates/lider-sys/src/browser.rs`), so a store copy cannot reach a LID release that
 does not list that id. Reviewers would see "LID helper not found".
 
 1. **Create the extension and upload the package**, but do not submit yet. Use
@@ -16,7 +16,7 @@ does not list that id. Reviewers would see "LID helper not found".
    `ophlhhmpoaonhglimkemkgjifigpghej` (Store ID `0RDCKF25DZGT`), now `EDGE_ADDONS_EXTENSION_ID`.
 3. Add it to `CHROMIUM_EXTENSION_IDS`, release LID with it, and upload that release's
    `lid-extension-chromium-store.zip` again (same version as the release).
-4. Fill in the rest below and submit. Once the listing is public, set its address in `lider/browser.py`
+4. Fill in the rest below and submit. Once the listing is public, set its address in `crates/lider-sys/src/browser.rs`
    (the "Get the extension" buttons) and in the README.
 
 ## 1. Availability
