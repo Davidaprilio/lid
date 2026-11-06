@@ -88,6 +88,11 @@ fn find_yt_dlp() -> Option<YtDlp> {
     if is_executable(&local) {
         return Some(plain(local));
     }
+    // The copy LID downloaded when YouTube first needed it (crate::tools).
+    let managed = crate::tools::yt_dlp_path(&crate::paths::Dirs::from_env());
+    if is_executable(&managed) {
+        return Some(plain(managed));
+    }
     if let Ok(exe) = std::env::current_exe() {
         let shipped = bundled_beside(&exe);
         if is_executable(&shipped) {
@@ -108,13 +113,20 @@ fn find_yt_dlp() -> Option<YtDlp> {
     })
 }
 
-/// yt-dlp, looked up once.
-pub fn yt_dlp() -> Option<&'static YtDlp> {
-    static FOUND: OnceLock<Option<YtDlp>> = OnceLock::new();
-    FOUND.get_or_init(find_yt_dlp).as_ref()
+static FOUND_YT_DLP: std::sync::Mutex<Option<Option<YtDlp>>> = std::sync::Mutex::new(None);
+
+/// yt-dlp, looked up once (again after [`forget_yt_dlp`]).
+pub fn yt_dlp() -> Option<YtDlp> {
+    let mut found = FOUND_YT_DLP.lock().unwrap_or_else(|e| e.into_inner());
+    found.get_or_insert_with(find_yt_dlp).clone()
 }
 
-/// yt-dlp can be used (the UI says "needs the yt-dlp package: pip install yt-dlp" otherwise).
+/// Look again next time (after LID downloaded yt-dlp).
+pub fn forget_yt_dlp() {
+    *FOUND_YT_DLP.lock().unwrap_or_else(|e| e.into_inner()) = None;
+}
+
+/// yt-dlp can be used; otherwise the UI offers to download it (crate::tools).
 pub fn available() -> bool {
     yt_dlp().is_some()
 }

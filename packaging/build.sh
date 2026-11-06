@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Build LID packages into dist/.
 #
-#   ./packaging/build.sh appimage   self-contained AppImage (WebKitGTK and yt-dlp bundled)
-#   ./packaging/build.sh deb        Debian 12+/Ubuntu 22.04+ package (system WebKitGTK, bundled yt-dlp)
+#   ./packaging/build.sh appimage   self-contained AppImage (WebKitGTK bundled)
+#   ./packaging/build.sh deb        Debian 12+/Ubuntu 22.04+ package (system WebKitGTK)
 #   ./packaging/build.sh arch       Arch package (.pkg.tar.zst) built with makepkg from the source tarball
 #   ./packaging/build.sh aur        PKGBUILD + .SRCINFO for the AUR (needs AUR_SOURCE_URL)
 #   ./packaging/build.sh extension  browser extension zips; signed Firefox .xpi when AMO keys are set
@@ -33,8 +33,6 @@ PROJECT_URL="${PROJECT_URL:-https://github.com/Davidaprilio/lid}"
 SUMMARY="Linux Internet Downloader (LID): fast multi-connection downloads"
 
 # Pinned versions (the ones LID was tested with).
-YTDLP_VERSION="2026.08.19"
-YTDLP_SHA256="58162f9bfdc27458ea47bfcb311cf47028f17d8154a8bf7d689861d46399230a"  # yt-dlp_linux
 WEB_EXT="web-ext@10.7.0"
 APPIMAGETOOL_URL="https://github.com/AppImage/appimagetool/releases/download/1.9.0/appimagetool-x86_64.AppImage"
 
@@ -79,20 +77,6 @@ third_party() {
     rm -rf "$WORK/third-party"
     pack licenses "$WORK/third-party" >/dev/null
     THIRD_PARTY_DONE=1
-}
-
-# The pinned standalone yt-dlp, downloaded once and checked.
-ytdlp() {
-    local f="$CACHE/yt-dlp_linux-$YTDLP_VERSION"
-    mkdir -p "$CACHE"
-    if [ ! -x "$f" ]; then
-        log "Downloading yt-dlp $YTDLP_VERSION" >&2
-        curl -fsSL -o "$f.tmp" "https://github.com/yt-dlp/yt-dlp/releases/download/$YTDLP_VERSION/yt-dlp_linux"
-        echo "$YTDLP_SHA256  $f.tmp" | sha256sum -c --quiet
-        chmod 755 "$f.tmp"
-        mv "$f.tmp" "$f"
-    fi
-    echo "$f"
 }
 
 # Make permissions predictable whatever the umask: folders 755, files 644, programs 755.
@@ -142,7 +126,6 @@ build_deb() {
     log "Building $out"
     rm -rf "$WORK/deb"
     install_tree "$root"
-    install -Dm755 "$(ytdlp)" "$root/usr/lib/lider/yt-dlp"
     cp -r "$WORK/third-party" "$root/usr/share/doc/lider/third-party"
     fix_modes "$root"
     # The newest glibc symbol the program uses decides the libc6 it needs.
@@ -154,8 +137,6 @@ build_deb() {
       sed 's/^$/./; s/^/ /' "$ROOT/LICENSE"
       printf '\nFiles: usr/bin/lider\nComment: built from the Rust crates and npm packages listed in\n'
       printf ' /usr/share/doc/lider/third-party/THIRD-PARTY.md, with their licence texts next to it.\n'
-      printf '\nFiles: usr/lib/lider/yt-dlp\nCopyright: yt-dlp contributors\nLicense: Unlicense\n'
-      printf 'Comment: the standalone yt-dlp %s from https://github.com/yt-dlp/yt-dlp\n' "$YTDLP_VERSION"
     } > "$root/usr/share/doc/lider/copyright"
     install -d "$root/DEBIAN"
     local size
@@ -244,8 +225,8 @@ build_extension() {
 
 # ---------------------------------------------------------------- AppImage
 # The Tauri bundler lays out the AppDir with WebKitGTK and its helper processes (linuxdeploy and its GTK
-# plugin); LID then adds what 1.x had in its AppImage (yt-dlp, the scalable icon, its own desktop entry,
-# the licences) and packs it with appimagetool.
+# plugin); LID then adds its own desktop entry, the scalable icon and the licences, and packs it with
+# appimagetool. yt-dlp is not bundled: LID offers to download it when YouTube first needs it.
 build_appimage() {
     local out="$DIST/Lider-$VERSION-x86_64.AppImage" appdir
     frontend
@@ -266,7 +247,6 @@ build_appimage() {
     cp -a "$appdir" "$WORK/appimage/Lider.AppDir"
     appdir="$WORK/appimage/Lider.AppDir"
 
-    install -Dm755 "$(ytdlp)" "$appdir/usr/lib/lider/yt-dlp"
     rm -f "$appdir"/*.desktop "$appdir"/usr/share/applications/*.desktop
     install -Dm644 "$ROOT/lider.desktop" "$appdir/usr/share/applications/lider.desktop"
     cp "$ROOT/lider.desktop" "$appdir/lider.desktop"

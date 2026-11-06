@@ -13,4 +13,5 @@ Description: @SUMMARY@
  segmentation, and resumes them later. It sorts downloads into categories,
  runs queues on a schedule and limits speed. Paste a YouTube link to choose
  a resolution or audio only; ffmpeg and a JavaScript runtime are used for
- that. yt-dlp is bundled in /usr/lib/lider; a copy in ~/.local/bin wins.
+ that. LID offers to download yt-dlp from its releases when YouTube first
+ needs it.

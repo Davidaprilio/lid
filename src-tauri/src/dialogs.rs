@@ -303,6 +303,55 @@ pub async fn probe_url(
     })
 }
 
+// ------------------------------------------------------------------ yt-dlp on demand
+
+static YT_DLP_PROGRESS: std::sync::LazyLock<Arc<lider_core::tools::Progress>> =
+    std::sync::LazyLock::new(Default::default);
+
+/// What the "Download yt-dlp?" window says: the file for this system and where it comes from.
+#[tauri::command]
+pub fn ytdlp_offer() -> Value {
+    json!({
+        "asset": lider_core::tools::yt_dlp_asset(),
+        "from": format!("{}/{}", lider_core::tools::RELEASES, lider_core::tools::yt_dlp_asset().unwrap_or("")),
+        "project": lider_core::tools::PROJECT_URL,
+    })
+}
+
+/// Download yt-dlp now (the user agreed); returns where it was put.
+#[tauri::command]
+pub async fn ytdlp_install(state: State<'_, AppState>) -> Res<String> {
+    let client = state.manager().client().map_err(|e| e.message())?;
+    let dirs = state.dirs.clone();
+    let p = YT_DLP_PROGRESS.clone();
+    p.done.store(0, std::sync::atomic::Ordering::Relaxed);
+    p.total.store(-1, std::sync::atomic::Ordering::Relaxed);
+    p.cancel.store(false, std::sync::atomic::Ordering::Relaxed);
+    let path = state
+        ._engine
+        .handle()
+        .spawn(async move { lider_core::tools::install_yt_dlp(&client, &dirs, &p).await })
+        .await
+        .map_err(|e| e.to_string())??;
+    Ok(path.to_string_lossy().into_owned())
+}
+
+#[tauri::command]
+pub fn ytdlp_progress() -> (i64, i64) {
+    use std::sync::atomic::Ordering::Relaxed;
+    (
+        YT_DLP_PROGRESS.done.load(Relaxed),
+        YT_DLP_PROGRESS.total.load(Relaxed),
+    )
+}
+
+#[tauri::command]
+pub fn ytdlp_cancel() {
+    YT_DLP_PROGRESS
+        .cancel
+        .store(true, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// Read a YouTube page with yt-dlp.
 #[tauri::command]
 pub async fn probe_media(url: String) -> Res<MediaInfo> {

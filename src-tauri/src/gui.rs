@@ -162,6 +162,10 @@ pub fn run(cli: Cli, socket: String) -> ExitCode {
             crate::dialogs::name_choice,
             crate::dialogs::media_default,
             crate::dialogs::media_variant,
+            crate::dialogs::ytdlp_offer,
+            crate::dialogs::ytdlp_install,
+            crate::dialogs::ytdlp_progress,
+            crate::dialogs::ytdlp_cancel,
             crate::dialogs::home_dir,
             crate::dialogs::appimage_name,
         ])

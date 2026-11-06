@@ -38,18 +38,20 @@ the Arch package, so both sort it before `2.0.0`. File names keep the plain vers
 |---|---|---|---|
 | Runs on | any x86_64 distro with glibc ≥ the build host's (Ubuntu 22.04 in CI) | Debian 12+, Ubuntu 22.04+ (amd64) | Arch, CachyOS, Manjaro, EndeavourOS |
 | WebKitGTK, GTK | bundled | from the system (`Depends`) | from the system (`depends`) |
-| yt-dlp | bundled (2026.08.19) | bundled (2026.08.19) | `optdepends` |
+| yt-dlp | offered on first use | offered on first use | `optdepends`, or offered on first use |
 | ffmpeg, node/deno/bun | from the system | `Recommends: ffmpeg, nodejs \| deno` | `optdepends` |
 | Application menu | offered on first start, written to `~/.local/share/applications` | installed | installed |
-| Size | ~150 MB | ~45 MB | ~8 MB |
+| Size | ~90 MB | ~6 MB | ~8 MB |
 
 ffmpeg and a JavaScript runtime are only needed for YouTube. Without ffmpeg, LID offers just the formats
 that need no merging. Without a JavaScript runtime, YouTube may withhold some streams.
 
-LID looks for yt-dlp in this order: `~/.local/bin/yt-dlp` (your own copy, so `pip install --user -U yt-dlp`
-or a downloaded `yt-dlp` updates it without waiting for LID), the copy the package ships in
-`/usr/lib/lider/yt-dlp` (the AppImage keeps it at the same place inside), `yt-dlp` on PATH, then
-`python3 -m yt_dlp`.
+No package carries yt-dlp. When a YouTube link needs it and none is found, LID asks whether to download
+the standalone yt-dlp for this system (`yt-dlp_linux`, `yt-dlp.exe`, …) from
+<https://github.com/yt-dlp/yt-dlp/releases/latest>, checks it against that release's `SHA2-256SUMS`, and
+keeps it in its data folder (`~/.local/share/lider/tools/`). It looks in this order: `~/.local/bin/yt-dlp`
+(your own copy, e.g. `pip install --user -U yt-dlp`), the copy LID downloaded, `yt-dlp` on PATH (the
+distribution's), then `python3 -m yt_dlp`.
 
 ## Install
 
@@ -197,8 +199,8 @@ before the extension is submitted.
 * **AppImage:**
   * `cargo tauri build --bundles appimage` lays out the AppDir: WebKitGTK with its helper processes, GTK
     and its modules, through linuxdeploy and its GTK plugin (its `AppRun` sets up GTK and starts `lider`).
-  * The script then adds yt-dlp, LID's own desktop entry and scalable icon, and the licences, and packs
-    the AppDir with `appimagetool` 1.9.0 (cached in `~/.cache/lider-build`, like yt-dlp).
+  * The script then adds LID's own desktop entry and scalable icon, and the licences, and packs the
+    AppDir with `appimagetool` 1.9.0 (cached in `~/.cache/lider-build`).
 * **deb:**
   * The package is assembled with `tar` + `ar` (the standard `.deb` layout), so it builds on any distro
     without `dpkg-deb`, and with reproducible tar flags.
@@ -218,4 +220,3 @@ before the extension is submitted.
 * **AppImage:** it also carries WebKitGTK, GTK and their libraries as separate shared libraries, which is
   how the LGPL lets users swap them. `usr/share/licenses/lider/system-libraries/` lists each library with
   the licence files of the distribution package it came from.
-* **yt-dlp** (deb, AppImage) is public domain (Unlicense).

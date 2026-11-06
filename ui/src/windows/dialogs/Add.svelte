@@ -22,7 +22,7 @@
     url: string; referer: string; parent_page: string; headers: Record<string, string>; filename: string; ask_address: boolean
   }
   let theme = $state<ThemeName>('ember')
-  let page = $state<'address' | 'duplicate' | 'busy' | 'info' | ''>('')
+  let page = $state<'address' | 'duplicate' | 'busy' | 'tool' | 'info' | ''>('')
   let box = $state<Box | null>(null)
   let settings = $state<any>(null)
 
@@ -167,11 +167,45 @@
     await showInfo(prep.category, `${prep.save_dir}/${prep.filename}`)
   }
 
-  async function youtubeFlow(check: any) {
-    if (!check.yt_dlp) {
-      await warn('Downloading from YouTube needs the yt-dlp package:\n\n    pip install yt-dlp')
-      return close()
+  // yt-dlp on demand: offered once YouTube needs it, downloaded from yt-dlp's own releases.
+  let tool = $state<{ done: number; total: number } | null>(null)
+  async function getYtDlp(): Promise<boolean> {
+    document.body.style.cursor = ''
+    const offer = await call<any>('ytdlp_offer')
+    if (!offer.asset) {
+      await warn('Downloading from YouTube needs yt-dlp, which has no program for this system.\n\nInstall it with: pip install yt-dlp')
+      return false
     }
+    const r = await ask({
+      title: 'Download yt-dlp?', icon: 'category-video',
+      text: `LID reads YouTube pages with yt-dlp, which is not on this computer yet.\n\nLID can download it now (${offer.asset}) from its official releases:\n${offer.project}\n\nThe file is checked against the release's checksums and kept in LID's own folder.`,
+      buttons: [{ id: 'get', label: 'Download', primary: true }, { id: 'no', label: 'Cancel' }],
+    })
+    if (r !== 'get') return false
+    page = 'tool'
+    setTitle('Downloading yt-dlp')
+    await fit(520)
+    tool = { done: 0, total: -1 }
+    const timer = setInterval(async () => {
+      const [done, total] = await call<[number, number]>('ytdlp_progress')
+      tool = { done, total }
+    }, 200)
+    try {
+      await call('ytdlp_install')
+      return true
+    } catch (e) {
+      if (String(e) !== 'cancelled') await warn(`Cannot download yt-dlp:\n${e}`)
+      return false
+    } finally {
+      clearInterval(timer)
+      tool = null
+      page = 'busy'
+      document.body.style.cursor = 'progress'
+    }
+  }
+
+  async function youtubeFlow(check: any) {
+    if (!check.yt_dlp && !(await getYtDlp())) return close()
     let info: MediaInfo
     try {
       info = await call('probe_media', { url: flowUrl })
@@ -326,6 +360,15 @@
       <span class="grow"></span>
       <button class="btn" onclick={close}>Cancel</button>
       <button class="btn primary" onclick={okDuplicate}>OK</button>
+    {/snippet}
+  </Shell>
+{:else if page === 'tool'}
+  <Shell {theme} icon="category-video" title="Downloading yt-dlp" subtitle="From the official yt-dlp releases on GitHub">
+    <div class="bar"><div style:width="{tool && tool.total > 0 ? Math.round((tool.done / tool.total) * 100) : 0}%"></div></div>
+    <div class="mono muted">{tool ? fmtSize(tool.done) : ''}{tool && tool.total > 0 ? ` of ${fmtSize(tool.total)}` : ''}</div>
+    {#snippet footer()}
+      <span class="grow"></span>
+      <button class="btn" onclick={() => call('ytdlp_cancel')}>Cancel</button>
     {/snippet}
   </Shell>
 {:else if page === 'busy'}

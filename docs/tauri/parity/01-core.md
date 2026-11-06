@@ -642,7 +642,7 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
   - Accepted: watch, youtu.be, m.youtube, shorts, music, http live.
   - Rejected: example.com, the bare home page, `youtube.com.evil.io`, `/channel/`.
   - Test `test_youtube_links`.
-- [x] `available()`: yt_dlp is importable. **(UI)** if not, a warning says "needs the yt-dlp package: pip install yt-dlp" (`main_window.py:841`). — **2.x:** `media::available()` finds the `yt-dlp` program (PATH, `~/.local/bin`, or `python3 -m yt_dlp`); the Add flow shows the warning (phase 6)
+- [x] `available()`: yt_dlp is importable. **(UI)** if not, a warning says "needs the yt-dlp package: pip install yt-dlp" (`main_window.py:841`). — **2.x:** `media::available()` finds the `yt-dlp` program (PATH, `~/.local/bin`, or `python3 -m yt_dlp`); the Add flow offers to download yt-dlp for this system instead (decision Q21); the pip hint stays for systems yt-dlp publishes no program for
 - [x] `ffmpeg()`: `which ffmpeg`, cached. — **2.x:** `media::ffmpeg`
 - [x] `ffmpeg_has_mp3()`: `ffmpeg -hide_banner -encoders` (10 s timeout) contains `libmp3lame`, cached. — **2.x:** `media::ffmpeg_has_mp3` (10 s timeout)
 - [x] `js_runtimes()`: the first of `deno`, `node`, `bun` on PATH gives `{name: {"path": p}}`, else `{}`. — **2.x:** `media::js_runtime`, passed as `--js-runtimes name:path`
