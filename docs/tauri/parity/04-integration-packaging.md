@@ -25,7 +25,7 @@ Everything below was read line by line. Paths are relative to the repository roo
   - Unknown args are passed through to `QApplication` via `parse_known_args` (`app.py:75,80`), for example `-platform offscreen`. Decide what Tauri does with unknown flags.
 - [~] **Single instance** (`app.py:77-78`). The program first calls `send_to_running(urls)`. If an instance answers, it exits 0. With no URLs it sends `--show`. — **2.x:** same, except `--minimized` alone does nothing when LID runs (decision Q1); test `minimized_alone_does_not_show_a_running_lid`, checked end to end (23 ms, exit 0)
   - **QUIRK:** `lider --minimized` while LID is already running sends `--show`, so the window pops up. This also happens when autostart runs while LID is open.
-- [ ] Start-up order when this process becomes the instance (`app.py:80-129`): — **2.x:** steps 2–6 and the server in `gui.rs`; showing/hiding by the tray, the menu offer and adding the argv URLs finish with the window in phase 5
+- [x] Start-up order when this process becomes the instance (`app.py:80-129`): — **2.x:** `gui.rs` in 1.x order; hidden only when a tray exists; the menu offer once the window is ready; argv URLs go through the same path as instance lines
   1. Set up the app: name and display name "LID", desktop file name "lider", `quitOnLastWindowClosed=False` (LID lives in the tray), window icon `app`.
   2. `settings_mod.migrate_legacy_dirs()` (§6).
   3. `settings.load()`.
@@ -87,14 +87,14 @@ Everything below was read line by line. Paths are relative to the repository roo
   - It decodes UTF-8 with `errors="replace"`, splits lines with `splitlines()`, strips each line and drops empty ones.
   - Each line is handed to `on_line`.
   - **QUIRK:** the read blocks the GUI loop for up to 2 s per slow client.
-- [ ] **Line semantics** (`app.py:101-112`): — **2.x:** lines reach the app (`lid://instance-line`, `take_pending_lines`); what the window does with them is phase 5
+- [x] **Line semantics** (`app.py:101-112`): — **2.x:** `app::on_line`: JSON lines go to `browser_request` without showing the window (except show); other lines show it and, unless `--show`, start the add flow
   - A line starting with `{` is parsed as JSON. Invalid JSON is ignored silently, and so is any value that is not an object. A valid object goes to `win.handle_browser_request(req)`. **A JSON line does not bring the window forward**, except `action:"show"`.
   - Any other line first calls `win.show_normal()` (`showNormal`, `raise_`, `activateWindow`, `main_window.py:1510-1513`). Then, unless the line is `--show`, it calls `win.add_url(line, ask_address=False)`. Plain lines are not validated as URLs at this point.
 - [x] **JSON requests from the native host to the app.** These are the fields after cleaning in `native_host.py`. Every field except `action` is optional, and each is present only when non-empty. — **2.x:** `native_host::clean_download` / `clean_links`
   - `{"action":"show"}`
   - `{"action":"download","url","final_url","referer","page_url","filename","mime","cookies","user_agent","size"}`
   - `{"action":"links","items":[{"url","text","kind"}],"referer","page_url","cookies","user_agent"}`
-- [ ] **How the app uses a request** (`main_window.py:983-1008`): — **2.x:** phase 5 (main window)
+- [x] **How the app uses a request** (`main_window.py:983-1008`): — **2.x:** `app::browser_request`: Cookie/User-Agent headers, referer = referer or page, URL check; the add and links windows are phase 6
   - `show` calls `show_normal()`.
   - `cookies` becomes the header `Cookie`, and `user_agent` becomes the header `User-Agent`.
   - `page = page_url or ""` and `referer = referer or page`.
@@ -242,7 +242,7 @@ Everything below was read line by line. Paths are relative to the repository roo
     - Firefox Add-ons if `FIREFOX_ADDONS_URL` is set; otherwise "Firefox (.xpi)" if `FIREFOX_SIGNED_XPI`; otherwise "Firefox (.zip)"
     - always "All downloads" (`RELEASES_URL`)
   - Each link has the URL as its tooltip.
-- [ ] **Other places that show browser status:** — **2.x:** phase 5
+- [x] **Other places that show browser status:** — **2.x:** the status bar's Browser: connected / not set up, re-checked after Browser integration
   - Status bar text "Browser: connected" or "Browser: not set up". It is computed once and cached: connected means any detected browser has the host installed (`main_window.py:486-491`). Clicking it opens the dialog (`:454-467`).
   - Options → General has "Capture downloads from browsers (needs the LID extension)" (`settings.browser_capture`), a note, "Set up browsers...", and the pill "✓ N browser(s) connected" or "Not set up yet" (`options.py:328-346`).
 

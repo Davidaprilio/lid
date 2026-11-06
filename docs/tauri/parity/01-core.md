@@ -306,7 +306,7 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
 - [x] Periodic restart: `periodic and next_run and not running and time.time() >= next_run` sets `next_run=0` and runs `start_queue`. It uses wall-clock `time.time()`, not the `now` argument. — **2.x:** `tests/manager.rs` `periodic_queue_downloads_again_and_plans_the_next_run` (wall clock, as 1.x)
 - [x] `start_on_startup`: started on the first `poll()` (`:443-447`). — **2.x:** `tests/manager.rs` `once_date_and_start_on_startup`
 - [x] `_fired` only grows, in memory. — **2.x:** done
-- [ ] On-done actions are **(UI)**, in `main_window.py:1445-1476` `_queue_done`, run on **every** `queue_done`, including "stopped by schedule": — **2.x:** the `queue_done` events are there; the actions (tray message, open, power off, exit) are UI, phase 5
+- [x] On-done actions are **(UI)**, in `main_window.py:1445-1476` `_queue_done`, run on **every** `queue_done`, including "stopped by schedule": — **2.x:** `app::handle_events`: notification, open_when_done, the power-off countdown (priority) or exit, also for "stopped by schedule"
   1. Tray message `"<name>" processing stopped/finished`.
   2. `open_when_done` opens the path with `QDesktopServices.openUrl(file://…)` (xdg-open behaviour) (`ui/util.py:56`).
   3. `shutdown_when_done`, which takes priority over exit: a 30 s countdown dialog the user can cancel, then `manager.shutdown()`, then `subprocess.Popen(["systemctl","poweroff"])`.

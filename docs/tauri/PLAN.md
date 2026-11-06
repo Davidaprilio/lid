@@ -190,8 +190,8 @@ Each phase ends with its parity items ticked and its tests green in CI. Python s
 - `tests/golden/make_golden.py` writes `tests/golden/v1.2/` (10 downloads covering every status, a YouTube
   record, checksum fields, four queues, current and legacy settings, part files) plus `expected.json`, which is
   what 1.2 reads back. CI re-runs it and fails if the output changes (the `.db` bytes are not compared).
-- Version pin: the `tauri` crate is on 2.11 while npm already has 2.12, and `tauri dev` refuses mismatched
-  minor versions, so `ui/package.json` pins `@tauri-apps/api` to `~2.11.1`. Raise both together.
+- Version pin: `tauri dev` refuses an npm `@tauri-apps/api` of another minor version than the `tauri` crate. Both are
+  on 2.12 now (the crate had stayed on 2.11 because `rust-version` was 1.88; it is 1.90 since phase 5). Raise both together.
 - `cargo tauri dev` opens the window; the native-host and browser-integration modes exit with
   "not ported yet" until phase 4.
 
@@ -287,6 +287,27 @@ its own tokio runtime, instance socket, hidden start; lines are kept for the win
   pills, column customisation), details pane (F9), status bar, tray, search bar (Ctrl+F) and Find Next (F3),
   drag-and-drop, clipboard monitoring, browser requests, close-while-downloading, power-off countdown.
 
+**Status 2026-11-06: done, except what needs a dialog (phase 6) or a manual check.**
+- 5a `lider-core/src/view.rs`: what the window shows, computed in Rust (rows and pills, tree and counts, filters and
+  sorting with the 1.x keys, checks and targets, enabled actions, status bar, tray tooltip, details pane, unique
+  names, add-many) and `ef2.rs`; 12 tests port the logic of `test_ui.py`.
+- 5b `src-tauri`: `app.rs` (window state, the view of a tick, event reactions, browser requests, clipboard,
+  closing), `commands.rs`, `menu.rs` (one menu description for the GTK menu bar and the in-window one), `pump.rs`
+  (500 ms tick, portal colour scheme, global-menu check), `tray.rs`, `system.rs` (xdg-open, FileManager1,
+  poweroff, fontconfig), `windows.rs` (dialog and progress windows).
+- 5c `ui/src`: theme tokens and CSS from `theme.py`, the 43 icons recoloured like `icons.py`, menu bar and popup
+  menus with mnemonics, toolbar, tree, virtualised list, details pane, status bar, search bar, message boxes.
+  `ui/src/dev/mock.ts` renders the window in a plain browser from a view saved with `LIDER_DUMP_VIEW`
+  (layout checks, screenshots of Ember and Dark looked right).
+- 5d UI tests: WebKitWebDriver is not packaged on Arch, so `tests/e2e/run.sh` starts the real app on a copy of the
+  golden profile with `LIDER_E2E=main`, and `ui/src/dev/e2e.ts` clicks through the window: 24 checks from
+  `test_ui.py` (menus, tree, filters, sorting, checks, details pane, F9, search with match case, F3, delete with
+  its question, themes, toolbar captions, the View menu). Passes 3 runs in a row; CI runs it under xvfb.
+- Message boxes (questions, Open with, the power-off countdown, closing with downloads) are drawn over the main
+  window instead of separate windows (decision Q18). The designed dialogs of phase 6 replace the closing one.
+- Still open in `parity/02`: 40 items, nearly all opening a dialog of phase 6; manual checks of the tray click
+  (D2), drag-and-drop, the clipboard monitor and the power-off countdown; menu tips in the status bar.
+
 ### Phase 6: dialogs
 - Every dialog in `parity/03-dialogs.md`, using the shared `Shell` component: Download File Info (with the
   YouTube box and checksum field), batch download with wildcards, Links/Grabber, batch from clipboard,
@@ -366,6 +387,7 @@ D2 and D4 still need a measurement or a test in their phase; record the outcome 
 | Q15 | One unreadable row in `downloads.db` (or `QueueSchedule(**data)` with an unknown key) stopped 1.x from starting | 1 | **Accepted 2026-11-06:** skip the bad row, leave it in the file, report it (the UI can show a note in phase 5); unknown queue keys are kept like download keys. |
 | Q16 | Verifier error text is Python's (`[Errno 2] No such file or directory: '<path>'`) | 1 | **Accepted 2026-11-06:** Rust's OS message plus the path. The text only appears after "Checksum check failed:". |
 | Q17 | Engine edge cases in 1.x: a failed disk write left zeros in the file; invalid input killed a connection's thread; `socks5://` proxies did not work; an `ftp://` folder URL downloaded the listing | 2 | **Accepted 2026-11-06:** give the bytes back and retry the write; fail the connection with a message; SOCKS works; a folder URL is an error. |
+| Q18 | 1.x message boxes (QMessageBox, QInputDialog) are separate windows | 5 | **Proposed in phase 5, built, awaiting confirmation:** draw them over the main window (the window comes forward when needed). Real dialogs stay windows. |
 
 ## 10. Prerequisites on this machine
 
