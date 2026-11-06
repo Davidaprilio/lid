@@ -1,5 +1,6 @@
 //! LID core. Like `lider/core/` in 1.x it never touches the GUI: the app drives it by polling.
 
+pub mod batch;
 pub mod categories;
 pub mod checksum;
 pub mod ef2;
@@ -8,6 +9,7 @@ pub mod fmt;
 pub mod ftp;
 pub mod http;
 pub mod limiter;
+pub mod links;
 pub mod manager;
 pub mod media;
 pub mod media_task;

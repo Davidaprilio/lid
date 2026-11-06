@@ -96,6 +96,34 @@ impl QueueSchedule {
     }
 }
 
+/// The Scheduler's "Next run" line: "Next run tonight at 23:00 · in 2 h 5 m" (minutes rounded up);
+/// `None` when the queue will not start by itself.
+pub fn next_run_text(s: &QueueSchedule, now: NaiveDateTime) -> Option<String> {
+    let t = s.next_start(now)?;
+    let mins = ((t - now).num_seconds() + 59).max(0) / 60;
+    let (h, m) = (mins / 60, mins % 60);
+    let day = if t.date() == now.date() {
+        if t.hour() >= 18 {
+            "tonight".to_string()
+        } else {
+            "today".to_string()
+        }
+    } else if t.date() == (now + Duration::days(1)).date() {
+        "tomorrow".to_string()
+    } else {
+        t.format("%a %d %b").to_string()
+    };
+    let hours = if h > 0 {
+        format!("{h} h ")
+    } else {
+        String::new()
+    };
+    Some(format!(
+        "Next run {day} at {} · in {hours}{m} m",
+        t.format("%H:%M")
+    ))
+}
+
 /// A queue as stored in the `queues` table: `{"schedule": {...}}`.
 #[derive(Debug, Clone, PartialEq, Default, Serialize, Deserialize)]
 pub struct QueueRecord {
@@ -141,6 +169,38 @@ mod tests {
         s.days = vec![];
         assert_eq!(s.next_start(now), None);
         assert_eq!(QueueSchedule::default().next_start(now), None);
+    }
+
+    #[test]
+    fn next_run_line() {
+        let now = dt(2026, 10, 25, 9, 41, 30); // Sunday
+        let mut s = QueueSchedule {
+            start_enabled: true,
+            start_time: "23:00".into(),
+            ..Default::default()
+        };
+        assert_eq!(
+            next_run_text(&s, now).unwrap(),
+            "Next run tonight at 23:00 · in 13 h 19 m"
+        );
+        s.start_time = "10:00".into();
+        assert_eq!(
+            next_run_text(&s, now).unwrap(),
+            "Next run today at 10:00 · in 19 m"
+        );
+        s.start_time = "08:00".into();
+        assert_eq!(
+            next_run_text(&s, now).unwrap(),
+            "Next run tomorrow at 08:00 · in 22 h 19 m"
+        );
+        s.daily = true;
+        s.days = vec![4];
+        assert_eq!(
+            next_run_text(&s, now).unwrap(),
+            "Next run Fri 30 Oct at 08:00 · in 118 h 19 m"
+        );
+        s.start_enabled = false;
+        assert_eq!(next_run_text(&s, now), None);
     }
 
     #[test]

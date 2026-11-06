@@ -141,7 +141,7 @@
     const text = await api.clipboard()
     const urls = text.split(/\s+/).filter((w) => URL_RE.test(w))
     if (!urls.length) return info('LID', 'Cannot find any web address in the clipboard!')
-    await openDialog('links', `links?source=clipboard&urls=${encodeURIComponent(JSON.stringify(urls))}`, 'Download links', 720, 520)
+    await openDialog('links', `links?urls=${encodeURIComponent(JSON.stringify(urls))}`, 'Download All Links', 840, 640)
   }
 
   async function exportList(kind: 'ef2' | 'text') {
@@ -164,10 +164,10 @@
   /** Every menu id: the window handles dialogs and questions, the backend everything else. */
   async function dispatch(id: string) {
     switch (id) {
-      case 'add': return openDialog('add', 'add', 'Enter new address to download', 560, 300)
+      case 'add': return openDialog(`add-${Date.now()}`, 'add', 'Enter new address to download', 560, 300)
       case 'batch': return openDialog('batch', 'batch', 'Add batch download', 620, 520)
       case 'batch_clipboard': return batchFromClipboard()
-      case 'grabber': return openDialog('grabber', 'grabber', 'Grabber', 560, 260)
+      case 'grabber': return openDialog('grabber', 'links?grabber=1', 'Grabber', 560, 200)
       case 'export_ef2': return exportList('ef2')
       case 'export_text': return exportList('text')
       case 'import_ef2': return importList('ef2')
@@ -283,9 +283,9 @@
   async function onRequest(r: UiRequest) {
     switch (r.kind) {
       case 'add_url':
-        return openDialog('add', `add?req=${encodeURIComponent(JSON.stringify(r))}`, 'Enter new address to download', 560, 300)
+        return openDialog(`add-${Date.now()}`, `add?req=${encodeURIComponent(JSON.stringify(r))}`, 'Download File Info', 720, 420, false)
       case 'links':
-        return openDialog('links', `links?req=${encodeURIComponent(JSON.stringify(r))}`, 'Download links', 720, 520)
+        return openDialog(`links-${Date.now()}`, `links?req=${encodeURIComponent(JSON.stringify(r))}`, 'Download All Links', 840, 640, false)
       case 'complete':
         return openDialog(`complete-${r.id}`, `complete?id=${r.id}`, 'Download complete', 560, 360, false)
       case 'mismatch':

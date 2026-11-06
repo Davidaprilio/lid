@@ -40,6 +40,10 @@ pub struct Ui {
     pub global_menu: bool,
     pub tick: u64,
     pub menus_json: String,
+    /// The theme dialog windows were last told about.
+    pub last_theme: String,
+    /// Addresses typed in "Enter new address to download" (most recent first, at most 20, not saved).
+    pub url_history: Vec<String>,
 }
 
 pub struct AppState {
@@ -91,6 +95,8 @@ pub fn new_ui(settings: &Settings) -> Ui {
         global_menu: false,
         tick: 0,
         menus_json: String::new(),
+        last_theme: String::new(),
+        url_history: Vec::new(),
     }
 }
 

@@ -61,6 +61,15 @@ pub fn push_view(app: &AppHandle, state: &AppState) {
         return;
     }
     let view = app::main_view(state, false);
+    let theme_changed = {
+        let mut ui = state.ui();
+        let changed = ui.last_theme != view.appearance.theme;
+        ui.last_theme = view.appearance.theme.clone();
+        changed
+    };
+    if theme_changed {
+        let _ = app.emit("lid://theme", view.appearance.theme.clone());
+    }
     if view.menus.is_some() {
         set_native_menu(app, state);
     }

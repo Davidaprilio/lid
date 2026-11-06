@@ -240,7 +240,7 @@ impl Variant {
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct MediaInfo {
     pub url: String,
     pub id: String,

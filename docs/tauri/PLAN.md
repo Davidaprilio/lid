@@ -387,7 +387,7 @@ D2 and D4 still need a measurement or a test in their phase; record the outcome 
 | Q15 | One unreadable row in `downloads.db` (or `QueueSchedule(**data)` with an unknown key) stopped 1.x from starting | 1 | **Accepted 2026-11-06:** skip the bad row, leave it in the file, report it (the UI can show a note in phase 5); unknown queue keys are kept like download keys. |
 | Q16 | Verifier error text is Python's (`[Errno 2] No such file or directory: '<path>'`) | 1 | **Accepted 2026-11-06:** Rust's OS message plus the path. The text only appears after "Checksum check failed:". |
 | Q17 | Engine edge cases in 1.x: a failed disk write left zeros in the file; invalid input killed a connection's thread; `socks5://` proxies did not work; an `ftp://` folder URL downloaded the listing | 2 | **Accepted 2026-11-06:** give the bytes back and retry the write; fail the connection with a message; SOCKS works; a folder URL is an error. |
-| Q18 | 1.x message boxes (QMessageBox, QInputDialog) are separate windows | 5 | **Proposed in phase 5, built, awaiting confirmation:** draw them over the main window (the window comes forward when needed). Real dialogs stay windows. |
+| Q18 | 1.x message boxes (QMessageBox, QInputDialog) are separate windows | 5 | **Accepted 2026-11-06:** draw them over the main window (the window comes forward when needed). Real dialogs stay windows. |
 
 ## 10. Prerequisites on this machine
 
