@@ -5,7 +5,8 @@
 //! | OS | adapter | state |
 //! |---|---|---|
 //! | Linux | [`linux::Linux`] | complete (what 1.x and 2.x do) |
-//! | others | `unsupported::Unsupported` | compiles; every service says "not supported yet" |
+//! | Windows | `windows::Windows` | named pipe, registry, Explorer (docs/platforms.md) |
+//! | others (macOS) | `unsupported::Unsupported` | compiles; every service says "not supported yet" |
 //!
 //! A new OS (Windows, macOS) gets its own module next to `linux/` that implements [`Platform`], and one
 //! line in [`Os`]. Nothing outside this module needs to change.
@@ -28,13 +29,17 @@ use crate::browser::Family;
 
 #[cfg(target_os = "linux")]
 pub mod linux;
-#[cfg(not(target_os = "linux"))]
+#[cfg(not(any(target_os = "linux", windows)))]
 mod unsupported;
+#[cfg(windows)]
+pub mod windows;
 
 /// The adapter of the OS LID is compiled for.
 #[cfg(target_os = "linux")]
 pub type Os = linux::Linux;
-#[cfg(not(target_os = "linux"))]
+#[cfg(windows)]
+pub type Os = windows::Windows;
+#[cfg(not(any(target_os = "linux", windows)))]
 pub type Os = unsupported::Unsupported;
 
 /// `use lider_sys::platform::prelude::*` brings [`os`] and every port into scope.

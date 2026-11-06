@@ -1,6 +1,9 @@
 //! The `lider` binary. Like `lider/app.py` in 1.x, it picks the process mode from argv before any GUI
 //! code runs: the native messaging host and the browser-integration CLI must never start the webview.
 
+// No console window on Windows (release builds); the browser still gets stdin/stdout for the host.
+#![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
+
 mod app;
 mod cli;
 mod commands;
@@ -25,8 +28,8 @@ enum Mode {
 
 fn mode(args: &[String]) -> Mode {
     // Same order and "anywhere in argv" matching as app.py:main. Browsers append their own arguments
-    // (an origin, a manifest path) after --native-host; they are never URLs.
-    if args.iter().any(|a| a == "--native-host") {
+    // (an origin, a manifest path); on Windows those alone mark the host (no wrapper script there).
+    if lider_sys::native_host::started_by_browser(args) {
         Mode::NativeHost
     } else if args
         .iter()

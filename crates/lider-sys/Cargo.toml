@@ -22,6 +22,11 @@ zip = { version = "2", default-features = false, features = ["deflate"] }
 libc = "0.2"
 zbus = { version = "5", default-features = false, features = ["blocking-api", "tokio"] }
 
+# The Windows adapter (platform/windows).
+[target.'cfg(windows)'.dependencies]
+tokio = { version = "1", features = ["net", "rt", "io-util", "time"] }
+winreg = "0.56"
+
 [dev-dependencies]
 base64 = "0.22"
 sha2 = "0.10"

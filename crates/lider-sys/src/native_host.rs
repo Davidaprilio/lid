@@ -277,6 +277,17 @@ pub fn handle(
     }
 }
 
+/// The browser started this program as LID's native messaging host. On Linux the wrapper script passes
+/// `--native-host`; on Windows the host manifest names lider.exe itself, and the browser adds its own
+/// arguments: Chromium the extension's origin, Firefox the manifest path and the add-on id.
+pub fn started_by_browser(args: &[String]) -> bool {
+    args.iter().any(|a| {
+        a == "--native-host"
+            || a.starts_with("chrome-extension://")
+            || a == crate::browser::FIREFOX_EXTENSION_ID
+    })
+}
+
 /// `lider --native-host`: answer messages until the browser closes stdin. Exit code 0 at the end of the
 /// input, 1 after a framing error (which is answered first).
 pub fn main() -> i32 {
@@ -297,6 +308,32 @@ pub fn main() -> i32 {
                 return 1;
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod started_by_browser_tests {
+    use super::started_by_browser;
+
+    #[test]
+    fn browser_arguments_mark_the_host() {
+        let a = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        assert!(started_by_browser(&a(&[
+            "--native-host",
+            "chrome-extension://x/"
+        ])));
+        assert!(started_by_browser(&a(&[
+            "chrome-extension://hljibhdjbmpphbjhbfgiejnijpeobbne/",
+            "--parent-window=0"
+        ])));
+        assert!(started_by_browser(&a(&[
+            r"C:\x\io.github.davidaprilio.lid.firefox.json",
+            "lid@davidaprilio.github.io"
+        ])));
+        assert!(!started_by_browser(&a(&[
+            "https://example.com/a.zip",
+            "--minimized"
+        ])));
     }
 }
 

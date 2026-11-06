@@ -52,12 +52,32 @@ jobs:
       - name: Parity progress
         run: ./docs/tauri/parity-progress.sh >> "$GITHUB_STEP_SUMMARY"
 
-  # The ports (crates/lider-sys/src/platform) and the portable crates must keep compiling for Windows
-  # (docs/platforms.md); the app itself needs a Windows adapter first.
+  # Windows (docs/platforms.md): the adapter's tests, and the app with its per-user installer, which is
+  # kept as an artifact to try on a Windows machine.
   windows:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo check -p lider-core -p lider-sys --all-targets --locked
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Frontend
+        run: |
+          pnpm --dir ui install --frozen-lockfile
+          pnpm --dir ui build
+      - run: cargo test -p lider-core -p lider-sys --locked
+      - run: cargo clippy -p lider-sys -p lider --all-targets --locked -- -D warnings
+      - name: Installer (NSIS)
+        run: |
+          cargo install tauri-cli --version "~2.12" --locked
+          cargo tauri build --bundles nsis --config '{"build":{"beforeBuildCommand":""}}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: target/release/bundle/nsis/*.exe
+          if-no-files-found: error
