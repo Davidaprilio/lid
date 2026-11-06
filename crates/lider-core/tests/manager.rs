@@ -459,7 +459,8 @@ fn active_status_becomes_paused_after_restart() {
 #[test]
 fn pause_resume_and_edit_while_running() {
     let mut t = setup();
-    t.srv.set_delay(Duration::from_millis(20));
+    // Slow enough that the stop arrives before the end, also on a fast Windows runner.
+    t.srv.set_delay(Duration::from_millis(60));
     let id = t.add(
         "slow.bin",
         NewDownload {
