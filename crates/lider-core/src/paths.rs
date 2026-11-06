@@ -175,6 +175,20 @@ mod tests {
         )
     }
 
+    #[cfg(windows)]
+    #[test]
+    fn windows_folders_without_xdg() {
+        let d = Dirs::from_parts(r"C:\Users\u".into(), None, None, None);
+        assert_eq!(d.config, PathBuf::from(r"C:\Users\u\AppData\Roaming\lider"));
+        assert_eq!(d.data, PathBuf::from(r"C:\Users\u\AppData\Local\lider"));
+        assert_eq!(
+            d.parts(),
+            PathBuf::from(r"C:\Users\u\AppData\Local\lider\parts")
+        );
+    }
+
+    // The layout of 1.x on Linux (Unix paths and folders).
+    #[cfg(unix)]
     #[test]
     fn xdg_defaults_and_overrides() {
         let d = Dirs::from_parts(PathBuf::from("/h"), None, None, None);
@@ -196,6 +210,8 @@ mod tests {
     }
 
     /// Port of test_manager.py `test_legacy_lindm_folders_are_migrated`.
+    // The layout of 1.x on Linux (Unix paths and folders).
+    #[cfg(unix)]
     #[test]
     fn legacy_lindm_folders_are_migrated() {
         let tmp = tempfile::tempdir().unwrap();

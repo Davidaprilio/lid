@@ -271,6 +271,8 @@ mod tests {
         );
     }
 
+    // The layout of 1.x on Linux (Unix paths and folders).
+    #[cfg(unix)]
     #[test]
     fn minimal_record_takes_defaults_and_keeps_unknown_fields() {
         let d = Download::from_json(serde_json::json!({

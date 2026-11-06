@@ -381,6 +381,8 @@ mod tests {
         Dirs::from_parts("/home/u".into(), None, None, None)
     }
 
+    // The layout of 1.x on Linux (Unix paths and folders).
+    #[cfg(unix)]
     #[test]
     fn defaults_match_1x() {
         let s = Settings::defaults(&dirs());

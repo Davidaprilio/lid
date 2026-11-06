@@ -31,6 +31,7 @@ pub fn write_all_at(file: &File, buf: &[u8], offset: u64) -> io::Result<()> {
 
 /// Open options for a part file: `rw-r--r--` on Unix (1.x), the defaults elsewhere.
 pub fn part_file_options() -> OpenOptions {
+    #[cfg_attr(not(unix), allow(unused_mut))]
     let mut o = OpenOptions::new();
     #[cfg(unix)]
     {
