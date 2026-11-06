@@ -367,6 +367,24 @@ its own tokio runtime, instance socket, hidden start; lines are kept for the win
 - Remove `lider/` (Python), `pyproject.toml` and the Python tests; update README, CLAUDE.md,
   packaging/README.md; release v2.0.0.
 
+**Status 2026-11-06: steps 1–2 done; the beta week (step 3) is David's; the cut-over (step 4) waits for it.**
+1. Parity: 01 and 03 have no open item. 02 keeps two manual checks (the tray left click, D2, and dropping links
+   on the window); 04 keeps two that need the pushed branch (the first run of `release.yml`, the AUR push, Q10).
+   The status-bar tips are built (the last buildable item).
+2. Screenshots: `tests/e2e/shots.sh` (2.x under Xvfb, `LIDER_E2E=shots`) and `tests/e2e/shots_1x.py` (1.x
+   offscreen) take every window in the three themes (90 and 78 pictures). The side-by-side review found and
+   fixed: dialogs that could only grow (`fit()` measured the 100vh frame), mnemonics underlined all the time,
+   the batch range on one wrapped row, Options groups drawn as fieldsets instead of captions, disabled fields
+   and check boxes that did not look disabled, 12-hour times in the Scheduler, labels beside fields where 1.x
+   has captions above (Check hash, Complete, Mismatch), the Mismatch button order, light native controls in
+   the dark themes, icons on the Columns buttons. What remains is the font rendering of WebKit against Qt.
+3. Upgrade from a real profile: a copy of David's 1.2 profile (9 downloads, 6 categories) round-trips through
+   2.x and reads back the same with the 1.2 code (`real_profile_round_trip`, `tests/golden/compare_profiles.py`),
+   and 2.x starts on it without a note. The beta AppImage `2.0.0-beta.1` is for the week of daily use.
+4. Cut-over, after the beta: move `lider/ui/assets/icons` and `lider/browser_extension` out of `lider/`, remove
+   the Python code, `pyproject.toml` and the Python tests (the golden checks then read 1.2 from the `v1.2.0`
+   tag), update README, CLAUDE.md and packaging/README.md, set 2.0.0 and tag.
+
 Rough size, from the earlier measurement: 10–16 person-weeks. Phases 2, 5 and 6 are the largest.
 
 ## 7. Tests

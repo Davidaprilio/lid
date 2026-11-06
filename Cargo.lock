@@ -2340,7 +2340,7 @@ dependencies = [
 
 [[package]]
 name = "lider"
-version = "2.0.0-alpha.1"
+version = "2.0.0-beta.1"
 dependencies = [
  "arboard",
  "chrono",
@@ -2363,7 +2363,7 @@ dependencies = [
 
 [[package]]
 name = "lider-core"
-version = "2.0.0-alpha.1"
+version = "2.0.0-beta.1"
 dependencies = [
  "base64 0.22.1",
  "bytes",
@@ -2393,7 +2393,7 @@ dependencies = [
 
 [[package]]
 name = "lider-sys"
-version = "2.0.0-alpha.1"
+version = "2.0.0-beta.1"
 dependencies = [
  "base64 0.22.1",
  "include_dir",
