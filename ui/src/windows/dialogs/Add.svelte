@@ -300,7 +300,7 @@
       <div class="accentBox"><Icon name="category-video" size={18} {theme} /><span><b>YouTube video detected</b> — choose the resolution or audio only in the next window.</span></div>
     {:else}
       <div class="panel">
-        <label class="check"><input type="checkbox" bind:checked={useAuth} /> Use <u>a</u>uthorization</label>
+        <label class="check"><input type="checkbox" bind:checked={useAuth} /> <span>Use <u>a</u>uthorization</span></label>
         <div style="display:flex;gap:10px">
           <Row label="Login" width={50}><input class="input" bind:value={login} disabled={!useAuth} /></Row>
           <Row label="Password" width={70}><input class="input" type="password" bind:value={password} disabled={!useAuth} /></Row>

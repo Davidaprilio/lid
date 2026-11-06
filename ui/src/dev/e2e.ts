@@ -156,6 +156,22 @@ async function main() {
   await waitFor('view menu', () => all('.menu .item').length > 5)
   eq(all('.menu > .item').pop()!.textContent!.trim(), 'Appearance...', 'the View menu ends with Appearance...')
   mouse(viewButton, 'mousedown')
+
+  // setStatusTip: the tip of the item under the mouse replaces the left side of the status bar.
+  await waitFor('view menu closed', () => !document.querySelector('.menu'))
+  const options = all('.toolbar .tb').find((b) => b.textContent!.trim() === 'Options')!
+  mouse(options, 'mouseover')
+  await waitFor('toolbar tip', () => document.querySelector('.statusbar .sbTip')?.textContent === options.title)
+  mouse(options, 'mouseout')
+  await waitFor('tip gone', () => !document.querySelector('.statusbar .sbTip'))
+  mouse(all('.menubar > button').find((b) => b.textContent!.trim() === 'Downloads')!, 'mousedown')
+  const sched = await waitFor('Scheduler item', () => all('.menu .item').find((i) => i.textContent!.trim().startsWith('Scheduler')))
+  mouse(sched, 'mouseenter')
+  await waitFor('menu tip', () => document.querySelector('.statusbar .sbTip')?.textContent === 'Scheduler and download queues')
+  key('Escape')
+  await waitFor('menu closed', () => !document.querySelector('.menu'))
+  await waitFor('tip cleared', () => !document.querySelector('.statusbar .sbTip'))
+  log.push('ok  toolbar and menu tips show in the status bar')
 }
 
 export async function run() {

@@ -34,7 +34,13 @@ export async function fit(width?: number) {
   await new Promise((r) => requestAnimationFrame(() => r(null)))
   const el = document.querySelector<HTMLElement>('.shell') ?? document.body
   const w = width ?? Math.max(el.scrollWidth, window.innerWidth)
-  await win().setSize(new LogicalSize(w, el.scrollHeight))
+  // The natural height: .shell fills the window (min-height: 100vh), so measure it without that, or a
+  // window could only grow (1.x dialogs take the height of their layout).
+  const min = el.style.minHeight
+  el.style.minHeight = '0'
+  const h = el.scrollHeight
+  el.style.minHeight = min
+  await win().setSize(new LogicalSize(w, h))
 }
 
 export function setTitle(title: string) {
@@ -48,6 +54,11 @@ export const call = invoke
 /** Qt mnemonics ("&x"): Alt+x presses the button or check box of the top layer (the window, or the last
  * overlay) whose underlined letter is x. */
 export function installMnemonics() {
+  // Qt underlines the letters only while Alt is held.
+  const root = document.documentElement
+  window.addEventListener('keydown', (e) => { if (e.key === 'Alt') root.classList.add('show-mnemonics') })
+  window.addEventListener('keyup', (e) => { if (e.key === 'Alt') root.classList.remove('show-mnemonics') })
+  window.addEventListener('blur', () => root.classList.remove('show-mnemonics'))
   window.addEventListener('keydown', (e) => {
     if (e.defaultPrevented || !e.altKey || e.ctrlKey || !/^[a-z0-9]$/i.test(e.key)) return
     const overlays = document.querySelectorAll('.overlay')

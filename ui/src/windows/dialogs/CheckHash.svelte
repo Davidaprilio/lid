@@ -2,7 +2,6 @@
   // "Check hash" (1.x checkhash.CheckHashDialog): compare a finished file with a pasted value, or only
   // compute its hash; for an unfinished download, check it as soon as it finishes.
   import Shell from '../../components/form/Shell.svelte'
-  import Row from '../../components/form/Row.svelte'
   import ChecksumEdit from '../../components/form/ChecksumEdit.svelte'
   import Icon from '../../components/Icon.svelte'
   import { call, close, followTheme, fit, params } from '../../lib/dialog'
@@ -110,11 +109,10 @@
 }} />
 {#if info}
   <Shell {theme} icon="checksum" badge="accent" title="Check hash" subtitle={info.subtitle}>
-    <Row label="Expected checksum" width={140} top>
-      <div style="flex:1;display:flex;flex-direction:column;gap:4px">
-        <ChecksumEdit bind:text bind:algorithm bind:valid bind:value hint={st === 'running' ? RUNNING : READY} disabled={st === 'reading'} />
-      </div>
-    </Row>
+    <div class="caption">Expected checksum</div>
+    <div style="display:flex;flex-direction:column;gap:4px">
+      <ChecksumEdit bind:text bind:algorithm bind:valid bind:value hint={st === 'running' ? RUNNING : READY} disabled={st === 'reading'} />
+    </div>
     {#if st !== 'running'}
       <label class="check"><input type="checkbox" bind:checked={saveIt} disabled={!canSave} /> Save this checksum to the download</label>
     {/if}
@@ -145,8 +143,10 @@
     {/if}
     {#if st === 'mismatch' && poll}
       <div class="mismatchBox">
-        <Row label="Expected" width={80}><span class="mono" style="user-select:text;overflow-wrap:anywhere">{value.split(':')[1]}</span></Row>
-        <Row label="Actual" width={80}><span class="mono badText" style="user-select:text;overflow-wrap:anywhere">{poll.actual}</span></Row>
+        <div class="pairGrid">
+          <span class="caption">Expected</span><span class="mono" style="user-select:text;overflow-wrap:anywhere">{value.split(':')[1]}</span>
+          <span class="caption">Actual</span><span class="mono badText" style="user-select:text;overflow-wrap:anywhere">{poll.actual}</span>
+        </div>
         <div class="faint">{kind}. Expected is the value above; Actual is computed from the file on disk.{saved ? ' Saved to the download — the list shows Checksum mismatch.' : ''}</div>
       </div>
     {/if}

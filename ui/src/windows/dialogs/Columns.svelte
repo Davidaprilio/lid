@@ -2,7 +2,6 @@
   // Customize columns (1.x options.ColumnsDialog): visible, order, width; Reset writes the defaults.
   import Shell from '../../components/form/Shell.svelte'
   import Row from '../../components/form/Row.svelte'
-  import Icon from '../../components/Icon.svelte'
   import { call, close, followTheme, fit } from '../../lib/dialog'
   import type { ThemeName } from '../../theme/tokens'
 
@@ -62,8 +61,8 @@
       {/each}
     </div>
     <div style="display:flex;flex-direction:column;gap:6px">
-      <button class="btn" onclick={() => move(-1)}><Icon name="up" size={14} {theme} /> Move up</button>
-      <button class="btn" onclick={() => move(1)}><Icon name="down-arrow" size={14} {theme} /> Move down</button>
+      <button class="btn" onclick={() => move(-1)}>Move up</button>
+      <button class="btn" onclick={() => move(1)}>Move down</button>
       <span style="flex:1"></span>
       <button class="ghostBtn" title="Back to the default columns" onclick={reset}>Reset</button>
     </div>

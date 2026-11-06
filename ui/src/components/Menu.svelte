@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { statusTip } from '../lib/statustip.svelte'
   // A popup menu: the dropdowns of the menu bar, context menus and split buttons.
   import type { MenuItem } from '../lib/types'
   import Icon from './Icon.svelte'
@@ -69,6 +70,10 @@
   }
 
   let subRef: Self | undefined = $state()
+  // A closed menu leaves no tip of its own behind in the status bar.
+  let myTip = ''
+  const setTip = (t: string) => { myTip = t; statusTip.text = t }
+  $effect(() => () => { if (myTip && statusTip.text === myTip) statusTip.text = '' })
 </script>
 
 <div class="menu" bind:this={el} style:left="{pos.x}px" style:top="{pos.y}px" role="menu" tabindex="-1">
@@ -83,8 +88,8 @@
         class:disabled={it.type === 'action' && !it.enabled}
         role="menuitem"
         tabindex="-1"
-        title={it.type === 'action' ? it.tip : undefined}
-        onmouseenter={(e) => { active = i; if (it.type === 'submenu') showSub(i, e.currentTarget as HTMLElement); else openSub = -1 }}
+        onmouseleave={() => setTip('')}
+        onmouseenter={(e) => { setTip(it.type === 'action' ? it.tip ?? '' : ''); active = i; if (it.type === 'submenu') showSub(i, e.currentTarget as HTMLElement); else openSub = -1 }}
         onclick={(e) => pick(i, e)}
       >
         {#if it.type === 'action' && it.checked !== undefined}

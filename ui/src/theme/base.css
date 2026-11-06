@@ -180,6 +180,7 @@ table.small tr:nth-child(even) td { background: var(--alt); }
 .statusbar { display: flex; align-items: center; gap: 0; height: 26px; padding: 0 6px; background: var(--win); border-top: 1px solid var(--line); color: var(--mu); flex: none; }
 .statusbar > span, .statusbar > button { padding: 0 8px; }
 .statusbar .grow { flex: 1; }
+.statusbar .sbTip { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .statusbar .sbLink { border: 0; background: none; color: var(--mu); cursor: pointer; }
 .statusbar .sbLink:hover { color: var(--ac); }
 .searchbar { display: flex; align-items: center; gap: 8px; padding: 6px 10px; background: var(--win); border-bottom: 1px solid var(--line); flex: none; }
@@ -189,6 +190,7 @@ table.small tr:nth-child(even) td { background: var(--alt); }
   background: var(--input); border: 1px solid var(--line2); border-radius: 8px; padding: 4px 9px; min-height: 28px;
 }
 .input:focus { border-color: var(--ac); }
+.input:disabled, .combo.disabled { background: var(--win); color: var(--fa); border-color: var(--line); }
 /* QSpinBox.NoButtons */
 .input.nospin::-webkit-inner-spin-button, .input.nospin::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .input[aria-invalid='true'] { border-color: var(--bad); }
@@ -202,6 +204,9 @@ table.small tr:nth-child(even) td { background: var(--alt); }
 .btn:disabled { color: var(--fa); background: var(--win); border-color: var(--line); cursor: default; }
 .btn.small { padding: 5px 0; border-radius: 10px; }
 .check { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+/* a disabled check box or radio and its text are dimmed, like Qt */
+.check:has(input:disabled), .radio:has(input:disabled) { color: var(--fa); cursor: default; }
+.check input:disabled, .radio input:disabled { opacity: 0.45; }
 .overlay { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.28); display: flex; align-items: center; justify-content: center; z-index: 900; }
 .dialog { background: var(--win); border: 1px solid var(--line2); border-radius: 12px; min-width: 420px; max-width: 560px; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.3); overflow: hidden; }
 .dialog .body { padding: 16px 18px 14px; display: flex; flex-direction: column; gap: 10px; }
@@ -234,6 +239,7 @@ table.small tr:nth-child(even) td { background: var(--alt); }
 .formctl > .input:last-child, .formctl > .grow { flex: 1; min-width: 0; }
 .panel { background: var(--pane); border: 1px solid var(--line); border-radius: 10px; padding: 14px; display: flex; flex-direction: column; gap: 10px; }
 .noteBox { background: var(--track); color: var(--mu); border-radius: 9px; padding: 9px 12px; }
+.pairGrid { display: grid; grid-template-columns: auto 1fr; gap: 6px 16px; align-items: baseline; }
 .caption { color: var(--fa); font-weight: 700; letter-spacing: 1px; text-transform: uppercase; font-size: 11px; }
 .tpill { display: inline-block; border-radius: 11px; padding: 3px 10px; font-weight: 600; font-size: 0.92em; white-space: nowrap; }
 .tpill.ok { background: var(--ok-14); color: var(--ok); }
@@ -275,3 +281,6 @@ fieldset.group legend { color: var(--fa); font-weight: 700; padding: 0 4px; }
 input[type='checkbox'], input[type='radio'] { accent-color: var(--ac); width: 14px; height: 14px; margin: 0; }
 .radio { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
 .hr { height: 1px; background: var(--line); margin: 2px 0; }
+
+/* dialog mnemonics: underlined only while Alt is held (installMnemonics) */
+html:not(.show-mnemonics) .shell u, html:not(.show-mnemonics) .dialog u { text-decoration: none; }

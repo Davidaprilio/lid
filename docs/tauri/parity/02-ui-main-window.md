@@ -310,7 +310,7 @@ Note: per the project rule this is the one allowed mention apart from the README
   - `Speed Limiter: on|off`
   - `Clipboard: on|off`
   - **`Browser: connected|not set up`**: a link-style button (object sbLink, pointing hand, tooltip "Browser integration…"). Clicking it opens BrowserIntegrationDialog, then **clears the cached result and re-checks** (MW:464-469). Connected = any detected browser has the host installed. Exceptions count as not set up, and the result is cached.
-- [ ] Action status tips show here on hover (setStatusTip, MW:139). — **2.x:** menu tips show as tooltips; showing them in the status bar is still to do
+- [x] Action status tips show here on hover (setStatusTip, MW:139). — **2.x:** the tip of the menu item or toolbar button under the mouse (or with the keyboard focus) replaces the left side of the status bar, like `QStatusBar.showMessage`; menu items no longer show tooltips (QMenu does not); e2e `toolbar and menu tips show in the status bar`. The GTK menu bar (D1) reports no hover
 
 ## 9. Tray icon (MW:493-509, 1357-1359, 1523-1575; app.py)
 - [x] It is created only when `settings.tray_icon` is on and a system tray is available. Icon `app`. — **2.x:** `tray.rs`

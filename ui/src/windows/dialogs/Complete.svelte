@@ -1,6 +1,5 @@
 <script lang="ts">
   // "Download complete" (1.x progress.CompleteDialog).
-  import Row from '../../components/form/Row.svelte'
   import Icon from '../../components/Icon.svelte'
   import Dialog, { type Box } from '../../components/Dialog.svelte'
   import { call, close, followTheme, fit, params } from '../../lib/dialog'
@@ -47,13 +46,10 @@
         </div>
         {#if info.verified}<span class="tpill ok" style="margin-left:auto">{info.kind} verified</span>{/if}
       </div>
-      <Row label="Address" width={130}><input class="input mono" readonly value={info.url} /></Row>
-      <Row label="The file saved as" width={130}>
-        <div style="position:relative;flex:1">
-          <span style="position:absolute;left:8px;top:6px"><Icon name={info.icon} size={16} {theme} /></span>
-          <input class="input" style="width:100%;padding-left:30px" readonly value={info.path} />
-        </div>
-      </Row>
+      <div class="caption">Address</div>
+      <input class="input mono" readonly tabindex="-1" value={info.url} />
+      <div class="caption" style="margin-top:4px">The file saved as</div>
+      <div class="combo-like"><Icon name={info.icon} size={16} {theme} /><input class="mono" readonly tabindex="-1" value={info.path} /></div>
       {#if info.verified}
         <div class="caption">Checksum ({info.kind}) · matches</div>
         <div style="position:relative">

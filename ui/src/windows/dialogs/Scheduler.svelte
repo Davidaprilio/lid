@@ -16,10 +16,13 @@
   let queue = $state(params().get('queue') || MAIN)
   let data = $state<any>(null)
   let sch = $state<any>(null)
-  let tab = $state(0)
+  let tab = $state(params().get('tab') === 'files' ? 1 : 0)
   let openOn = $state(false)
   let date = $state('')
   /** QDateEdit (yyyy-MM-dd) cannot hold an invalid date; a bad text goes back to the last good one. */
+  // QTimeEdit "HH:mm": 24-hour, whatever the locale.
+  const validTime = (t: string) => /^([01]\d|2[0-3]):[0-5]\d$/.test(t)
+  let lastTime = ''
   const validDate = (d: string) => /^\d{4}-\d{2}-\d{2}$/.test(d) && !Number.isNaN(Date.parse(d))
   let nextRun = $state<string | null>(null)
   let selItem = $state<number | null>(null)
@@ -150,7 +153,8 @@
               <label class="check"><input type="checkbox" bind:checked={sch.start_on_startup} /> Start download on LID startup</label>
               <div style="display:flex;align-items:center;gap:8px">
                 <label class="check" style="flex:1"><input type="checkbox" bind:checked={sch.start_enabled} /> Start download at</label>
-                <input class="input mono" type="time" bind:value={sch.start_time} disabled={!sch.start_enabled} />
+                <input class="input mono" style="width:70px" maxlength="5" bind:value={sch.start_time} disabled={!sch.start_enabled}
+                  onfocus={() => (lastTime = sch.start_time)} onblur={() => { if (!validTime(sch.start_time)) sch.start_time = lastTime }} />
               </div>
               <div style="padding-left:24px;display:flex;flex-direction:column;gap:6px">
                 <div style="display:flex;align-items:center;gap:8px">
@@ -174,7 +178,8 @@
               {/if}
               <div style="display:flex;align-items:center;gap:8px">
                 <label class="check" style="flex:1"><input type="checkbox" bind:checked={sch.stop_enabled} /> Stop download at</label>
-                <input class="input mono" type="time" bind:value={sch.stop_time} />
+                <input class="input mono" style="width:70px" maxlength="5" bind:value={sch.stop_time}
+                  onfocus={() => (lastTime = sch.stop_time)} onblur={() => { if (!validTime(sch.stop_time)) sch.stop_time = lastTime }} />
               </div>
               <div style="display:flex;align-items:center;gap:8px">
                 <label class="check" style="flex:1"><input type="checkbox" bind:checked={sch.retries_enabled} /> Number of retries for each file if downloading failed</label>

@@ -8,6 +8,7 @@
   import { applyTheme, type ThemeName } from '../theme/tokens'
   import MenuBar from '../components/MenuBar.svelte'
   import Menu from '../components/Menu.svelte'
+  import { statusTip } from '../lib/statustip.svelte'
   import Toolbar from '../components/Toolbar.svelte'
   import Tree from '../components/Tree.svelte'
   import DownloadList from '../components/DownloadList.svelte'
@@ -186,6 +187,18 @@
       default: return api.menu(id)
     }
   }
+
+  // The status tip of the toolbar button under the mouse or the keyboard focus (QAction.setStatusTip).
+  let toolbarWrap: HTMLDivElement | undefined = $state()
+  $effect(() => {
+    const el = toolbarWrap
+    if (!el) return
+    const show = (e: Event) => (statusTip.text = (e.target as HTMLElement).closest('button')?.title ?? '')
+    const hide = () => (statusTip.text = '')
+    const events: [string, (e: Event) => void][] = [['mouseover', show], ['mouseout', hide], ['focusin', show], ['focusout', hide]]
+    for (const [n, f] of events) el.addEventListener(n, f)
+    return () => { for (const [n, f] of events) el.removeEventListener(n, f) }
+  })
 
   // ------------------------------------------------------------------ context menus
   async function listMenu(e: MouseEvent) {
@@ -423,6 +436,7 @@
       invoke<string | null>('e2e_script').then((name) => {
         if (name === 'main') import('../dev/e2e').then((m) => m.run())
         if (name === 'dialogs') import('../dev/e2e-dialogs').then((m) => m.runMain(e2eDispatch, e2eSelect))
+        if (name === 'shots') import('../dev/e2e-shots').then((m) => m.run(e2eDispatch, e2eSelect))
       })
     })
     const up = (e: KeyboardEvent) => { if (e.key === 'Alt') altHeld = false }
@@ -438,7 +452,9 @@
     {#if v.appearance.inline_menubar}
       <MenuBar bind:this={menubar} {menus} {theme} onpick={dispatch} />
     {/if}
+    <div style="display:contents" bind:this={toolbarWrap}>
     <Toolbar actions={v.actions} labels={v.appearance.toolbar_labels} {theme} onpick={dispatch} onclear={() => api.clearChecks()} />
+    </div>
     <div style="flex:1;display:flex;min-height:0">
       {#if v.appearance.show_categories}
         <div class="sidebar" style:width="{sidebarWidth}px">
@@ -485,8 +501,12 @@
     </div>
     {#if v.appearance.show_statusbar}
       <div class="statusbar">
-        <span class="mono">{v.status.speed}</span>
-        <span>{v.status.counts}</span>
+        {#if statusTip.text}
+          <span class="sbTip">{statusTip.text}</span>
+        {:else}
+          <span class="mono">{v.status.speed}</span>
+          <span>{v.status.counts}</span>
+        {/if}
         <span class="grow"></span>
         <span>{v.status.limiter}</span>
         <span>{v.status.clipboard}</span>

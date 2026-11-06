@@ -111,6 +111,8 @@ pub fn run(cli: Cli, socket: String) -> ExitCode {
             crate::commands::delete_category,
             crate::commands::e2e_script,
             crate::commands::e2e_report,
+            crate::commands::e2e_shot,
+            crate::commands::e2e_env,
             crate::dialogs::dialog_theme,
             crate::dialogs::settings_get,
             crate::dialogs::settings_patch,

@@ -51,9 +51,11 @@
   <Row label="Address" width={70}><Combo editable link {theme} items={[]} bind:value={address} /></Row>
   <div class="panel">
     <div class="caption">Replace asterisk with</div>
-    <div style="display:flex;gap:18px;align-items:center;flex-wrap:wrap">
+    <div style="display:flex;gap:20px;align-items:center">
       <label class="radio"><input type="radio" bind:group={mode} value="numbers" /> Numbers</label>
       <label class="radio"><input type="radio" bind:group={mode} value="letters" /> Letters</label>
+    </div>
+    <div style="display:flex;gap:12px;align-items:center">
       <span>From</span>
       {#if mode === 'numbers'}<input class="input mono nospin" type="number" min="0" max="999999" style="width:80px" bind:value={numFrom} onblur={() => (numFrom = clamp(numFrom, 0, 999999))} />
       {:else}<input class="input mono" maxlength="1" style="width:80px" bind:value={letFrom} />{/if}
@@ -64,7 +66,7 @@
       <input class="input mono nospin" type="number" min="1" max="9" style="width:80px" bind:value={width} onblur={() => (width = clamp(width, 1, 9))} disabled={mode !== 'numbers'} />
     </div>
   </div>
-  <label class="check"><input type="checkbox" bind:checked={useAuth} /> Use <u>a</u>uthorization</label>
+  <label class="check"><input type="checkbox" bind:checked={useAuth} /> <span>Use <u>a</u>uthorization</span></label>
   {#if useAuth}
     <div style="display:flex;gap:10px">
       <Row label="Login" width={50}><input class="input" bind:value={login} /></Row>

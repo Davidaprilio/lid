@@ -158,8 +158,8 @@
         <label class="check" title={desk.system_installed ? 'Added by the installed LID package' : null}>
           <input type="checkbox" bind:checked={inMenu} disabled={desk.system_installed} /> Show LID in the application menu</label>
         <label class="check"><input type="checkbox" bind:checked={s.monitor_clipboard} /> Automatically start downloading of URLs placed to clipboard</label>
-        <fieldset class="group">
-          <legend>Browser integration</legend>
+        <div class="panel">
+          <div class="caption">Browser integration</div>
           <label class="check"><input type="checkbox" bind:checked={s.browser_capture} /> Capture downloads from browsers (needs the LID extension)</label>
           <div class="faint">The extension takes over downloads of the file types on the File types tab, and adds “Download with LID”, “Download all links with LID” and a YouTube button.</div>
           <div style="display:flex;gap:10px;align-items:center">
@@ -167,7 +167,7 @@
             {#if desk.browsers_connected > 0}<Pill tone="ok" text="✓ {desk.browsers_connected} browser{desk.browsers_connected === 1 ? '' : 's'} connected" />
             {:else}<Pill text="Not set up yet" />{/if}
           </div>
-        </fieldset>
+        </div>
       {:else if tab === 1}
         <div>Automatically start downloading the following file types:</div>
         <TagInput bind:values={fileTypes} placeholder="Add a file type…" kind="extension" noun="types" />
@@ -177,8 +177,8 @@
         <div>Don't start downloading automatically from the following sites:</div>
         <TagInput bind:values={noSites} placeholder="Add a site, e.g. *.example.com" kind="site" noun="sites" />
       {:else if tab === 2}
-        <fieldset class="group">
-          <legend>Save to...</legend>
+        <div class="panel">
+          <div class="caption">Save to...</div>
           <Row label="Category" width={80}>
             <Combo {theme} style="flex:0 1 auto;min-width:200px" value={String(catIndex)} onchange={(v) => selectCat(Number(v))}
               items={cats.map((c, i) => ({ value: String(i), label: c.name, icon: catIcon(c.name) }))} />
@@ -189,12 +189,12 @@
           <TagInput bind:values={catExts} placeholder="Add a type…" kind="extension" noun="types" />
           <div>Default download directory for “{cats[catIndex]?.name}”</div>
           <div style="display:flex;gap:8px"><input class="input mono" style="flex:1" bind:value={catDir} /><button class="btn" onclick={() => browse((v) => (catDir = v), catDir)}>Browse</button></div>
-        </fieldset>
-        <fieldset class="group">
-          <legend>Temporary directory</legend>
+        </div>
+        <div class="panel">
+          <div class="caption">Temporary directory</div>
           <div style="display:flex;gap:8px"><input class="input mono" style="flex:1" bind:value={s.temp_dir} /><button class="btn" onclick={() => browse((v) => (s.temp_dir = v), s.temp_dir)}>Browse</button></div>
           <div class="faint">Parts are stored here while downloading. The finished file moves to its category folder.</div>
-        </fieldset>
+        </div>
       {:else if tab === 3}
         <label class="check"><input type="checkbox" bind:checked={s.show_progress_dialog} /> Show "Download progress" dialog</label>
         <label class="check"><input type="checkbox" bind:checked={s.show_start_dialog} /> Show start download dialog</label>
@@ -222,8 +222,8 @@
           </select>
         </Row>
       {:else if tab === 4}
-        <fieldset class="group">
-          <legend>Max. connections number</legend>
+        <div class="panel">
+          <div class="caption">Max. connections number</div>
           <Row label="Default max. conn. number" width={190}>
             <select class="input" style="width:100px" bind:value={s.max_connections}>{#each CHOICES as c}<option value={c}>{c}</option>{/each}</select>
           </Row>
@@ -244,8 +244,8 @@
               <button class="btn" disabled={limitSel < 0} onclick={() => (editLimit = { index: limitSel, pattern: limits[limitSel][0], n: limits[limitSel][1] })}>Edit</button>
             </div>
           </div>
-        </fieldset>
-        <Row label="Reconnection attempts for each connection" width={280}><input class="input mono" type="number" min="0" max="100" style="width:90px" bind:value={s.retries} /></Row>
+        </div>
+        <Row label="Reconnection attempts for each connection" width={280}><input class="input mono" type="number" min="0" max="100" style="width:70px;flex:none" bind:value={s.retries} /></Row>
       {:else if tab === 5}
         <label class="check"><input type="checkbox" bind:checked={useProxy} /> Use proxy</label>
         <Row label="Proxy address" width={110}><input class="input mono" bind:value={proxy} disabled={!useProxy} /></Row>

@@ -52,5 +52,6 @@ export function applyTheme(theme: ThemeName) {
   }
   for (const [k, v] of Object.entries(vars)) root.style.setProperty(`--${k}`, v)
   root.dataset.theme = theme
+  // Native controls (check boxes, radios, number fields, scroll bars) follow the palette's lightness.
   root.style.colorScheme = theme === 'ember' ? 'light' : 'dark'
 }

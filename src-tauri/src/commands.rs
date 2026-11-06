@@ -727,6 +727,38 @@ pub fn e2e_script() -> Option<String> {
     std::env::var("LIDER_E2E").ok().filter(|s| !s.is_empty())
 }
 
+/// An environment variable for a UI scenario (only the `LIDER_` ones).
+#[tauri::command]
+pub fn e2e_env(name: String) -> Option<String> {
+    if e2e_script().is_none() || !name.starts_with("LIDER_") {
+        return None;
+    }
+    std::env::var(name).ok()
+}
+
+/// The screenshot scenario (`tests/e2e/shots.sh`, under Xvfb): save the area of window `label` from the X
+/// screen as `<LIDER_E2E_SHOTS>/<name>.png` with ImageMagick's `import`. Only in that scenario.
+#[tauri::command]
+pub fn e2e_shot(app: AppHandle, label: String, name: String) -> Res<()> {
+    let dir = std::env::var("LIDER_E2E_SHOTS").map_err(|_| "not in the screenshot scenario")?;
+    let w = app.get_webview_window(&label).ok_or("no such window")?;
+    let pos = w.outer_position().map_err(|e| e.to_string())?;
+    let size = w.outer_size().map_err(|e| e.to_string())?;
+    let out = std::path::Path::new(&dir).join(format!("{name}.png"));
+    let status = std::process::Command::new("import")
+        .args(["-window", "root", "-crop"])
+        .arg(format!("{}x{}+{}+{}", size.width, size.height, pos.x, pos.y))
+        .args(["+repage"])
+        .arg(&out)
+        .status()
+        .map_err(|e| e.to_string())?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(format!("import failed for {name}"))
+    }
+}
+
 /// The UI test's result: written to `LIDER_E2E_OUT`, then LID exits (code 0 when it passed).
 #[tauri::command]
 pub fn e2e_report(app: AppHandle, state: State<'_, AppState>, ok: bool, log: String) {

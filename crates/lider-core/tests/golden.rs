@@ -105,3 +105,57 @@ fn writes_what_it_reads() {
     assert_eq!(downloads_json(&b), downloads_json(&a));
     assert_eq!(queues_json(&b), queues_json(&a));
 }
+
+/// A real 1.x profile (for the beta, phase 8): read it from LIDER_PROFILE_IN (holding config/ and data/),
+/// write it with 2.x to LIDER_PROFILE_OUT, then compare both with the 1.2 code:
+///
+///     LIDER_PROFILE_IN=/tmp/in LIDER_PROFILE_OUT=/tmp/out cargo test -p lider-core --test golden -- --ignored
+///     python3 tests/golden/compare_profiles.py /tmp/in /tmp/out
+///
+/// Never point it at the real home: copy the profile first.
+#[test]
+#[ignore]
+fn real_profile_round_trip() {
+    let input = PathBuf::from(std::env::var_os("LIDER_PROFILE_IN").expect("LIDER_PROFILE_IN"));
+    let output = PathBuf::from(std::env::var_os("LIDER_PROFILE_OUT").expect("LIDER_PROFILE_OUT"));
+    let home = lider_core::paths::home_dir();
+    assert!(
+        !input.starts_with(home.join(".config")) && !input.starts_with(home.join(".local")),
+        "use a copy"
+    );
+    let src = Dirs::from_parts(
+        home.clone(),
+        Some(input.join("config").into()),
+        Some(input.join("data").into()),
+        None,
+    );
+    let _ = fs::remove_dir_all(&output);
+    let out = Dirs::from_parts(
+        home,
+        Some(output.join("config").into()),
+        Some(output.join("data").into()),
+        None,
+    );
+
+    let s = settings::load(&src);
+    settings::save(&s, &out).unwrap();
+    assert_eq!(settings::load(&out), s);
+    let a = Store::open(&src.database_file()).unwrap();
+    let b = Store::open(&out.database_file()).unwrap();
+    let (downloads, bad) = a.load_downloads().unwrap();
+    assert!(bad.is_empty(), "unreadable rows: {bad:?}");
+    b.save_downloads(&downloads).unwrap();
+    let (queues, bad) = a.load_queues().unwrap();
+    assert!(bad.is_empty(), "unreadable queues: {bad:?}");
+    for (name, q) in &queues {
+        b.save_queue(name, q).unwrap();
+    }
+    assert_eq!(downloads_json(&b), downloads_json(&a));
+    assert_eq!(queues_json(&b), queues_json(&a));
+    println!(
+        "{} downloads, {} queues, {} categories",
+        downloads.len(),
+        queues.len(),
+        s.categories.len()
+    );
+}
