@@ -1,6 +1,7 @@
 <script lang="ts">
   // The main window (1.x ui/main_window.py): menus, toolbar, sidebar, list, details pane, status bar.
   import { listen } from '@tauri-apps/api/event'
+  import { invoke } from '@tauri-apps/api/core'
   import { open as openFile, save as saveFile } from '@tauri-apps/plugin-dialog'
   import { api, openDialog } from '../lib/api'
   import type { MainView, Menu as MenuT, MenuItem, TreeFilter, UiRequest } from '../lib/types'
@@ -389,6 +390,9 @@
       sidebarWidth = first.appearance.sidebar_width
       detailsHeight = first.appearance.details_height
       searchText = first.search.query
+      invoke<string | null>('e2e_script').then((name) => {
+        if (name) import('../dev/e2e').then((m) => m.run())
+      })
     })
     const up = (e: KeyboardEvent) => { if (e.key === 'Alt') altHeld = false }
     window.addEventListener('keyup', up)

@@ -22,6 +22,7 @@
   <div
     class="node"
     class:selected={same(n.filter, filter)}
+    data-depth={depth}
     style:padding-left="{4 + depth * 16}px"
     role="treeitem"
     aria-selected={same(n.filter, filter)}

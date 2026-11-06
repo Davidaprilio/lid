@@ -719,3 +719,22 @@ pub fn delete_category(app: AppHandle, state: State<'_, AppState>, name: String)
     state.ui().filter = TreeFilter::default();
     crate::pump::push_view(&app, &state);
 }
+
+/// The UI test scenario to run (`LIDER_E2E`), if any.
+#[tauri::command]
+pub fn e2e_script() -> Option<String> {
+    std::env::var("LIDER_E2E").ok().filter(|s| !s.is_empty())
+}
+
+/// The UI test's result: written to `LIDER_E2E_OUT`, then LID exits (code 0 when it passed).
+#[tauri::command]
+pub fn e2e_report(app: AppHandle, state: State<'_, AppState>, ok: bool, log: String) {
+    if let Ok(path) = std::env::var("LIDER_E2E_OUT") {
+        let _ = std::fs::write(
+            path,
+            format!("{}\n{log}\n", if ok { "PASS" } else { "FAIL" }),
+        );
+    }
+    state.manager().shutdown();
+    app.exit(if ok { 0 } else { 1 });
+}

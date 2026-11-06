@@ -16,7 +16,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
-            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev ffmpeg
+            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev ffmpeg xvfb
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -45,5 +45,9 @@ jobs:
         run: |
           LIDER_GOLDEN_OUT="$RUNNER_TEMP/rust-profile" cargo test -p lider-core --test golden --locked
           python3 tests/golden/check_rust_profile.py "$RUNNER_TEMP/rust-profile"
+      - name: UI scenarios in the real window
+        run: |
+          cargo install tauri-cli --version "^2" --locked
+          xvfb-run -a tests/e2e/run.sh
       - name: Parity progress
         run: ./docs/tauri/parity-progress.sh >> "$GITHUB_STEP_SUMMARY"
