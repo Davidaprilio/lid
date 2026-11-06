@@ -1,0 +1,224 @@
+{
+  "launch_on_startup": false,
+  "menu_offered": false,
+  "monitor_clipboard": true,
+  "browser_capture": true,
+  "auto_capture_types": "3GP 7Z AAC ACE AIF APK ARJ ASF AVI BIN BZ2 EXE GZ GZIP IMG ISO LZH M4A M4V MKV MOV MP3 MP4 MPA MPE MPEG MPG MSI MSU OGG OGV PDF PLJ PPS PPT QT R0* R1* RA RAR RM RMVB SEA SIT SITX TAR TIF TIFF WAV WMA WMV Z ZIP",
+  "no_auto_sites": "",
+  "show_start_dialog": true,
+  "only_add_to_queue": false,
+  "show_complete_dialog": true,
+  "duplicate_action": "number",
+  "verify_checksum": true,
+  "checksum_from_clipboard": false,
+  "checksum_mismatch": "keep",
+  "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+  "max_connections": 16,
+  "server_limits": {
+    "*.example.com": 4,
+    "files.test": 2
+  },
+  "retries": 5,
+  "retry_delay": 1.5,
+  "timeout": 20.0,
+  "categories": [
+    {
+      "name": "General",
+      "extensions": [],
+      "save_dir": "/home/lid-user/Downloads",
+      "sites": [],
+      "remember_last": false
+    },
+    {
+      "name": "Compressed",
+      "extensions": [
+        "zip",
+        "rar",
+        "r0*",
+        "r1*",
+        "arj",
+        "gz",
+        "sit",
+        "sitx",
+        "sea",
+        "ace",
+        "bz2",
+        "7z"
+      ],
+      "save_dir": "/home/lid-user/Downloads/Compressed",
+      "sites": [],
+      "remember_last": false
+    },
+    {
+      "name": "Documents",
+      "extensions": [
+        "doc",
+        "pdf",
+        "ppt",
+        "pps",
+        "docx",
+        "pptx"
+      ],
+      "save_dir": "/home/lid-user/Downloads/Documents",
+      "sites": [],
+      "remember_last": false
+    },
+    {
+      "name": "Music",
+      "extensions": [
+        "mp3",
+        "wav",
+        "wma",
+        "mpa",
+        "ram",
+        "ra",
+        "aac",
+        "aif",
+        "m4a",
+        "tsa"
+      ],
+      "save_dir": "/home/lid-user/Downloads/Music",
+      "sites": [],
+      "remember_last": false
+    },
+    {
+      "name": "Programs",
+      "extensions": [
+        "exe",
+        "msi"
+      ],
+      "save_dir": "/home/lid-user/Downloads/Programs",
+      "sites": [],
+      "remember_last": false
+    },
+    {
+      "name": "Video",
+      "extensions": [
+        "avi",
+        "mpg",
+        "mpe",
+        "mpeg",
+        "asf",
+        "wmv",
+        "mov",
+        "qt",
+        "rm",
+        "mp4",
+        "flv",
+        "m4v",
+        "webm",
+        "ogv",
+        "ogg",
+        "mkv",
+        "ts",
+        "tsv",
+        "vob"
+      ],
+      "save_dir": "/home/lid-user/Downloads/Video",
+      "sites": [],
+      "remember_last": false
+    },
+    {
+      "name": "Images",
+      "extensions": [
+        "png",
+        "jpg"
+      ],
+      "save_dir": "/home/lid-user/Downloads/Images",
+      "sites": [
+        "*.imgur.com"
+      ],
+      "remember_last": true
+    }
+  ],
+  "temp_dir": "/home/lid-user/.cache/lider/parts",
+  "proxy": "http://127.0.0.1:8080",
+  "speed_limiter_on": true,
+  "speed_limit_kbps": 512,
+  "speed_limiter_on_startup": false,
+  "columns": [
+    [
+      "queue",
+      true,
+      34
+    ],
+    [
+      "filename",
+      true,
+      280
+    ],
+    [
+      "status",
+      true,
+      180
+    ],
+    [
+      "size",
+      true,
+      92
+    ],
+    [
+      "time_left",
+      true,
+      100
+    ],
+    [
+      "rate",
+      true,
+      120
+    ],
+    [
+      "last_try",
+      true,
+      130
+    ],
+    [
+      "description",
+      false,
+      200
+    ],
+    [
+      "date_added",
+      false,
+      130
+    ],
+    [
+      "save_to",
+      false,
+      200
+    ],
+    [
+      "referer",
+      false,
+      200
+    ],
+    [
+      "parent_page",
+      false,
+      200
+    ]
+  ],
+  "theme": "dark",
+  "follow_system": false,
+  "dark_theme": "ember-dark",
+  "density": "compact",
+  "toolbar_labels": false,
+  "menubar": "custom",
+  "show_categories": true,
+  "show_details": false,
+  "show_statusbar": true,
+  "tray_icon": true,
+  "close_to_tray": true,
+  "start_minimized": false,
+  "list_font": "Inter,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1",
+  "sort_key": "size",
+  "sort_desc": true,
+  "window_geometry": "AdnQywADAAAAAAAAAAAAAAAAA+cAAAIvAAAAAAAAAAAAAAPnAAACLwAAAAACAAAAB4AAAAAAAAAAAAAAA+cAAAIv",
+  "sidebar_width": 260,
+  "details_height": 210,
+  "search_flags": 5,
+  "search_string": "ubuntu",
+  "show_progress_dialog": true,
+  "media_kind": "audio",
+  "media_quality": "MP3"
+}

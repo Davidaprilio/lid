@@ -182,6 +182,19 @@ Each phase ends with its parity items ticked and its tests green in CI. Python s
 - **Golden data:** a script that uses the 1.2 Python code to write sample `settings.json`, `downloads.db`
   (every status, queues, media, checksum fields) and part files into `tests/golden/`. The Rust tests load them.
 
+**Status 2026-11-06: done.**
+- Workspace `Cargo.toml` (version `2.0.0-alpha.1`), `crates/lider-core`, `crates/lider-sys`, `src-tauri`
+  (binary `lider`, argv dispatch before the GUI, `app_info` command), `ui/` (Svelte 5 + TS + Vite, port 1420).
+- `.github/workflows/rust.yml`: frontend check/build, fmt, clippy `-D warnings`, tests, golden check, parity summary.
+  The release workflow keeps reading `lider/__init__.py` until phase 7, because 1.x releases still come from it.
+- `tests/golden/make_golden.py` writes `tests/golden/v1.2/` (10 downloads covering every status, a YouTube
+  record, checksum fields, four queues, current and legacy settings, part files) plus `expected.json`, which is
+  what 1.2 reads back. CI re-runs it and fails if the output changes (the `.db` bytes are not compared).
+- Version pin: the `tauri` crate is on 2.11 while npm already has 2.12, and `tauri dev` refuses mismatched
+  minor versions, so `ui/package.json` pins `@tauri-apps/api` to `~2.11.1`. Raise both together.
+- `cargo tauri dev` opens the window; the native-host and browser-integration modes exit with
+  "not ported yet" until phase 4.
+
 ### Phase 1: data layer (`lider-core`, no network)
 - paths, migrate, models, store, settings (every key and shim), categories, fmt, search, checksum.
 - Done when: the golden files load and save back unchanged; `test_manager`/`test_search` cases that need no
@@ -264,12 +277,13 @@ The rule from CLAUDE.md stays: tests never touch the real home.
 - **Tray behaviour** differs between KDE, GNOME (needs the AppIndicator extension) and others.
 - **Wayland:** clipboard polling and window positioning (progress windows) behave differently from X11.
 
-## 9. Decisions to take (owner: David)
+## 9. Decisions (owner: David)
 
-Open items found while reading the code. Each needs "keep" or "change" before its phase starts; record the
-answer here and mark the parity item `[~]` if it changes.
+Open items found while reading the code. **2026-11-06: every suggestion below was accepted** and is now
+the decision. A parity item that changes because of one of them becomes `[~]` with a link to its row.
+D2 and D4 still need a measurement or a test in their phase; record the outcome in the row.
 
-| # | Item | Phase | Suggestion |
+| # | Item | Phase | Decision |
 |---|---|---|---|
 | D1 | Global D-Bus menu (menu bar mode `native`/`both`) cannot be exported by Tauri | 5 | Keep the three modes; `native` = GTK menu bar in the window. Revisit global menu later. |
 | D2 | Tray left-click | 5 | See §5; decide after testing. |

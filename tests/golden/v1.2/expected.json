@@ -1,0 +1,1171 @@
+{
+  "settings": {
+    "launch_on_startup": false,
+    "menu_offered": false,
+    "monitor_clipboard": true,
+    "browser_capture": true,
+    "auto_capture_types": "3GP 7Z AAC ACE AIF APK ARJ ASF AVI BIN BZ2 EXE GZ GZIP IMG ISO LZH M4A M4V MKV MOV MP3 MP4 MPA MPE MPEG MPG MSI MSU OGG OGV PDF PLJ PPS PPT QT R0* R1* RA RAR RM RMVB SEA SIT SITX TAR TIF TIFF WAV WMA WMV Z ZIP",
+    "no_auto_sites": "",
+    "show_start_dialog": true,
+    "only_add_to_queue": false,
+    "show_complete_dialog": true,
+    "duplicate_action": "number",
+    "verify_checksum": true,
+    "checksum_from_clipboard": false,
+    "checksum_mismatch": "keep",
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+    "max_connections": 16,
+    "server_limits": {
+      "*.example.com": 4,
+      "files.test": 2
+    },
+    "retries": 5,
+    "retry_delay": 1.5,
+    "timeout": 20.0,
+    "categories": [
+      {
+        "name": "General",
+        "extensions": [],
+        "save_dir": "/home/lid-user/Downloads",
+        "sites": [],
+        "remember_last": false
+      },
+      {
+        "name": "Compressed",
+        "extensions": [
+          "zip",
+          "rar",
+          "r0*",
+          "r1*",
+          "arj",
+          "gz",
+          "sit",
+          "sitx",
+          "sea",
+          "ace",
+          "bz2",
+          "7z"
+        ],
+        "save_dir": "/home/lid-user/Downloads/Compressed",
+        "sites": [],
+        "remember_last": false
+      },
+      {
+        "name": "Documents",
+        "extensions": [
+          "doc",
+          "pdf",
+          "ppt",
+          "pps",
+          "docx",
+          "pptx"
+        ],
+        "save_dir": "/home/lid-user/Downloads/Documents",
+        "sites": [],
+        "remember_last": false
+      },
+      {
+        "name": "Music",
+        "extensions": [
+          "mp3",
+          "wav",
+          "wma",
+          "mpa",
+          "ram",
+          "ra",
+          "aac",
+          "aif",
+          "m4a",
+          "tsa"
+        ],
+        "save_dir": "/home/lid-user/Downloads/Music",
+        "sites": [],
+        "remember_last": false
+      },
+      {
+        "name": "Programs",
+        "extensions": [
+          "exe",
+          "msi"
+        ],
+        "save_dir": "/home/lid-user/Downloads/Programs",
+        "sites": [],
+        "remember_last": false
+      },
+      {
+        "name": "Video",
+        "extensions": [
+          "avi",
+          "mpg",
+          "mpe",
+          "mpeg",
+          "asf",
+          "wmv",
+          "mov",
+          "qt",
+          "rm",
+          "mp4",
+          "flv",
+          "m4v",
+          "webm",
+          "ogv",
+          "ogg",
+          "mkv",
+          "ts",
+          "tsv",
+          "vob"
+        ],
+        "save_dir": "/home/lid-user/Downloads/Video",
+        "sites": [],
+        "remember_last": false
+      },
+      {
+        "name": "Images",
+        "extensions": [
+          "png",
+          "jpg"
+        ],
+        "save_dir": "/home/lid-user/Downloads/Images",
+        "sites": [
+          "*.imgur.com"
+        ],
+        "remember_last": true
+      }
+    ],
+    "temp_dir": "/home/lid-user/.cache/lider/parts",
+    "proxy": "http://127.0.0.1:8080",
+    "speed_limiter_on": true,
+    "speed_limit_kbps": 512,
+    "speed_limiter_on_startup": false,
+    "columns": [
+      [
+        "queue",
+        true,
+        34
+      ],
+      [
+        "filename",
+        true,
+        280
+      ],
+      [
+        "status",
+        true,
+        180
+      ],
+      [
+        "size",
+        true,
+        92
+      ],
+      [
+        "time_left",
+        true,
+        100
+      ],
+      [
+        "rate",
+        true,
+        120
+      ],
+      [
+        "last_try",
+        true,
+        130
+      ],
+      [
+        "description",
+        false,
+        200
+      ],
+      [
+        "date_added",
+        false,
+        130
+      ],
+      [
+        "save_to",
+        false,
+        200
+      ],
+      [
+        "referer",
+        false,
+        200
+      ],
+      [
+        "parent_page",
+        false,
+        200
+      ]
+    ],
+    "theme": "dark",
+    "follow_system": false,
+    "dark_theme": "ember-dark",
+    "density": "compact",
+    "toolbar_labels": false,
+    "menubar": "custom",
+    "show_categories": true,
+    "show_details": false,
+    "show_statusbar": true,
+    "tray_icon": true,
+    "close_to_tray": true,
+    "start_minimized": false,
+    "list_font": "Inter,10,-1,5,400,0,0,0,0,0,0,0,0,0,0,1",
+    "sort_key": "size",
+    "sort_desc": true,
+    "window_geometry": "AdnQywADAAAAAAAAAAAAAAAAA+cAAAIvAAAAAAAAAAAAAAPnAAACLwAAAAACAAAAB4AAAAAAAAAAAAAAA+cAAAIv",
+    "sidebar_width": 260,
+    "details_height": 210,
+    "search_flags": 5,
+    "search_string": "ubuntu",
+    "show_progress_dialog": true,
+    "media_kind": "audio",
+    "media_quality": "MP3"
+  },
+  "settings_legacy": {
+    "launch_on_startup": false,
+    "menu_offered": false,
+    "monitor_clipboard": true,
+    "browser_capture": true,
+    "auto_capture_types": "3GP 7Z AAC ACE AIF APK ARJ ASF AVI BIN BZ2 EXE GZ GZIP IMG ISO LZH M4A M4V MKV MOV MP3 MP4 MPA MPE MPEG MPG MSI MSU OGG OGV PDF PLJ PPS PPT QT R0* R1* RA RAR RM RMVB SEA SIT SITX TAR TIF TIFF WAV WMA WMV Z ZIP",
+    "no_auto_sites": "",
+    "show_start_dialog": true,
+    "only_add_to_queue": false,
+    "show_complete_dialog": true,
+    "duplicate_action": "ask",
+    "verify_checksum": true,
+    "checksum_from_clipboard": false,
+    "checksum_mismatch": "ask",
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+    "max_connections": 2,
+    "server_limits": {},
+    "retries": 10,
+    "retry_delay": 3.0,
+    "timeout": 30.0,
+    "categories": [
+      {
+        "name": "General",
+        "extensions": [],
+        "save_dir": "/home/lid-user/Downloads",
+        "sites": [],
+        "remember_last": false
+      },
+      {
+        "name": "Compressed",
+        "extensions": [
+          "zip",
+          "rar",
+          "r0*",
+          "r1*",
+          "arj",
+          "gz",
+          "sit",
+          "sitx",
+          "sea",
+          "ace",
+          "bz2",
+          "7z"
+        ],
+        "save_dir": "/home/lid-user/Downloads/Compressed",
+        "sites": [],
+        "remember_last": false
+      },
+      {
+        "name": "Documents",
+        "extensions": [
+          "doc",
+          "pdf",
+          "ppt",
+          "pps",
+          "docx",
+          "pptx"
+        ],
+        "save_dir": "/home/lid-user/Downloads/Documents",
+        "sites": [],
+        "remember_last": false
+      },
+      {
+        "name": "Music",
+        "extensions": [
+          "mp3",
+          "wav",
+          "wma",
+          "mpa",
+          "ram",
+          "ra",
+          "aac",
+          "aif",
+          "m4a",
+          "tsa"
+        ],
+        "save_dir": "/home/lid-user/Downloads/Music",
+        "sites": [],
+        "remember_last": false
+      },
+      {
+        "name": "Programs",
+        "extensions": [
+          "exe",
+          "msi"
+        ],
+        "save_dir": "/home/lid-user/Downloads/Programs",
+        "sites": [],
+        "remember_last": false
+      },
+      {
+        "name": "Video",
+        "extensions": [
+          "avi",
+          "mpg",
+          "mpe",
+          "mpeg",
+          "asf",
+          "wmv",
+          "mov",
+          "qt",
+          "rm",
+          "mp4",
+          "flv",
+          "m4v",
+          "webm",
+          "ogv",
+          "ogg",
+          "mkv",
+          "ts",
+          "tsv"
+        ],
+        "save_dir": "/home/lid-user/Downloads/Video",
+        "sites": [],
+        "remember_last": false
+      }
+    ],
+    "temp_dir": "/home/lid-user/.cache/lider/parts",
+    "proxy": "",
+    "speed_limiter_on": false,
+    "speed_limit_kbps": 200,
+    "speed_limiter_on_startup": false,
+    "columns": [
+      [
+        "queue",
+        true,
+        34
+      ],
+      [
+        "filename",
+        true,
+        280
+      ],
+      [
+        "size",
+        true,
+        92
+      ],
+      [
+        "status",
+        true,
+        180
+      ],
+      [
+        "time_left",
+        true,
+        100
+      ],
+      [
+        "rate",
+        true,
+        120
+      ],
+      [
+        "last_try",
+        true,
+        130
+      ],
+      [
+        "description",
+        true,
+        200
+      ],
+      [
+        "date_added",
+        false,
+        130
+      ],
+      [
+        "save_to",
+        false,
+        200
+      ],
+      [
+        "referer",
+        false,
+        200
+      ],
+      [
+        "parent_page",
+        false,
+        200
+      ]
+    ],
+    "theme": "ember-dark",
+    "follow_system": false,
+    "dark_theme": "ember-dark",
+    "density": "comfortable",
+    "toolbar_labels": false,
+    "menubar": "native",
+    "show_categories": true,
+    "show_details": true,
+    "show_statusbar": true,
+    "tray_icon": true,
+    "close_to_tray": true,
+    "start_minimized": false,
+    "list_font": "",
+    "sort_key": "date_added",
+    "sort_desc": false,
+    "window_geometry": "",
+    "sidebar_width": 236,
+    "details_height": 210,
+    "search_flags": 4,
+    "search_string": "",
+    "show_progress_dialog": true,
+    "media_kind": "video",
+    "media_quality": ""
+  },
+  "settings_missing": {
+    "launch_on_startup": false,
+    "menu_offered": false,
+    "monitor_clipboard": true,
+    "browser_capture": true,
+    "auto_capture_types": "3GP 7Z AAC ACE AIF APK ARJ ASF AVI BIN BZ2 EXE GZ GZIP IMG ISO LZH M4A M4V MKV MOV MP3 MP4 MPA MPE MPEG MPG MSI MSU OGG OGV PDF PLJ PPS PPT QT R0* R1* RA RAR RM RMVB SEA SIT SITX TAR TIF TIFF WAV WMA WMV Z ZIP",
+    "no_auto_sites": "",
+    "show_start_dialog": true,
+    "only_add_to_queue": false,
+    "show_complete_dialog": true,
+    "duplicate_action": "ask",
+    "verify_checksum": true,
+    "checksum_from_clipboard": false,
+    "checksum_mismatch": "ask",
+    "user_agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36",
+    "max_connections": 8,
+    "server_limits": {},
+    "retries": 10,
+    "retry_delay": 3.0,
+    "timeout": 30.0,
+    "categories": [
+      {
+        "name": "General",
+        "extensions": [],
+        "save_dir": "/home/lid-user/Downloads",
+        "sites": [],
+        "remember_last": false
+      },
+      {
+        "name": "Compressed",
+        "extensions": [
+          "zip",
+          "rar",
+          "r0*",
+          "r1*",
+          "arj",
+          "gz",
+          "sit",
+          "sitx",
+          "sea",
+          "ace",
+          "bz2",
+          "7z"
+        ],
+        "save_dir": "/home/lid-user/Downloads/Compressed",
+        "sites": [],
+        "remember_last": false
+      },
+      {
+        "name": "Documents",
+        "extensions": [
+          "doc",
+          "pdf",
+          "ppt",
+          "pps",
+          "docx",
+          "pptx"
+        ],
+        "save_dir": "/home/lid-user/Downloads/Documents",
+        "sites": [],
+        "remember_last": false
+      },
+      {
+        "name": "Music",
+        "extensions": [
+          "mp3",
+          "wav",
+          "wma",
+          "mpa",
+          "ram",
+          "ra",
+          "aac",
+          "aif",
+          "m4a",
+          "tsa"
+        ],
+        "save_dir": "/home/lid-user/Downloads/Music",
+        "sites": [],
+        "remember_last": false
+      },
+      {
+        "name": "Programs",
+        "extensions": [
+          "exe",
+          "msi"
+        ],
+        "save_dir": "/home/lid-user/Downloads/Programs",
+        "sites": [],
+        "remember_last": false
+      },
+      {
+        "name": "Video",
+        "extensions": [
+          "avi",
+          "mpg",
+          "mpe",
+          "mpeg",
+          "asf",
+          "wmv",
+          "mov",
+          "qt",
+          "rm",
+          "mp4",
+          "flv",
+          "m4v",
+          "webm",
+          "ogv",
+          "ogg",
+          "mkv",
+          "ts",
+          "tsv"
+        ],
+        "save_dir": "/home/lid-user/Downloads/Video",
+        "sites": [],
+        "remember_last": false
+      }
+    ],
+    "temp_dir": "/home/lid-user/.cache/lider/parts",
+    "proxy": "",
+    "speed_limiter_on": false,
+    "speed_limit_kbps": 200,
+    "speed_limiter_on_startup": false,
+    "columns": [
+      [
+        "queue",
+        true,
+        34
+      ],
+      [
+        "filename",
+        true,
+        280
+      ],
+      [
+        "size",
+        true,
+        92
+      ],
+      [
+        "status",
+        true,
+        180
+      ],
+      [
+        "time_left",
+        true,
+        100
+      ],
+      [
+        "rate",
+        true,
+        120
+      ],
+      [
+        "last_try",
+        true,
+        130
+      ],
+      [
+        "description",
+        true,
+        200
+      ],
+      [
+        "date_added",
+        false,
+        130
+      ],
+      [
+        "save_to",
+        false,
+        200
+      ],
+      [
+        "referer",
+        false,
+        200
+      ],
+      [
+        "parent_page",
+        false,
+        200
+      ]
+    ],
+    "theme": "ember",
+    "follow_system": true,
+    "dark_theme": "ember-dark",
+    "density": "comfortable",
+    "toolbar_labels": true,
+    "menubar": "native",
+    "show_categories": true,
+    "show_details": true,
+    "show_statusbar": true,
+    "tray_icon": true,
+    "close_to_tray": true,
+    "start_minimized": false,
+    "list_font": "",
+    "sort_key": "date_added",
+    "sort_desc": false,
+    "window_geometry": "",
+    "sidebar_width": 236,
+    "details_height": 210,
+    "search_flags": 4,
+    "search_string": "",
+    "show_progress_dialog": true,
+    "media_kind": "video",
+    "media_quality": ""
+  },
+  "downloads": [
+    {
+      "id": 1,
+      "url": "https://example.com/never-started.iso",
+      "filename": "never-started.iso",
+      "save_dir": "/home/lid-user/Downloads/Programs",
+      "category": "Programs",
+      "queue": "Main download queue",
+      "description": "",
+      "referer": "",
+      "parent_page": "",
+      "size": -1,
+      "downloaded": 0,
+      "status": "queued",
+      "resumable": null,
+      "connections": 0,
+      "segments": [],
+      "date_added": 1793000000.0,
+      "last_try": 0.0,
+      "error": "",
+      "username": "",
+      "password": "",
+      "speed_limit_kbps": 0,
+      "queue_order": 1,
+      "headers": {},
+      "media": null,
+      "checksum": "",
+      "checksum_result": "",
+      "checksum_actual": "",
+      "checksum_checked": 0.0,
+      "checksum_seconds": 0.0,
+      "checksum_retried": false,
+      "checksum_force": false
+    },
+    {
+      "id": 2,
+      "url": "https://example.com/big.tar.gz",
+      "filename": "big.tar.gz",
+      "save_dir": "/home/lid-user/Downloads/Compressed",
+      "category": "Compressed",
+      "queue": "",
+      "description": "",
+      "referer": "",
+      "parent_page": "",
+      "size": 10240,
+      "downloaded": 3072,
+      "status": "paused",
+      "resumable": true,
+      "connections": 4,
+      "segments": [
+        {
+          "start": 0,
+          "end": 5120,
+          "pos": 2048
+        },
+        {
+          "start": 5120,
+          "end": 10240,
+          "pos": 6144
+        }
+      ],
+      "date_added": 1793000001.0,
+      "last_try": 1793000100.0,
+      "error": "",
+      "username": "",
+      "password": "",
+      "speed_limit_kbps": 300,
+      "queue_order": 0,
+      "headers": {},
+      "media": null,
+      "checksum": "",
+      "checksum_result": "",
+      "checksum_actual": "",
+      "checksum_checked": 0.0,
+      "checksum_seconds": 0.0,
+      "checksum_retried": false,
+      "checksum_force": false
+    },
+    {
+      "id": 3,
+      "url": "https://files.test/stream.bin",
+      "filename": "stream.bin",
+      "save_dir": "/home/lid-user/Downloads",
+      "category": "General",
+      "queue": "",
+      "description": "",
+      "referer": "",
+      "parent_page": "",
+      "size": -1,
+      "downloaded": 12345,
+      "status": "error",
+      "resumable": false,
+      "connections": 0,
+      "segments": [
+        {
+          "start": 0,
+          "end": -1,
+          "pos": 12345
+        }
+      ],
+      "date_added": 1793000002.0,
+      "last_try": 1793000200.0,
+      "error": "HTTP Error 503: Service Unavailable",
+      "username": "",
+      "password": "",
+      "speed_limit_kbps": 0,
+      "queue_order": 0,
+      "headers": {},
+      "media": null,
+      "checksum": "",
+      "checksum_result": "",
+      "checksum_actual": "",
+      "checksum_checked": 0.0,
+      "checksum_seconds": 0.0,
+      "checksum_retried": false,
+      "checksum_force": false
+    },
+    {
+      "id": 4,
+      "url": "https://example.com/doc.pdf",
+      "filename": "doc.pdf",
+      "save_dir": "/home/lid-user/Downloads/Documents",
+      "category": "Documents",
+      "queue": "",
+      "description": "manual",
+      "referer": "https://example.com/",
+      "parent_page": "https://example.com/docs",
+      "size": 2048,
+      "downloaded": 2048,
+      "status": "complete",
+      "resumable": true,
+      "connections": 0,
+      "segments": [],
+      "date_added": 1793000003.0,
+      "last_try": 0.0,
+      "error": "",
+      "username": "",
+      "password": "",
+      "speed_limit_kbps": 0,
+      "queue_order": 0,
+      "headers": {},
+      "media": null,
+      "checksum": "sha256:abababababababababababababababababababababababababababababababab",
+      "checksum_result": "verified",
+      "checksum_actual": "abababababababababababababababababababababababababababababababab",
+      "checksum_checked": 1793000300.0,
+      "checksum_seconds": 0.25,
+      "checksum_retried": false,
+      "checksum_force": false
+    },
+    {
+      "id": 5,
+      "url": "https://example.com/bad.zip",
+      "filename": "bad.zip",
+      "save_dir": "/home/lid-user/Downloads/Compressed",
+      "category": "Compressed",
+      "queue": "",
+      "description": "",
+      "referer": "",
+      "parent_page": "",
+      "size": 4096,
+      "downloaded": 4096,
+      "status": "complete",
+      "resumable": true,
+      "connections": 0,
+      "segments": [],
+      "date_added": 1793000004.0,
+      "last_try": 0.0,
+      "error": "",
+      "username": "",
+      "password": "",
+      "speed_limit_kbps": 0,
+      "queue_order": 0,
+      "headers": {},
+      "media": null,
+      "checksum": "md5:00000000000000000000000000000000",
+      "checksum_result": "mismatch",
+      "checksum_actual": "ffffffffffffffffffffffffffffffff",
+      "checksum_checked": 0.0,
+      "checksum_seconds": 0.0,
+      "checksum_retried": true,
+      "checksum_force": true
+    },
+    {
+      "id": 6,
+      "url": "https://login.test/private.mkv",
+      "filename": "privé — 映画.mkv",
+      "save_dir": "/home/lid-user/Downloads/Video",
+      "category": "Video",
+      "queue": "Synchronization queue",
+      "description": "",
+      "referer": "",
+      "parent_page": "",
+      "size": 3072,
+      "downloaded": 1024,
+      "status": "downloading",
+      "resumable": true,
+      "connections": 0,
+      "segments": [
+        {
+          "start": 0,
+          "end": 3072,
+          "pos": 1024
+        }
+      ],
+      "date_added": 1793000005.0,
+      "last_try": 0.0,
+      "error": "",
+      "username": "user",
+      "password": "secret",
+      "speed_limit_kbps": 0,
+      "queue_order": 2,
+      "headers": {
+        "Cookie": "a=1; b=2",
+        "User-Agent": "Browser/1.0"
+      },
+      "media": null,
+      "checksum": "",
+      "checksum_result": "",
+      "checksum_actual": "",
+      "checksum_checked": 0.0,
+      "checksum_seconds": 0.0,
+      "checksum_retried": false,
+      "checksum_force": false
+    },
+    {
+      "id": 7,
+      "url": "https://example.com/state-connecting.bin",
+      "filename": "state-connecting.bin",
+      "save_dir": "/home/lid-user/Downloads",
+      "category": "General",
+      "queue": "Nightly",
+      "description": "",
+      "referer": "",
+      "parent_page": "",
+      "size": 1024,
+      "downloaded": 0,
+      "status": "connecting",
+      "resumable": null,
+      "connections": 0,
+      "segments": [],
+      "date_added": 1793000006.0,
+      "last_try": 0.0,
+      "error": "",
+      "username": "",
+      "password": "",
+      "speed_limit_kbps": 0,
+      "queue_order": 1,
+      "headers": {},
+      "media": null,
+      "checksum": "",
+      "checksum_result": "",
+      "checksum_actual": "",
+      "checksum_checked": 0.0,
+      "checksum_seconds": 0.0,
+      "checksum_retried": false,
+      "checksum_force": false
+    },
+    {
+      "id": 8,
+      "url": "https://example.com/state-assembling.bin",
+      "filename": "state-assembling.bin",
+      "save_dir": "/home/lid-user/Downloads",
+      "category": "General",
+      "queue": "Nightly",
+      "description": "",
+      "referer": "",
+      "parent_page": "",
+      "size": 1024,
+      "downloaded": 1024,
+      "status": "assembling",
+      "resumable": null,
+      "connections": 0,
+      "segments": [],
+      "date_added": 1793000007.0,
+      "last_try": 0.0,
+      "error": "",
+      "username": "",
+      "password": "",
+      "speed_limit_kbps": 0,
+      "queue_order": 2,
+      "headers": {},
+      "media": null,
+      "checksum": "",
+      "checksum_result": "",
+      "checksum_actual": "",
+      "checksum_checked": 0.0,
+      "checksum_seconds": 0.0,
+      "checksum_retried": false,
+      "checksum_force": false
+    },
+    {
+      "id": 9,
+      "url": "https://example.com/state-verifying.bin",
+      "filename": "state-verifying.bin",
+      "save_dir": "/home/lid-user/Downloads",
+      "category": "General",
+      "queue": "Nightly",
+      "description": "",
+      "referer": "",
+      "parent_page": "",
+      "size": 1024,
+      "downloaded": 1024,
+      "status": "verifying",
+      "resumable": null,
+      "connections": 0,
+      "segments": [],
+      "date_added": 1793000008.0,
+      "last_try": 0.0,
+      "error": "",
+      "username": "",
+      "password": "",
+      "speed_limit_kbps": 0,
+      "queue_order": 3,
+      "headers": {},
+      "media": null,
+      "checksum": "",
+      "checksum_result": "",
+      "checksum_actual": "",
+      "checksum_checked": 0.0,
+      "checksum_seconds": 0.0,
+      "checksum_retried": false,
+      "checksum_force": false
+    },
+    {
+      "id": 10,
+      "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+      "filename": "Video title.mp4",
+      "save_dir": "/home/lid-user/Downloads/Video",
+      "category": "Video",
+      "queue": "",
+      "description": "",
+      "referer": "",
+      "parent_page": "",
+      "size": 51200,
+      "downloaded": 20480,
+      "status": "paused",
+      "resumable": null,
+      "connections": 0,
+      "segments": [],
+      "date_added": 1793000009.0,
+      "last_try": 0.0,
+      "error": "",
+      "username": "",
+      "password": "",
+      "speed_limit_kbps": 0,
+      "queue_order": 0,
+      "headers": {},
+      "media": {
+        "source": "youtube",
+        "page_url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+        "video_id": "dQw4w9WgXcQ",
+        "title": "Video title",
+        "uploader": "Uploader",
+        "variant": {
+          "kind": "video",
+          "quality": "1080p",
+          "label": "1080p MP4",
+          "ext": "mp4",
+          "video_format": "137",
+          "audio_format": "140",
+          "size": 51200,
+          "height": 1080,
+          "convert": ""
+        },
+        "streams": [
+          {
+            "kind": "video",
+            "format_id": "137",
+            "url": "https://rr1.example/v",
+            "headers": {
+              "User-Agent": "yt"
+            },
+            "ext": "mp4",
+            "size": 46080,
+            "resumable": true,
+            "segments": [
+              [
+                0,
+                46080,
+                20480
+              ]
+            ]
+          },
+          {
+            "kind": "audio",
+            "format_id": "140",
+            "url": "https://rr1.example/a",
+            "headers": {},
+            "ext": "m4a",
+            "size": 5120,
+            "resumable": true,
+            "segments": [
+              [
+                0,
+                5120,
+                5120
+              ]
+            ],
+            "done": true,
+            "file": "/home/lid-user/.cache/lider/parts/10-media-1.m4a",
+            "downloaded": 5120
+          }
+        ]
+      },
+      "checksum": "",
+      "checksum_result": "",
+      "checksum_actual": "",
+      "checksum_checked": 0.0,
+      "checksum_seconds": 0.0,
+      "checksum_retried": false,
+      "checksum_force": false
+    }
+  ],
+  "queues": {
+    "Main download queue": {
+      "schedule": {
+        "max_parallel": 1,
+        "periodic": false,
+        "start_on_startup": false,
+        "start_enabled": false,
+        "start_time": "23:00",
+        "daily": false,
+        "once_date": "",
+        "days": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "every_hours": 2,
+        "every_minutes": 0,
+        "stop_enabled": false,
+        "stop_time": "07:30",
+        "retries_enabled": true,
+        "retries": 10,
+        "open_when_done": "",
+        "exit_when_done": false,
+        "shutdown_when_done": false
+      }
+    },
+    "Synchronization queue": {
+      "schedule": {
+        "max_parallel": 1,
+        "periodic": true,
+        "start_on_startup": true,
+        "start_enabled": false,
+        "start_time": "23:00",
+        "daily": false,
+        "once_date": "",
+        "days": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "every_hours": 6,
+        "every_minutes": 30,
+        "stop_enabled": false,
+        "stop_time": "07:30",
+        "retries_enabled": true,
+        "retries": 10,
+        "open_when_done": "",
+        "exit_when_done": false,
+        "shutdown_when_done": false
+      }
+    },
+    "Nightly": {
+      "schedule": {
+        "max_parallel": 3,
+        "periodic": false,
+        "start_on_startup": false,
+        "start_enabled": true,
+        "start_time": "01:30",
+        "daily": true,
+        "once_date": "",
+        "days": [
+          0,
+          2,
+          4
+        ],
+        "every_hours": 2,
+        "every_minutes": 0,
+        "stop_enabled": true,
+        "stop_time": "06:00",
+        "retries_enabled": true,
+        "retries": 3,
+        "open_when_done": "/usr/bin/true",
+        "exit_when_done": true,
+        "shutdown_when_done": false
+      }
+    },
+    "Once": {
+      "schedule": {
+        "max_parallel": 1,
+        "periodic": false,
+        "start_on_startup": false,
+        "start_enabled": true,
+        "start_time": "08:00",
+        "daily": false,
+        "once_date": "2026-12-24",
+        "days": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6
+        ],
+        "every_hours": 2,
+        "every_minutes": 0,
+        "stop_enabled": false,
+        "stop_time": "07:30",
+        "retries_enabled": false,
+        "retries": 10,
+        "open_when_done": "",
+        "exit_when_done": false,
+        "shutdown_when_done": true
+      }
+    }
+  },
+  "next_id": 11
+}

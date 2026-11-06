@@ -4,3 +4,7 @@ __pycache__/
 /dist/
 *.egg-info/
 .venv/
+/target/
+/ui/node_modules/
+/ui/dist/
+/src-tauri/gen/
