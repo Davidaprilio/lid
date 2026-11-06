@@ -41,5 +41,9 @@ jobs:
         run: |
           python3 tests/golden/make_golden.py
           git diff --exit-code -- tests/golden/v1.2 ':!*.db'  # SQLite bytes differ between SQLite versions
+      - name: 1.2 can read what the port writes (downgrade)
+        run: |
+          LIDER_GOLDEN_OUT="$RUNNER_TEMP/rust-profile" cargo test -p lider-core --test golden --locked
+          python3 tests/golden/check_rust_profile.py "$RUNNER_TEMP/rust-profile"
       - name: Parity progress
         run: ./docs/tauri/parity-progress.sh >> "$GITHUB_STEP_SUMMARY"

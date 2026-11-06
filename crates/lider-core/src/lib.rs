@@ -1,5 +1,16 @@
 //! LID core. Like `lider/core/` in 1.x it never touches the GUI: the app drives it by polling.
 
+pub mod categories;
+pub mod checksum;
+pub mod fmt;
+pub mod models;
+pub mod paths;
+pub mod pyutil;
+pub mod queue;
+pub mod search;
+pub mod settings;
+pub mod store;
+
 /// Short name shown in the UI.
 pub const APP_NAME: &str = "LID";
 /// Long name, used in the window title and the About box.

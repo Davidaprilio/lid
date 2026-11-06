@@ -288,7 +288,7 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
 | `shutdown_when_done` | `False` |
 
 - [ ] `Queue` runtime fields: `name`, `schedule`, `running=False`, `next_run=0.0`, `failures={}`, `_fired=set()` (`:64-71`).
-- [ ] `next_start(now)` (`:48-61`):
+- [x] `next_start(now)` (`:48-61`): — **2.x:** `queue.rs` test `once_daily_and_off`
   - None if `start_enabled` is off. `now` is truncated to the minute, so the current minute counts.
   - `daily`: first of today+0..7 days at HH:MM that is `>= now` and whose weekday is in `days`, else None.
   - `once_date`: that date at HH:MM if `>= now`, else None.
@@ -361,12 +361,12 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
 ---
 
 ## 3. Models (`models.py`)
-- [ ] Queue names: `MAIN_QUEUE="Main download queue"`, `SYNC_QUEUE="Synchronization queue"` (`:10-11`).
-- [ ] `Status` (string values): `queued`, `connecting`, `downloading`, `paused`, `assembling`, `verifying`, `complete`, `error`. `active` = connecting, downloading or assembling (`:14-26`).
-- [ ] `Segment(start, end, pos)` covers `[start, end)`; `end = -1` means unknown size.
+- [x] Queue names: `MAIN_QUEUE="Main download queue"`, `SYNC_QUEUE="Synchronization queue"` (`:10-11`). — **2.x:** `models.rs` consts
+- [x] `Status` (string values): `queued`, `connecting`, `downloading`, `paused`, `assembling`, `verifying`, `complete`, `error`. `active` = connecting, downloading or assembling (`:14-26`). — **2.x:** `models.rs` test `status_text_and_active`
+- [x] `Segment(start, end, pos)` covers `[start, end)`; `end = -1` means unknown size. — **2.x:** `models.rs` test `segment_rules`
   - `remaining` = -1 if `end < 0`, else `max(0, end-pos)`.
   - `done` = `end >= 0 and pos >= end` (`:29-46`).
-- [ ] `Download` fields and defaults (`:49-82`):
+- [x] `Download` fields and defaults (`:49-82`): — **2.x:** `models.rs` serde defaults; test `minimal_record_takes_defaults_and_keeps_unknown_fields`, golden
 
 | Field | Default |
 |---|---|
@@ -402,12 +402,12 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
 | `checksum_retried` | `False` |
 | `checksum_force` | `False` |
 
-- [ ] `path = join(save_dir, filename)`. `progress` = `min(1, downloaded/size)` if `size > 0`, else 1.0 if COMPLETE, else 0.
-- [ ] `to_dict`: `asdict`, with `status` as its string value and segments as a list of `{start,end,pos}` dicts (`:94-97`).
-- [ ] `from_dict`:
+- [x] `path = join(save_dir, filename)`. `progress` = `min(1, downloaded/size)` if `size > 0`, else 1.0 if COMPLETE, else 0. — **2.x:** `models.rs` test `progress`
+- [x] `to_dict`: `asdict`, with `status` as its string value and segments as a list of `{start,end,pos}` dicts (`:94-97`). — **2.x:** golden `reads_the_1_2_profile_like_1_2`; non-ASCII is written as UTF-8 instead of `\uXXXX`, which 1.2 reads the same (`check_rust_profile.py`)
+- [~] `from_dict`: — **2.x:** unknown keys are kept in `extra` and written back instead of dropped (PLAN §2); missing keys and required keys as 1.x
   - Missing status means `queued`. Segments are rebuilt from dicts.
   - **Unknown keys are dropped** and missing keys take defaults. The four required keys must exist (`:99-105`).
-- [ ] `media` dict layout (`media.py:234-249`, `media_task.py`):
+- [x] `media` dict layout (`media.py:234-249`, `media_task.py`): — **2.x:** stored verbatim as a JSON object (golden download 10); runtime use of the stream keys is phase 3 (§10.3)
   - Top level: `{source:"youtube", page_url, video_id, title, uploader, variant: Variant asdict, streams:[...]}`.
   - Each stream starts as `{kind, format_id}`. Runtime keys added later: `url`, `headers`, `ext`, `size`, `segments` (**lists `[start,end,pos]`**, unlike the top-level dicts), `resumable`, `done`, `file`.
   - `downloaded` is popped but never set (legacy).
@@ -415,33 +415,33 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
 ---
 
 ## 4. Store (`store.py`)
-- [ ] Path: `data_dir()/downloads.db` = `$XDG_DATA_HOME or ~/.local/share` + `/lider/downloads.db`. The parent directory is created. `":memory:"` is supported (`:20-24`).
-- [ ] Exact schema (`:13-16`):
+- [x] Path: `data_dir()/downloads.db` = `$XDG_DATA_HOME or ~/.local/share` + `/lider/downloads.db`. The parent directory is created. `":memory:"` is supported (`:20-24`). — **2.x:** `Store::open`, `Dirs::database_file`; test `save_load_delete`
+- [x] Exact schema (`:13-16`): — **2.x:** `store.rs` `SCHEMA`
   ```sql
   CREATE TABLE IF NOT EXISTS downloads (id INTEGER PRIMARY KEY, data TEXT NOT NULL);
   CREATE TABLE IF NOT EXISTS queues (name TEXT PRIMARY KEY, data TEXT NOT NULL);
   ```
   There is no schema version and no migrations.
-- [ ] `data` is the JSON of `Download.to_dict()` (`json.dumps` default, which escapes non-ASCII as `\uXXXX`). Queue `data` is `{"schedule": {...}}`.
-- [ ] Operations:
+- [x] `data` is the JSON of `Download.to_dict()` (`json.dumps` default, which escapes non-ASCII as `\uXXXX`). Queue `data` is `{"schedule": {...}}`. — **2.x:** golden round trip in both directions
+- [~] Operations: — **2.x:** same operations; `load_downloads`/`load_queues` report unreadable rows and keep loading the rest instead of failing (PLAN §9 Q15)
   - `load_downloads`: `SELECT data … ORDER BY id`.
   - `save_downloads`: `INSERT OR REPLACE` via executemany in one transaction.
   - `delete_downloads`.
   - `next_id`: `COALESCE(MAX(id),0)+1`.
   - `load_queues`, `save_queue` (INSERT OR REPLACE), `delete_queue`, `close`.
   - One connection, `check_same_thread=False`, guarded by a lock.
-- [ ] Legacy folder migration lives in settings (§5.3), called at startup from `app.py:91`.
+- [ ] Legacy folder migration lives in settings (§5.3), called at startup from `app.py:91`. — **2.x:** `paths::migrate_legacy_dirs` is ported and tested; the call at startup comes with `main.rs` in phase 4
 
 ---
 
 ## 5. Settings (`settings.py`)
 
 ### 5.1 Paths
-- [ ] `config_dir = ($XDG_CONFIG_HOME or ~/.config)/lider`, `data_dir = ($XDG_DATA_HOME or ~/.local/share)/lider`, `cache_dir = ($XDG_CACHE_HOME or ~/.cache)/lider`. An empty env var counts as unset (`:45-54`).
-- [ ] The settings file is `config_dir/settings.json`.
-- [ ] `save`: write `settings.tmp` (`with_suffix(".tmp")`) with `indent=2`, then an atomic `replace`; parent dirs are created (`:216-221`).
-- [ ] `load`: any OSError, ValueError or TypeError returns full defaults (`:208-213`).
-- [ ] `downloads_root = ~/Downloads`. It is `Path.home()/Downloads`, not the XDG user dir.
+- [x] `config_dir = ($XDG_CONFIG_HOME or ~/.config)/lider`, `data_dir = ($XDG_DATA_HOME or ~/.local/share)/lider`, `cache_dir = ($XDG_CACHE_HOME or ~/.cache)/lider`. An empty env var counts as unset (`:45-54`). — **2.x:** `paths.rs` test `xdg_defaults_and_overrides`
+- [x] The settings file is `config_dir/settings.json`. — **2.x:** `Dirs::settings_file`
+- [x] `save`: write `settings.tmp` (`with_suffix(".tmp")`) with `indent=2`, then an atomic `replace`; parent dirs are created (`:216-221`). — **2.x:** `settings::save_to`; test `settings_round_trip` checks the `.tmp` is gone
+- [x] `load`: any OSError, ValueError or TypeError returns full defaults (`:208-213`). — **2.x:** `settings::load_from`; test `bad_files_give_defaults`
+- [x] `downloads_root = ~/Downloads`. It is `Path.home()/Downloads`, not the XDG user dir. — **2.x:** `Dirs::downloads_root`
 
 ### 5.2 Every key, type and default (`:110-171`)
 
@@ -497,7 +497,7 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
 | `media_kind` | str | `"video"` |
 | `media_quality` | str | `""` |
 
-- [ ] `DEFAULT_COLUMNS` as (key, title, visible, width) (`:29-42`):
+- [x] `DEFAULT_COLUMNS` as (key, title, visible, width) (`:29-42`): — **2.x:** `settings::DEFAULT_COLUMNS`
   - `queue` "Q" T 34
   - `filename` "File Name" T 280
   - `size` "Size" T 92
@@ -510,29 +510,29 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
   - `save_to` "Save To" F 200
   - `referer` "Referer" F 200
   - `parent_page` "Parent Web Page" F 200
-- [ ] `Settings.category(name)`: exact name match, else `categories[0]`. `connections_for(host)`: see §2.2.
+- [x] `Settings.category(name)`: exact name match, else `categories[0]`. `connections_for(host)`: see §2.2. — **2.x:** tests `category_lookup_falls_back_to_general`, `server_limits_first_match_in_saved_order`
 
 ### 5.3 Migration shims
-- [ ] `_from_dict` (`:188-205`):
+- [~] `_from_dict` (`:188-205`): — **2.x:** shims, unknown keys, categories and columns as 1.x (tests `old_dark_mode_and_toolbar_size_map_to_themes`, `missing_columns_are_appended`, `bad_files_give_defaults`); a value of the wrong type keeps that key's default (PLAN §9 Q14, test `wrong_type_keeps_that_default_only`)
   1. If `theme` is missing and `dark_mode` is truthy: `theme="ember-dark"`, `follow_system=False`.
   2. If `toolbar_labels` is missing and `toolbar_large` is present: `toolbar_labels = bool(toolbar_large)`.
   3. Unknown keys are ignored. Values are set without type checks.
   4. `categories` is rebuilt with `Category(**c)`. An unknown category key raises TypeError, so **all** settings fall back to defaults.
   5. Columns: any `DEFAULT_COLUMNS` key missing from the saved columns is appended at the end with default visibility and width.
   - Test `test_old_dark_mode_and_toolbar_size_map_to_themes`: `{dark_mode:True, toolbar_large:False}` gives `("ember-dark", False, False)`, and `{}` gives `("ember", True, "ember-dark")`.
-- [ ] `migrate_legacy_dirs()` (`:57-87`), with `LEGACY_NAMES=("lidman","lindm")` (newest first):
+- [x] `migrate_legacy_dirs()` (`:57-87`), with `LEGACY_NAMES=("lidman","lindm")` (newest first): — **2.x:** `paths.rs` tests `legacy_lindm_folders_are_migrated`, `merge_keeps_existing_items_and_the_old_folder`
   1. For each of the config, data and cache dirs, and each legacy sibling folder that exists:
      - If the new folder does not exist, rename old to new.
      - Otherwise **merge**: move each item not already present, then try `rmdir(old)` and ignore failure.
   2. Rewrite the `settings.json` text, plain-string replacing each `<cache parent>/<legacy>` path with the new cache dir (fixes `temp_dir`).
   - Test `test_legacy_lindm_folders_are_migrated`: lindm config is moved, `downloads.db` is merged into an existing `lider/` that has `native-host/`, and `temp_dir` is rewritten to `…/k/lider/parts`.
-- [ ] Test `test_settings_round_trip`: `max_connections=16` and an added "vob" extension survive save and load.
+- [x] Test `test_settings_round_trip`: `max_connections=16` and an added "vob" extension survive save and load. — **2.x:** `settings.rs` test `settings_round_trip`
 
 ---
 
 ## 6. Categories (`categories.py`, `settings.py:20-26,94-107`)
-- [ ] `Category(name, extensions=[], save_dir="", sites=[], remember_last=False)`.
-- [ ] Defaults, in order:
+- [x] `Category(name, extensions=[], save_dir="", sites=[], remember_last=False)`. — **2.x:** `settings::Category`
+- [x] Defaults, in order: — **2.x:** `settings::default_categories`; test `defaults_match_1x`
   - `General`: no extensions, `~/Downloads`.
   - `Compressed`: `zip rar r0* r1* arj gz sit sitx sea ace bz2 7z`
   - `Documents`: `doc pdf ppt pps docx pptx`
@@ -540,23 +540,23 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
   - `Programs`: `exe msi`
   - `Video`: `avi mpg mpe mpeg asf wmv mov qt rm mp4 flv m4v webm ogv ogg mkv ts tsv`
   - Each non-General category saves to `~/Downloads/<Name>`.
-- [ ] `extension(fn)`: last `splitext` suffix, without the dot, lower-cased.
-- [ ] `classify(settings, filename, url)` (`:20-32`):
+- [x] `extension(fn)`: last `splitext` suffix, without the dot, lower-cased. — **2.x:** `categories::extension` over `pyutil::splitext_ext` (test `splitext_like_python`)
+- [x] `classify(settings, filename, url)` (`:20-32`): — **2.x:** `categories::classify`, `pyutil::fnmatch` (test `fnmatch_like_python`), `pyutil::url_hostname` (test `hostname_like_urlsplit`)
   1. **Site rules win.** Lower-cased URL hostname, fnmatch against each lower-cased pattern in `cat.sites`, first category in list order.
   2. Then extension rules: fnmatch of ext against lower-cased patterns, first category.
   3. Else `categories[0]` (General).
   - fnmatch supports `* ? [seq] [!seq]` and is case-sensitive on POSIX, hence the explicit lower-casing.
-- [ ] `is_auto_capture_type(settings, fn)`: ext non-empty and matches any whitespace-split pattern in `auto_capture_types` (case-insensitive) (`:35-37`).
-- [ ] `remember_last` is stored. It is used by the Options UI and the file-info dialog **(UI)**.
-- [ ] Tests:
+- [x] `is_auto_capture_type(settings, fn)`: ext non-empty and matches any whitespace-split pattern in `auto_capture_types` (case-insensitive) (`:35-37`). — **2.x:** `categories::is_auto_capture_type`
+- [ ] `remember_last` is stored. It is used by the Options UI and the file-info dialog **(UI)**. — **2.x:** stored and round-tripped (`Category::remember_last`); the UI use comes in phase 6
+- [x] Tests: — **2.x:** `categories.rs` tests `default_extension_lists`, `site_rule_wins`
   - `test_default_extension_lists`: `a.R01` is Compressed, `.pptx` is Documents, `.flac` is General, `setup.MSI` is auto-capture, `page.html` is not.
   - `test_site_rule_wins`: `*.soundhost.com` sends a `.zip` to Music.
 
 ---
 
 ## 7. Checksum (`checksum.py`)
-- [ ] Algorithms are md5 (32 hex chars), sha1 (40), sha256 (64) and sha512 (128). Titles are MD5, SHA-1, SHA-256, SHA-512.
-- [ ] `parse(text, algorithm="auto")` (`:23-52`):
+- [x] Algorithms are md5 (32 hex chars), sha1 (40), sha256 (64) and sha512 (128). Titles are MD5, SHA-1, SHA-256, SHA-512. — **2.x:** `checksum::ALGORITHMS`, `algorithm_title`
+- [x] `parse(text, algorithm="auto")` (`:23-52`): — **2.x:** `checksum::parse`; tests `accepted_input`, `invalid_input_says_why` compare the texts exactly
   1. Strip. Empty text returns `""`.
   2. Optional prefix at the start, regex `(md5|sha-?1|sha-?256|sha-?512)\s*[:=]\s*` (case-insensitive). The name is normalised by removing `-` and lower-casing.
   3. Value = first whitespace token, lower-cased. This drops the filename in SHA256SUMS lines (`<hex>  name`, `<hex> *name`).
@@ -567,13 +567,13 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
      - Algorithm unknown by length: `Not a valid checksum — expected 32, 40, 64 or 128 hex characters, got N.`
      - Wrong length: `Not a valid <T> value — expected N hex characters, got M.`
   5. Returns `"algo:hex"`.
-- [ ] `split("a:h")` returns `(a, h)`. `title(cs)` returns the title, or `""`.
-- [ ] `Verifier` thread `verify-<id>` (`:66-121`):
+- [x] `split("a:h")` returns `(a, h)`. `title(cs)` returns the title, or `""`. — **2.x:** test `split_and_title`
+- [~] `Verifier` thread `verify-<id>` (`:66-121`): — **2.x:** `checksum::Verifier` (results, skip, progress, seconds, manual); the manager runs it on a thread and reads `outcome()` instead of a callback (phase 3). Error texts are Rust's OS messages, e.g. `No such file or directory (os error 2): '<path>'` (PLAN §9 Q16)
   - Hashes in 1 MiB reads. `total = filesize`; `progress = read/total`.
   - `skip()` is checked between blocks and gives result `skipped`.
   - Results: `verified`, `mismatch`, `computed` (empty expected value, e.g. `"md5:"`), `error` (OSError, or ValueError such as an unknown algorithm, with `str(e)`).
   - `seconds` = monotonic duration. `manual` flag. Calls `on_finish(self)`.
-- [ ] Tests:
+- [x] Tests: — **2.x:** `checksum.rs` tests `accepted_input`, `verifier_computes_without_an_expected_value`, `invalid_input_says_why`, `verifier_results`
   - `test_accepted_input`: uppercase hex with whitespace, `SHA-256: `, `hex *ubuntu.iso`, the md5 empty-string hash, and forced sha256.
   - `test_verifier_computes_without_an_expected_value`.
   - `test_invalid_input_says_why`: covers "expected 64 … got 62", "got 62", "“g” is not a hex character", and "marked SHA-256 but MD5".
@@ -581,20 +581,20 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
 ---
 
 ## 8. fmt.py
-- [ ] `size(n)` (`:10-19`):
+- [x] `size(n)` (`:10-19`): — **2.x:** `fmt::size`; tests `formats`, `edges`
   - None or negative: `""`.
   - Under 1024: `"N Bytes"`.
   - Otherwise divide by 1024 per step through KB, MB, GB, TB with `%.2f`. TB is the cap.
   - Examples: `"1.50 KB"`, `"5.00 GB"`.
-- [ ] `rate(bps)`: `size(int(bps)) + "/sec"` if `bps > 0`, else `""`.
-- [ ] `duration(s)`:
+- [x] `rate(bps)`: `size(int(bps)) + "/sec"` if `bps > 0`, else `""`. — **2.x:** `fmt::rate`
+- [x] `duration(s)`: — **2.x:** `fmt::duration`
   - Negative or None: `""`.
   - With hours: `"H hour(s) M min"`.
   - With minutes: `"M min S sec"`.
   - Otherwise `"S sec"`.
   - Examples: 125 gives "2 min 5 sec"; 3720 gives "1 hour(s) 2 min".
-- [ ] `date(ts)`: `"%b %d %H:%M:%S %Y"` in local time; 0 gives `""`.
-- [ ] `status(d)` (`:42-57`):
+- [x] `date(ts)`: `"%b %d %H:%M:%S %Y"` in local time; 0 gives `""`. — **2.x:** `fmt::date`
+- [x] `status(d)` (`:42-57`): — **2.x:** `fmt::status`; test `edges` covers every status
   - Complete: "Complete". Error: "Error". Connecting: "Connecting...". Assembling: "Assembling...". Verifying: "Verifying...".
   - Queued with 0 bytes downloaded: `""`.
   - Otherwise `"xx.xx%"` if `size > 0`, else `size(downloaded)`.
@@ -603,23 +603,23 @@ I read all of `lider/core/*.py` plus the listed tests and fixtures. I also check
 ---
 
 ## 9. search.py
-- [ ] Flag bits (`:18-25`): `MATCH_CASE=0x01`, `WHOLE_STRING=0x02`, `TARGET_NAME=0x04`, `TARGET_DESCRIPTION=0x08`, `TARGET_LINKS=0x10` (url, parent_page and referer). The default is `TARGET_NAME`, matching the `search_flags` setting.
-- [ ] `SearchSettings(query="", flags=NAME, active=False)`.
-- [ ] `validate()`: if no target bit is set, **add TARGET_NAME first**, then raise `SearchSettingsError("The checkbox for at least one of the search targets must be enabled")` (`:59-64`).
-- [ ] Matcher (`:72-104`):
+- [x] Flag bits (`:18-25`): `MATCH_CASE=0x01`, `WHOLE_STRING=0x02`, `TARGET_NAME=0x04`, `TARGET_DESCRIPTION=0x08`, `TARGET_LINKS=0x10` (url, parent_page and referer). The default is `TARGET_NAME`, matching the `search_flags` setting. — **2.x:** `search::flags`
+- [x] `SearchSettings(query="", flags=NAME, active=False)`. — **2.x:** `SearchSettings::default`
+- [x] `validate()`: if no target bit is set, **add TARGET_NAME first**, then raise `SearchSettingsError("The checkbox for at least one of the search targets must be enabled")` (`:59-64`). — **2.x:** test `no_target_is_rejected_and_name_reenabled`
+- [x] Matcher (`:72-104`): — **2.x:** full case folding with `caseless`; test `casefold_handles_sharp_s`
   - Without match-case, compare with Unicode **full casefold** (`ß` == `ss`; Rust needs full case folding, not `to_lowercase`).
   - Empty field values never match.
   - Whole string means **full-field equality**. Otherwise substring.
   - An empty query matches everything.
   - Field order: filename, description, url, parent_page, referer.
-- [ ] `filter_downloads`: inactive returns everything without validating. Active validates (and may raise), then filters (`:107-113`).
-- [ ] `FindNext.next(rows)` (`:116-147`):
+- [x] `filter_downloads`: inactive returns everything without validating. Active validates (and may raise), then filters (`:107-113`). — **2.x:** `search::filter`
+- [x] `FindNext.next(rows)` (`:116-147`): — **2.x:** `search::FindNext`
   1. Empty query: return None without validating.
   2. Validate. If the query changed since `_last_query`, set `cursor=0`.
   3. Scan from `min(cursor,len)` to the end, then wrap once over `0..start`.
   4. On a hit, `cursor = i+1` and return i. With no hit, `cursor=0` and return None.
   - `reset()` sets cursor to 0.
-- [ ] Tests (`test_search.py`):
+- [x] Tests (`test_search.py`): — **2.x:** `search.rs` tests, one per 1.x test plus `find_next_empty_query_skips_validation`
   - Empty query matches all.
   - Case-insensitive by default: SETUP gives [3,4].
   - Match case: Setup gives [4].

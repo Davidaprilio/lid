@@ -200,6 +200,17 @@ Each phase ends with its parity items ticked and its tests green in CI. Python s
 - Done when: the golden files load and save back unchanged; `test_manager`/`test_search` cases that need no
   network have Rust equivalents.
 
+**Status 2026-11-06: done.** `crates/lider-core/src/`: `paths` (XDG folders as a `Dirs` value, legacy migration),
+`pyutil` (exact ports of `fnmatch`, `splitext`, `urlsplit().hostname`, truthiness), `models`, `queue`
+(`QueueSchedule`, `next_start`), `settings` (all 49 keys, shims, plus `window_state`), `categories`, `store`
+(rusqlite), `fmt`, `search` (full case folding), `checksum` (parse with the exact texts, `Verifier`).
+- 47 unit tests, including a port of every data-layer case in `test_manager.py` and all of `test_search.py`.
+- `tests/golden.rs`: the 1.2 profile reads back exactly as 1.2 reads it, and what 2.x writes reads back the same.
+- Downgrade check: `tests/golden/check_rust_profile.py` reads the profile written by 2.x with the 1.2 Python code
+  and compares it with `expected.json` (also in CI).
+- Parity: 42 items done and 4 changed in `parity/01-core.md` (decisions Q14–Q16 are new and need a yes).
+  Still open from this area: the startup call of the legacy migration (phase 4) and `remember_last` in the UI (phase 6).
+
 ### Phase 2: engine
 - http (probe, ranges, Content-Disposition, redirects, proxy, cookies/referrer/UA/auth headers), ftp,
   limiter, meter, engine (segmentation, splitting at 2×MIN_SPLIT, retries, FATAL_HTTP, fallbacks, pwrite,
@@ -302,6 +313,9 @@ D2 and D4 still need a measurement or a test in their phase; record the outcome 
 | Q11 | deb Homepage-removal line can never run | 7 | Remove it. |
 | Q12 | Pause All and Stop All do the same; only Stop All has an enabled rule | 5 | Keep both items, give Pause All the same rule. |
 | Q13 | "Grabber projects" tree node is always empty | 5 | Keep as is (parity). |
+| Q14 | A settings value of the wrong JSON type was stored as is and could fail later | 1 | **Proposed in phase 1, built, awaiting confirmation:** that key keeps its default; the rest of the file loads. |
+| Q15 | One unreadable row in `downloads.db` (or `QueueSchedule(**data)` with an unknown key) stopped 1.x from starting | 1 | **Proposed in phase 1, built, awaiting confirmation:** skip the bad row, leave it in the file, report it (the UI can show a note in phase 5); unknown queue keys are kept like download keys. |
+| Q16 | Verifier error text is Python's (`[Errno 2] No such file or directory: '<path>'`) | 1 | **Proposed in phase 1, built, awaiting confirmation:** Rust's OS message plus the path. The text only appears after "Checksum check failed:". |
 
 ## 10. Prerequisites on this machine
 
