@@ -36,6 +36,24 @@ pub trait Searchable {
     fn referer(&self) -> &str;
 }
 
+impl<T: Searchable + ?Sized> Searchable for &T {
+    fn filename(&self) -> &str {
+        (**self).filename()
+    }
+    fn description(&self) -> &str {
+        (**self).description()
+    }
+    fn url(&self) -> &str {
+        (**self).url()
+    }
+    fn parent_page(&self) -> &str {
+        (**self).parent_page()
+    }
+    fn referer(&self) -> &str {
+        (**self).referer()
+    }
+}
+
 impl Searchable for Download {
     fn filename(&self) -> &str {
         &self.filename

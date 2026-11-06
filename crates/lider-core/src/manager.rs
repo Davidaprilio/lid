@@ -435,6 +435,21 @@ impl DownloadManager {
         self.tasks.get(&id).map(|r| r.task.clone())
     }
 
+    /// A task exists for the download (it may have just finished and wait for `poll()`).
+    pub fn has_task(&self, id: i64) -> bool {
+        self.tasks.contains_key(&id)
+    }
+
+    /// Downloads with a task.
+    pub fn task_count(&self) -> usize {
+        self.tasks.len()
+    }
+
+    /// Checks reading a file right now.
+    pub fn verifier_count(&self) -> usize {
+        self.verifiers.len()
+    }
+
     pub fn is_running(&self, id: i64) -> bool {
         self.tasks.get(&id).is_some_and(|r| r.task.is_running())
     }

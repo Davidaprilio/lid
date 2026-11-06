@@ -2,6 +2,7 @@
 
 pub mod categories;
 pub mod checksum;
+pub mod ef2;
 pub mod engine;
 pub mod fmt;
 pub mod ftp;
@@ -18,6 +19,7 @@ pub mod queue;
 pub mod search;
 pub mod settings;
 pub mod store;
+pub mod view;
 
 /// Short name shown in the UI.
 pub const APP_NAME: &str = "LID";
