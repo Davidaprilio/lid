@@ -184,6 +184,9 @@ pub fn ready(app: AppHandle, state: State<'_, AppState>) -> MainView {
     for l in lines {
         app::on_line(&app, &l);
     }
+    // Look for a newer LID once per run (crate::update).
+    static UPDATE_CHECK: std::sync::Once = std::sync::Once::new();
+    UPDATE_CHECK.call_once(|| crate::update::check_at_startup(&app));
     let offer = std::mem::take(&mut *app::lock(&state.offer_menu));
     if offer && !state.start_hidden {
         // Asked once: remembered before the box shows, so quitting with it open does not ask again (1.x `offer`).

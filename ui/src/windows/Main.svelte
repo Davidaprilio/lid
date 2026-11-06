@@ -322,6 +322,7 @@
       case 'shutdown': return countdown()
       case 'confirm_close': return confirmClose(r.running, r.background, r.exiting)
       case 'offer_menu': return offerMenu()
+      case 'update_available': return offerUpdate(r)
     }
   }
 
@@ -375,6 +376,44 @@
       buttons: [{ id: 'later', label: 'Not now' }, { id: 'add', label: 'Add to menu', primary: true }],
     })
     await api.menuOffer(r.button === 'add').catch(() => {})
+  }
+
+  // A newer LID (src-tauri/src/update.rs): an AppImage or the Windows install updates itself; a deb or Arch
+  // install gets the release page.
+  async function offerUpdate(u: Extract<UiRequest, { kind: 'update_available' }>) {
+    const current = (await invoke<any>('app_info')).version
+    const notes = u.notes.trim() ? `\n\n${u.notes.trim().slice(0, 600)}${u.notes.length > 600 ? '…' : ''}` : ''
+    const r = await ask({
+      title: `LID ${u.version} is available`, icon: 'down-arrow', badge: 'accent',
+      text: `You have LID ${current}.${notes}`,
+      note: u.can_install ? 'LID downloads it, checks its signature, installs it and starts again.' : 'Update LID with the package manager it came from (apt, pacman or your AUR helper), or get it from the release page.',
+      buttons: [
+        { id: 'skip', label: 'Skip this version', left: true },
+        { id: 'later', label: 'Later' },
+        u.can_install ? { id: 'install', label: 'Update now', primary: true } : { id: 'page', label: 'Open release page', primary: true },
+      ],
+    })
+    if (r.button === 'skip') await invoke('update_skip', { version: u.version })
+    if (r.button === 'page') await invoke('open_url', { url: u.page })
+    if (r.button === 'install' && u.latest_json) await installUpdate(u.version, u.latest_json)
+  }
+
+  async function installUpdate(version: string, latestJson: string) {
+    const text = (done: number, total: number) =>
+      total > 0 ? `Downloading LID ${version}… ${Math.round((done / total) * 100)}%` : `Downloading LID ${version}…`
+    const shown = ask({ title: 'Updating LID', text: text(0, -1), icon: 'down-arrow', badge: 'accent', buttons: [{ id: 'hide', label: 'Hide' }] })
+    const timer = setInterval(async () => {
+      const [done, total] = await invoke<[number, number]>('update_progress')
+      if (box && box.title === 'Updating LID') box = { ...box, text: text(done, total) }
+    }, 300)
+    try {
+      await invoke('update_install', { latestJson }) // restarts LID when it worked
+    } catch (e) {
+      clearInterval(timer)
+      if (box && box.title === 'Updating LID') box.resolve({ button: 'hide', checked: false, value: '' })
+      await shown
+      await ask({ title: 'LID was not updated', text: String(e), icon: 'info', badge: 'bad', buttons: [{ id: 'ok', label: 'OK', primary: true }] })
+    }
   }
 
   // ------------------------------------------------------------------ keyboard, drag and drop, splitters

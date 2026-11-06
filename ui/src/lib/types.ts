@@ -39,3 +39,4 @@ export type UiRequest =
   | { kind: 'shutdown' }
   | { kind: 'confirm_close'; running: [string, string, string][]; background: boolean; exiting: boolean }
   | { kind: 'offer_menu' }
+  | { kind: 'update_available'; version: string; notes: string; page: string; latest_json: string | null; can_install: boolean }

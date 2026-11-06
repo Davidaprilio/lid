@@ -59,6 +59,7 @@ pub fn run(cli: Cli, socket: String) -> ExitCode {
     };
 
     let result = tauri::Builder::default()
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_notification::init())
         .invoke_handler(tauri::generate_handler![
@@ -163,6 +164,13 @@ pub fn run(cli: Cli, socket: String) -> ExitCode {
             crate::dialogs::media_default,
             crate::dialogs::media_variant,
             crate::dialogs::ytdlp_offer,
+            crate::update::update_prefs,
+            crate::update::update_set_prefs,
+            crate::update::update_check,
+            crate::update::update_skip,
+            crate::update::update_offer,
+            crate::update::update_progress,
+            crate::update::update_install,
             crate::dialogs::ytdlp_install,
             crate::dialogs::ytdlp_progress,
             crate::dialogs::ytdlp_cancel,

@@ -28,6 +28,9 @@ serde_json.workspace = true
 tauri = { version = "2", features = ["image-png", "tray-icon"] }
 tauri-plugin-dialog = "2"
 tauri-plugin-notification = "2"
+tauri-plugin-updater = "2"
+semver = "1"
+url = "2"
 tokio = { version = "1", features = ["rt-multi-thread"] }
 trash = "5"
 

@@ -101,6 +101,27 @@ If a tag has to move to a newer commit, its release is kept and only its files a
 To build the packages without publishing anything, use "Run workflow" on the Actions tab, or
 `gh workflow run release.yml`.
 
+## Updates inside LID
+
+LID looks for a newer release when it starts (Options → General → Updates: on/off, Stable or
+Pre-releases too, Check now). An AppImage and the Windows install update themselves through
+`tauri-plugin-updater`: they read the release's `latest.json`, download the file it names and refuse it
+unless its minisign signature matches the public key in `src-tauri/tauri.conf.json`. A deb or Arch
+install is told to update with its package manager.
+
+The release workflow signs the AppImage and the Windows installer and writes `latest.json` when these
+repository secrets are set (the key is in `../secrets/`, outside the repository; back it up — without it
+installed copies can no longer update themselves):
+
+```sh
+gh secret set TAURI_SIGNING_PRIVATE_KEY < ../secrets/lid-updater.key
+gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD < ../secrets/lid-updater.password
+```
+
+Without them the release still builds, just without signatures and `latest.json` (LID then only points
+at the release page). Locally, `./packaging/build.sh appimage` signs too when `TAURI_SIGNING_PRIVATE_KEY`
+(or `TAURI_SIGNING_PRIVATE_KEY_PATH`) and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` are set.
+
 ## Publishing to the AUR
 
 1. Build the source tarball and upload it somewhere public, such as a GitHub release:

@@ -12,6 +12,7 @@ mod gui;
 mod menu;
 mod pump;
 mod tray;
+mod update;
 mod windows;
 
 use std::process::ExitCode;

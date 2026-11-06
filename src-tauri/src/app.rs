@@ -351,6 +351,8 @@ pub enum UiRequest {
     Mismatch { id: i64 },
     /// The 30 s power-off countdown.
     Shutdown,
+    /// A newer LID is out (crate::update).
+    UpdateAvailable(crate::update::Found),
     /// Closing with downloads running: keep, background or stop.
     ConfirmClose {
         /// Each running download as (category icon, file name, "NN%" or the size so far).

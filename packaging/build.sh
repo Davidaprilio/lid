@@ -269,6 +269,11 @@ build_appimage() {
     fi
     rm -f "$out"
     ARCH=x86_64 "$tool" --appimage-extract-and-run --no-appstream "$appdir" "$out" >/dev/null
+    # The updater's signature (src-tauri/src/update.rs), when the release key is in the environment.
+    if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}${TAURI_SIGNING_PRIVATE_KEY_PATH:-}" ]; then
+        log "Signing the AppImage for the updater"
+        (cd "$ROOT" && cargo tauri signer sign "$out" >/dev/null)
+    fi
     log "Done: $out ($(du -h "$out" | cut -f1))"
 }
 

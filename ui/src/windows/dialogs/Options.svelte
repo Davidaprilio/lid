@@ -35,11 +35,28 @@
   let editCat = $state<{ cat: Category | null; index: number } | null>(null)
   let editLimit = $state<{ index: number; pattern: string; n: number } | null>(null)
   let fontLabel = $state('')
+  // Updates (src-tauri/src/update.rs): kept in updates.json, written on OK like the rest.
+  let updates = $state<{ check_at_startup: boolean; channel: string; skipped: string }>({ check_at_startup: true, channel: 'stable', skipped: '' })
+  let updateNote = $state('')
+  async function checkNow() {
+    updateNote = 'Checking…'
+    await call('update_set_prefs', { prefs: updates })
+    try {
+      const found = await call<any>('update_check')
+      if (found) {
+        updateNote = `LID ${found.version} is available.`
+        await call('update_offer', { found })
+      } else updateNote = 'LID is up to date.'
+    } catch (e) {
+      updateNote = `Cannot check: ${e}`
+    }
+  }
 
   followTheme((t) => (theme = t))
   ;(async () => {
     // Both before anything draws: the Appearance tab reads the desktop state.
-    const [sv, dv] = await Promise.all([call<any>('settings_get'), call<any>('desktop_state')])
+    const [sv, dv, up] = await Promise.all([call<any>('settings_get'), call<any>('desktop_state'), call<any>('update_prefs')])
+    updates = up
     desk = dv
     s = sv
     inMenu = desk.system_installed || desk.in_menu
@@ -121,6 +138,7 @@
     patch.list_font = s.list_font
     if (!String(s.temp_dir).trim()) delete patch.temp_dir
     if (!String(s.user_agent).trim()) delete patch.user_agent
+    await call('update_set_prefs', { prefs: updates })
     await call('options_apply', { settings: patch, menu: desk.system_installed ? null : inMenu })
     close()
   }
@@ -167,6 +185,18 @@
             {#if desk.browsers_connected > 0}<Pill tone="ok" text="✓ {desk.browsers_connected} browser{desk.browsers_connected === 1 ? '' : 's'} connected" />
             {:else}<Pill text="Not set up yet" />{/if}
           </div>
+        </div>
+        <div class="panel">
+          <div class="caption">Updates</div>
+          <label class="check"><input type="checkbox" bind:checked={updates.check_at_startup} /> Check for a new version when LID starts</label>
+          <Row label="Versions" width={80}>
+            <select class="input" style="flex:none;min-width:260px" bind:value={updates.channel}>
+              <option value="stable">Stable releases</option>
+              <option value="prerelease">Pre-releases too (beta, alpha)</option>
+            </select>
+            <button class="btn" onclick={checkNow}>Check now</button>
+          </Row>
+          {#if updateNote}<div class="faint">{updateNote}</div>{/if}
         </div>
       {:else if tab === 1}
         <div>Automatically start downloading the following file types:</div>
