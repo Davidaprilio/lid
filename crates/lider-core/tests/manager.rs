@@ -602,6 +602,7 @@ fn youtube_download_through_the_manager() {
         Ok(ids
             .iter()
             .map(|_| Resolved {
+                chunk: 0,
                 url: url.clone(),
                 headers: Default::default(),
                 size: -1,

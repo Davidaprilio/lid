@@ -37,6 +37,7 @@ impl Env {
             retries: 3,
             retry_delay: 0.05,
             temp_dir: self.dir.join("tmp").to_string_lossy().into_owned(),
+            request_limit: None,
         }
     }
 
@@ -86,6 +87,61 @@ async fn wait_until(mut f: impl FnMut() -> bool) {
         );
         tokio::time::sleep(Duration::from_millis(10)).await;
     }
+}
+
+/// YouTube slows long requests down; with a request limit every request asks for one piece, and the
+/// connections go on piece by piece until their segments are done.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn requests_in_pieces_when_limited() {
+    let e = env();
+    let srv = FileServer::start(Options {
+        size: 2 * 1024 * 1024 + 77,
+        ..Default::default()
+    })
+    .await;
+    let limit = 100_000i64;
+    let t = DownloadTask::new(
+        e.download(&srv.url),
+        e.client.clone(),
+        EngineOptions {
+            request_limit: Some(limit),
+            ..e.options(4)
+        },
+        None,
+        None,
+    );
+    let (tx, rx) = oneshot::channel();
+    t.on_finish(move || {
+        let _ = tx.send(());
+    });
+    t.start(&Handle::current());
+    finished(rx, 30).await;
+    let d = t.download();
+    assert_eq!(d.status, Status::Complete, "{}", d.error);
+    assert_eq!(sha_file(&d.path()), srv.sha256);
+    let pieces: Vec<(i64, i64)> = srv
+        .ranges()
+        .iter()
+        .filter_map(|r| {
+            let (a, b) = r.strip_prefix("bytes=")?.split_once('-')?;
+            Some((a.parse().ok()?, b.parse().ok()?))
+        })
+        .collect();
+    let open_ended = srv.ranges().iter().filter(|r| r.ends_with('-')).count();
+    assert!(
+        pieces.len() >= (srv.data().len() as i64 / limit) as usize,
+        "{:?}",
+        srv.ranges()
+    );
+    assert!(
+        pieces.iter().all(|(a, b)| b - a < limit),
+        "no piece is longer than the limit"
+    );
+    assert!(
+        open_ended <= 1,
+        "only the first probe may be open-ended: {:?}",
+        srv.ranges()
+    );
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

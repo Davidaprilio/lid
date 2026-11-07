@@ -323,6 +323,8 @@ impl MT {
                         } else {
                             "m4a".into()
                         },
+                        // As yt-dlp reports for YouTube, scaled down: requests of at most 64 KiB.
+                        chunk: 64 * 1024,
                     }
                 })
                 .collect())
@@ -359,6 +361,7 @@ impl MT {
             retries: 1,
             retry_delay: 0.05,
             temp_dir: self.dir.join("parts").to_string_lossy().into_owned(),
+            request_limit: None,
         };
         let t = MediaTask::new(
             d,

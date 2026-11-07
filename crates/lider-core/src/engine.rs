@@ -43,6 +43,11 @@ pub struct EngineOptions {
     pub retries: i64,
     pub retry_delay: f64,
     pub temp_dir: String,
+    /// Ask for at most this many bytes per request (`bytes=a-b`), then go on with the next piece on the
+    /// same connection. YouTube slows a long request down to about the playing speed; yt-dlp reports
+    /// the piece size it uses (`downloader_options.http_chunk_size`, 10 MB). None: one open-ended
+    /// request per connection.
+    pub request_limit: Option<i64>,
 }
 
 impl Default for EngineOptions {
@@ -52,6 +57,7 @@ impl Default for EngineOptions {
             retries: 10,
             retry_delay: 3.0,
             temp_dir: "/tmp".into(),
+            request_limit: None,
         }
     }
 }
@@ -584,25 +590,17 @@ impl Shared {
         headers: &IndexMap<String, String>,
         file: &File,
     ) -> Result<Fetch, FetchError> {
-        let mut resp = match response {
+        // With a request limit, a response opened before (open-ended) is not used: every request asks
+        // for one piece.
+        let limit = self.options.request_limit.filter(|n| *n > 0);
+        let mut response = if limit.is_some() { None } else { response };
+        // The last byte (exclusive) the current request asks for, when it is a piece.
+        let mut piece_end: Option<i64> = None;
+        let mut resp = match response.take() {
             Some(r) => r,
             None => {
-                self.conn_status(conn, "Connecting...");
-                let (url, pos, ranged) = {
-                    let mut st = self.lock();
-                    let splittable = st.splittable;
-                    let pos = st.seg(segment).pos;
-                    (st.d.url.clone(), pos, splittable || pos > 0)
-                };
-                let r = self
-                    .client
-                    .open(&url, pos, ranged, headers)
-                    .await
-                    .map_err(FetchError::Open)?;
-                if ranged && r.status != 206 {
-                    return Err(FetchError::NoRange);
-                }
-                r
+                self.open_piece(conn, segment, headers, limit, &mut piece_end)
+                    .await?
             }
         };
         self.conn_status(conn, "Receiving data...");
@@ -627,6 +625,21 @@ impl Shared {
                 _ = self.stop.cancelled() => return Ok(Fetch::Stopped),
             };
             let Some(data) = data else {
+                // A piece ended where it should: ask for the next one on this connection.
+                if let Some(end) = piece_end {
+                    let more = {
+                        let mut st = self.lock();
+                        let s = st.seg(segment);
+                        s.pos >= end && (s.end < 0 || s.pos < s.end)
+                    };
+                    if more {
+                        resp = self
+                            .open_piece(conn, segment, headers, limit, &mut piece_end)
+                            .await?;
+                        self.conn_status(conn, "Receiving data...");
+                        continue;
+                    }
+                }
                 let mut st = self.lock();
                 if st.seg(segment).end < 0 {
                     // Unknown size: the end of the stream is the end of the file.
@@ -674,6 +687,48 @@ impl Shared {
                 conn_meter.add(allowed as u64);
             }
         }
+    }
+
+    /// Open the next request of a segment at its position: open-ended, or one piece of at most `limit`
+    /// bytes (never past the segment's end), whose exclusive end goes to `piece_end`.
+    async fn open_piece(
+        &self,
+        conn: usize,
+        segment: i64,
+        headers: &IndexMap<String, String>,
+        limit: Option<i64>,
+        piece_end: &mut Option<i64>,
+    ) -> Result<Response, FetchError> {
+        self.conn_status(conn, "Connecting...");
+        let (url, pos, ranged, seg_end) = {
+            let mut st = self.lock();
+            let splittable = st.splittable;
+            let s = st.seg(segment);
+            let (pos, end) = (s.pos, s.end);
+            (
+                st.d.url.clone(),
+                pos,
+                splittable || pos > 0 || limit.is_some(),
+                end,
+            )
+        };
+        let end = limit.map(|n| {
+            if seg_end >= 0 {
+                (pos + n).min(seg_end)
+            } else {
+                pos + n
+            }
+        });
+        *piece_end = end;
+        let r = self
+            .client
+            .open_span(&url, pos, end.map(|e| e - 1), ranged, headers)
+            .await
+            .map_err(FetchError::Open)?;
+        if ranged && r.status != 206 {
+            return Err(FetchError::NoRange);
+        }
+        Ok(r)
     }
 
     fn finish(&self) {

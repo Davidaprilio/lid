@@ -465,6 +465,7 @@ impl DownloadManager {
             retries: self.settings.retries,
             retry_delay: self.settings.retry_delay,
             temp_dir: self.settings.temp_dir.clone(),
+            request_limit: None,
         }
     }
 

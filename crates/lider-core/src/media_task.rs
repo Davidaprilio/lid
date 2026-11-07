@@ -388,6 +388,7 @@ impl Shared {
                 s.insert("url".into(), f.url.clone().into());
                 s.insert("headers".into(), Value::Object(f.headers.clone()));
                 s.insert("ext".into(), f.ext.clone().into());
+                s.insert("chunk".into(), f.chunk.into());
                 if f.size > 0 && int(s, "size") == 0 {
                     s.insert("size".into(), f.size.into());
                 }
@@ -496,10 +497,14 @@ impl Shared {
         }
         let ua = sub.headers.get("User-Agent").cloned().unwrap_or_default();
         let client = (self.make_client)(&ua).map_err(|e| e.message())?;
+        // Pieces of the size yt-dlp says the site serves at full speed.
+        let mut options = self.options.clone();
+        let chunk = int(&streams(&self.d())[i], "chunk");
+        options.request_limit = (chunk > 0).then_some(chunk);
         let task = Arc::new(DownloadTask::new(
             sub,
             client,
-            self.options.clone(),
+            options,
             self.global.clone(),
             Some(name),
         ));

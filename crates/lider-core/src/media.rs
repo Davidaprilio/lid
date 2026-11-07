@@ -674,6 +674,9 @@ pub struct Resolved {
     pub headers: Map<String, Value>,
     pub size: i64,
     pub ext: String,
+    /// The most to ask for in one request (`downloader_options.http_chunk_size`; YouTube: 10 MB, or the
+    /// server slows the request down). 0: no limit.
+    pub chunk: i64,
 }
 
 /// Fresh direct URLs for the given format ids.
@@ -711,6 +714,10 @@ pub fn resolve_from_info(info: &Value, format_ids: &[String]) -> Result<Vec<Reso
                     let e = text(f, "ext");
                     if e.is_empty() { "bin".into() } else { e }
                 },
+                chunk: get(f, "downloader_options")
+                    .and_then(|o| o.get("http_chunk_size"))
+                    .and_then(Value::as_i64)
+                    .unwrap_or(0),
             })
         })
         .collect()

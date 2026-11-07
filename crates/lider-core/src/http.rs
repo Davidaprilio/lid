@@ -189,6 +189,19 @@ impl HttpClient {
         ranged: bool,
         headers: &IndexMap<String, String>,
     ) -> Result<Response, OpenError> {
+        self.open_span(url, start, None, ranged, headers).await
+    }
+
+    /// [`open`](Self::open) with an inclusive last byte: `bytes=<start>-<end>`. Media servers that
+    /// slow down long requests (YouTube) are read in such pieces.
+    pub async fn open_span(
+        &self,
+        url: &str,
+        start: i64,
+        end: Option<i64>,
+        ranged: bool,
+        headers: &IndexMap<String, String>,
+    ) -> Result<Response, OpenError> {
         if url_scheme(url) == "ftp" {
             return crate::ftp::open(url, self.timeout).await;
         }
@@ -205,7 +218,10 @@ impl HttpClient {
         set("Accept", "*/*");
         set("Accept-Encoding", "identity");
         if ranged {
-            set("Range", &format!("bytes={start}-"));
+            match end {
+                Some(end) => set("Range", &format!("bytes={start}-{end}")),
+                None => set("Range", &format!("bytes={start}-")),
+            }
         }
         for (k, v) in headers {
             set(k, v);
