@@ -1,6 +1,6 @@
 [workspace]
 resolver = "3"
-members = ["crates/lider-core", "crates/lider-sys", "src-tauri"]
+members = ["crates/lider-core", "crates/lider-sys", "crates/lider-gui", "src-tauri"]
 
 [workspace.package]
 # The only place the version of LID 2 is set. src-tauri/tauri.conf.json, build.sh and CI read it from here.

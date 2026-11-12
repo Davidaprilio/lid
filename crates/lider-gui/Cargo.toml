@@ -1,0 +1,23 @@
+[package]
+name = "lider-gui"
+description = "LID's window, drawn with egui (docs/egui/PLAN.md)."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+
+# `lider-egui` until the cut-over from the Tauri window, then `lider`.
+[[bin]]
+name = "lider-egui"
+path = "src/main.rs"
+
+[dependencies]
+eframe = { version = "0.37", default-features = false, features = ["glow", "wayland", "x11", "accesskit", "default_fonts"] }
+egui = "0.37"
+egui_extras = { version = "0.37", features = ["svg"] }
+include_dir = "0.7"
+lider-core.workspace = true
+lider-sys.workspace = true
+serde_json.workspace = true
+tokio = { version = "1", features = ["rt-multi-thread"] }
