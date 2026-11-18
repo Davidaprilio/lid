@@ -3332,6 +3332,7 @@ name = "lider-gui"
 version = "2.0.0-beta.1"
 dependencies = [
  "arboard",
+ "chrono",
  "eframe",
  "egui",
  "egui_extras",
@@ -3341,6 +3342,7 @@ dependencies = [
  "ksni",
  "lider-core",
  "lider-sys",
+ "mime_guess",
  "notify-rust",
  "rfd 0.15.4",
  "serde_json",

@@ -443,7 +443,14 @@ impl ChecksumEdit {
                         lider_core::checksum::algorithm_title(a).to_string(),
                     )
                 }));
-                changed |= combo(ui, "checksum-algo", 110.0, &mut self.algorithm, &choices);
+                changed |= combo_named(
+                    ui,
+                    "checksum-algo",
+                    110.0,
+                    &mut self.algorithm,
+                    &choices,
+                    by,
+                );
                 let title = parsed
                     .as_ref()
                     .map(|v| lider_core::checksum::title(v))
@@ -588,4 +595,37 @@ impl TagInput {
             });
         });
     }
+}
+
+// ---- added for the progress dialogs
+
+/// [`combo`] named by the label `by` (screen readers, the tests).
+pub fn combo_named(
+    ui: &mut Ui,
+    id: &str,
+    width: f32,
+    value: &mut String,
+    choices: &[(String, String)],
+    by: egui::Id,
+) -> bool {
+    let shown = choices
+        .iter()
+        .find(|(v, _)| v == value)
+        .map(|(_, l)| l.clone())
+        .unwrap_or_else(|| value.clone());
+    let mut changed = false;
+    egui::ComboBox::from_id_salt(id)
+        .width(width)
+        .selected_text(shown)
+        .show_ui(ui, |ui| {
+            for (v, l) in choices {
+                if ui.selectable_label(value == v, l).clicked() && value != v {
+                    *value = v.clone();
+                    changed = true;
+                }
+            }
+        })
+        .response
+        .labelled_by(by);
+    changed
 }

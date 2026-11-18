@@ -1346,7 +1346,7 @@ fn details(app: &mut App, ui: &mut Ui) {
 }
 
 /// A progress bar.
-fn bar(ui: &mut Ui, p: &Palette, fraction: f32, height: f32) {
+pub(crate) fn bar(ui: &mut Ui, p: &Palette, fraction: f32, height: f32) {
     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), height), Sense::hover());
     let radius = CornerRadius::same((height / 2.0) as u8);
     ui.painter().rect_filled(r, radius, p.track);
@@ -1357,7 +1357,7 @@ fn bar(ui: &mut Ui, p: &Palette, fraction: f32, height: f32) {
 }
 
 /// The per-connection bar: each segment's downloaded part, with gaps between segments.
-fn segments(ui: &mut Ui, p: &Palette, size: i64, segs: &[lider_core::models::Segment]) {
+pub(crate) fn segments(ui: &mut Ui, p: &Palette, size: i64, segs: &[lider_core::models::Segment]) {
     let (r, _) = ui.allocate_exact_size(vec2(ui.available_width(), 12.0), Sense::hover());
     ui.painter().rect_filled(r, CornerRadius::same(3), p.track);
     if size <= 0 {

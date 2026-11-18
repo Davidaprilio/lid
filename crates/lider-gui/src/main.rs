@@ -302,6 +302,12 @@ fn gui(cli: cli::Cli, socket: String) -> ExitCode {
     if let Ok(actions) = std::env::var("LIDER_RUN") {
         app.tick();
         for a in actions.split(';').filter(|a| !a.is_empty()) {
+            // "select:NAME" selects a download by its file name (for its context-menu windows).
+            if let Some(name) = a.strip_prefix("select:") {
+                let id = app.manager.downloads.values().find(|d| d.filename == name);
+                app.selected = id.map(|d| d.id).into_iter().collect();
+                continue;
+            }
             app.run(a);
         }
     }
