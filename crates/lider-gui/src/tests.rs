@@ -960,3 +960,29 @@ fn the_details_pane_is_dragged_and_its_height_kept() {
         "saved when the drag ends"
     );
 }
+
+#[test]
+fn another_tree_node_starts_find_next_again() {
+    let (_tmp, mut app) = golden();
+    app.search.query = "state".into();
+    app.search.flags = lider_core::search::flags::TARGET_NAME;
+    app.finder = lider_core::search::FindNext::new(app.search.clone());
+    app.rebuild();
+    app.find_next();
+    let first = app.selected.clone();
+    app.find_next();
+    assert_ne!(app.selected, first, "F3 goes on to the next match");
+    let all = app.filter.clone();
+    let queues = app
+        .view
+        .tree
+        .iter()
+        .find(|n| n.title == "Queues")
+        .unwrap()
+        .filter
+        .clone();
+    app.set_filter(queues);
+    app.set_filter(all);
+    app.find_next();
+    assert_eq!(app.selected, first, "a new node starts from the top again");
+}

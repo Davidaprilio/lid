@@ -93,6 +93,11 @@ impl Window {
             match e {
                 Effect::Notify(title, text) => notify(title, text),
                 Effect::Show => self.show(),
+                // Without a tray icon (a desktop without one) hiding would lose the window: it
+                // minimises instead (1.x `_to_background`).
+                Effect::Hide if self.tray.is_none() => self
+                    .ctx
+                    .send_viewport_cmd(egui::ViewportCommand::Minimized(true)),
                 Effect::Hide => self
                     .ctx
                     .send_viewport_cmd(egui::ViewportCommand::Visible(false)),

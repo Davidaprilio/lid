@@ -437,7 +437,14 @@ enum Kind {
     Ghost,
 }
 
-fn tool(app: &mut App, ui: &mut Ui, t: &Tool, enabled: bool, kind: Kind, picked: &mut Option<&'static str>) {
+fn tool(
+    app: &mut App,
+    ui: &mut Ui,
+    t: &Tool,
+    enabled: bool,
+    kind: Kind,
+    picked: &mut Option<&'static str>,
+) {
     let p = app.palette;
     let primary = kind == Kind::Primary;
     let labels = app.manager.settings.toolbar_labels || primary;
@@ -478,7 +485,10 @@ fn tool(app: &mut App, ui: &mut Ui, t: &Tool, enabled: bool, kind: Kind, picked:
     if r.hovered() {
         app.status_tip = t.tip.to_string();
     }
-    if r.on_hover_text(t.tip).clicked() {
+    if r.on_hover_cursor(egui::CursorIcon::PointingHand)
+        .on_hover_text(t.tip)
+        .clicked()
+    {
         *picked = Some(t.id);
     }
 }
@@ -717,6 +727,7 @@ fn statusbar(app: &mut App, ui: &mut Ui) {
             let browser = crate::dialogs::browsers::status_text(app);
             let link = ui
                 .add(egui::Button::new(RichText::new(browser).color(p.actx)).frame(false))
+                .on_hover_cursor(egui::CursorIcon::PointingHand)
                 .on_hover_text("Browser integration…");
             if link.clicked() {
                 app.run("browsers");
@@ -748,6 +759,16 @@ fn tree(app: &mut App, ui: &mut Ui) {
         for n in &nodes {
             tree_node(ui, &p, n, 0, &app.filter, &mut picked, &mut action);
         }
+        // The empty space below: Add category (Delete and Properties need a category), 1.x MW:568-584.
+        let rest = ui.allocate_response(ui.available_size().max(vec2(0.0, 20.0)), Sense::click());
+        rest.context_menu(|ui| {
+            if ui.button("Add category").clicked() {
+                action = Some("cat_add".into());
+                ui.close();
+            }
+            ui.add_enabled(false, egui::Button::new("Delete"));
+            ui.add_enabled(false, egui::Button::new("Properties"));
+        });
     });
     if let Some(f) = picked {
         app.set_filter(f);
@@ -862,14 +883,14 @@ fn tree_node(
 // ---------------------------------------------------------------------- list
 
 fn check_box(painter: &egui::Painter, p: &Palette, center: egui::Pos2, state: CheckState) {
-    let b = Rect::from_center_size(center, vec2(15.0, 15.0));
+    let b = Rect::from_center_size(center, vec2(16.0, 16.0));
     match state {
         CheckState::Unchecked => {
             painter.rect_filled(b, CornerRadius::same(4), p.input);
             painter.rect_stroke(
                 b,
                 CornerRadius::same(4),
-                Stroke::new(1.0, p.line2),
+                Stroke::new(1.5, p.line2),
                 StrokeKind::Inside,
             );
         }
@@ -905,6 +926,15 @@ fn list(app: &mut App, ui: &mut Ui) {
         .show(ui, |ui| {
             ui.set_min_width(total.max(ui.available_width()));
             ui.spacing_mut().item_spacing.y = 0.0;
+            // The last section stretches to the right edge (drawn only; its saved width stays).
+            let saved: Vec<f32> = cols.iter().map(|c| c.width).collect();
+            let mut cols = cols.clone();
+            let room = ui.available_width();
+            if let Some(last) = cols.last_mut()
+                && total < room
+            {
+                last.width += room - total;
+            }
             // Header: click sorts (again reverses); the first column checks or unchecks every row.
             let (head, _) =
                 ui.allocate_exact_size(vec2(ui.available_width(), 28.0), Sense::hover());
@@ -975,10 +1005,12 @@ fn list(app: &mut App, ui: &mut Ui) {
                         )
                     });
                     if g.dragged() {
-                        resized = Some((c.key.clone(), c.width + g.drag_delta().x, false));
+                        let base = saved[cols.iter().position(|x| x.key == c.key).unwrap_or(0)];
+                        resized = Some((c.key.clone(), base + g.drag_delta().x, false));
                     }
                     if g.drag_stopped() {
-                        resized = Some((c.key.clone(), c.width, true));
+                        let base = saved[cols.iter().position(|x| x.key == c.key).unwrap_or(0)];
+                        resized = Some((c.key.clone(), base, true));
                     }
                     ui.painter().vline(
                         cell.right() - 1.0,
@@ -1127,7 +1159,7 @@ fn list(app: &mut App, ui: &mut Ui) {
                                         .on_hover_text(&row.error);
                                     }
                                 }
-                                "size" | "rate" | "time_left" | "last_try" | "date_added" => {
+                                k if lider_core::view::MONO_KEYS.contains(&k) => {
                                     clip.text(
                                         at,
                                         Align2::LEFT_CENTER,
@@ -1650,24 +1682,41 @@ fn details(app: &mut App, ui: &mut Ui) {
             }
             1 => {
                 egui::ScrollArea::vertical().show(ui, |ui| {
+                    // N. 50, DOWNLOADED 120, SPEED 110, INFO; "Finished" as a teal pill (details.py).
                     egui::Grid::new("conns")
                         .num_columns(4)
                         .striped(true)
-                        .spacing(vec2(24.0, 4.0))
+                        .min_col_width(0.0)
+                        .spacing(vec2(0.0, 4.0))
                         .show(ui, |ui| {
-                            for h in ["N.", "DOWNLOADED", "SPEED", "INFO"] {
-                                ui.label(RichText::new(h).size(11.0).color(p.mu));
+                            let cell = |ui: &mut Ui, w: f32, text: RichText| {
+                                ui.allocate_ui_with_layout(
+                                    vec2(w, 20.0),
+                                    Layout::left_to_right(Align::Center),
+                                    |ui| {
+                                        ui.set_min_width(w);
+                                        ui.label(text);
+                                    },
+                                );
+                            };
+                            for (h, w) in [
+                                ("N.", 50.0),
+                                ("DOWNLOADED", 120.0),
+                                ("SPEED", 110.0),
+                                ("INFO", 200.0),
+                            ] {
+                                cell(ui, w, RichText::new(h).size(11.0).strong().color(p.mu));
                             }
                             ui.end_row();
                             for c in &d.rows {
-                                ui.label(&c.n);
-                                ui.label(RichText::new(&c.downloaded).monospace());
-                                ui.label(RichText::new(&c.speed).monospace());
-                                ui.label(RichText::new(&c.info).color(if c.info == "Finished" {
-                                    p.ok
+                                cell(ui, 50.0, RichText::new(&c.n));
+                                cell(ui, 120.0, RichText::new(&c.downloaded).monospace());
+                                cell(ui, 110.0, RichText::new(&c.speed).monospace());
+                                if c.info == "Finished" {
+                                    crate::dialogs::kit::pill(ui, &p, "Finished", "ok");
                                 } else {
-                                    p.tx
-                                }));
+                                    cell(ui, 200.0, RichText::new(&c.info));
+                                }
                                 ui.end_row();
                             }
                         });

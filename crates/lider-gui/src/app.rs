@@ -781,6 +781,10 @@ impl App {
     }
 
     pub fn set_filter(&mut self, f: TreeFilter) {
+        // Another node: Find Next starts again from the top (1.x MW:562-566).
+        if f != self.filter {
+            self.finder = FindNext::new(self.search.clone());
+        }
         self.filter = f;
         self.rebuild();
     }
