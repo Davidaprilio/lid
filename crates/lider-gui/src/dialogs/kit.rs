@@ -589,3 +589,59 @@ impl TagInput {
         });
     }
 }
+
+// ---- added for the settings dialogs
+
+/// [`combo`] named by the label `by` (screen readers, the tests).
+pub fn combo_by(
+    ui: &mut Ui,
+    id: &str,
+    width: f32,
+    value: &mut String,
+    choices: &[(String, String)],
+    by: egui::Id,
+) -> bool {
+    let shown = choices
+        .iter()
+        .find(|(v, _)| v == value)
+        .map(|(_, l)| l.clone())
+        .unwrap_or_else(|| value.clone());
+    let mut changed = false;
+    egui::ComboBox::from_id_salt(id)
+        .width(width)
+        .selected_text(shown)
+        .show_ui(ui, |ui| {
+            for (v, l) in choices {
+                if ui.selectable_label(value == v, l).clicked() && value != v {
+                    *value = v.clone();
+                    changed = true;
+                }
+            }
+        })
+        .response
+        .labelled_by(by);
+    changed
+}
+
+/// A segmented choice (a row of toggle buttons, one on); true when it changed.
+pub fn segmented<T: PartialEq + Clone>(
+    ui: &mut Ui,
+    p: &Palette,
+    value: &mut T,
+    choices: &[(T, &str)],
+) -> bool {
+    let mut changed = false;
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 0.0;
+        for (v, label) in choices {
+            let on = value == v;
+            let text = RichText::new(*label).color(if on { p.actx } else { p.tx });
+            let b = egui::Button::selectable(on, text).min_size(vec2(0.0, 26.0));
+            if ui.add(b).clicked() && !on {
+                *value = v.clone();
+                changed = true;
+            }
+        }
+    });
+    changed
+}

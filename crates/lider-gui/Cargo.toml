@@ -22,6 +22,7 @@ lider-sys.workspace = true
 serde_json.workspace = true
 rfd = "0.15"
 tokio = { version = "1", features = ["rt-multi-thread"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
 arboard = { version = "3", default-features = false, features = ["wayland-data-control"] }
 notify-rust = "4"
 image = { version = "0.25", default-features = false, features = ["png"] }

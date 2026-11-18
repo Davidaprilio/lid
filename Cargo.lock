@@ -3332,6 +3332,7 @@ name = "lider-gui"
 version = "2.0.0-beta.1"
 dependencies = [
  "arboard",
+ "chrono",
  "eframe",
  "egui",
  "egui_extras",

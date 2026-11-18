@@ -152,6 +152,9 @@ pub struct App {
     pub power_off_at: Option<Instant>,
     /// The window's place and size (kept while it is shown, saved with the settings).
     pub geometry: Option<WindowState>,
+    /// "Browser: connected" (any detected browser has the helper); None = check again (Options and
+    /// Browser integration reset it).
+    pub browser_ok: Option<bool>,
 }
 
 fn column_width(key: &str, saved: i64) -> f32 {
@@ -207,6 +210,7 @@ impl App {
             closing: false,
             power_off_at: None,
             geometry: None,
+            browser_ok: None,
         }
     }
 
