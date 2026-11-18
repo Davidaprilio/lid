@@ -139,6 +139,8 @@ impl MsgBox {
     /// Draw the box; the answer once a button, Enter (the primary button) or Escape (cancel) ends it.
     pub fn show(&mut self, ctx: &egui::Context, p: &Palette) -> Option<Answer> {
         let mut pressed: Option<&'static str> = None;
+        // The input field is named after the text (screen readers, the tests).
+        let mut text_id = egui::Id::NULL;
         let modal = egui::Modal::new(egui::Id::unique("lid-box")).show(ctx, |ui| {
             ui.set_width(440.0);
             ui.horizontal_top(|ui| {
@@ -150,10 +152,12 @@ impl MsgBox {
                     ui,
                     egui::Rect::from_center_size(r.center(), egui::vec2(22.0, 22.0)),
                 );
-                ui.vertical(|ui| {
-                    ui.label(RichText::new(&self.title).size(16.0).strong());
-                    ui.label(&self.text);
-                });
+                text_id = ui
+                    .vertical(|ui| {
+                        ui.label(RichText::new(&self.title).size(16.0).strong());
+                        ui.label(&self.text).id
+                    })
+                    .inner;
             });
             for (cat, name, done) in &self.items {
                 ui.horizontal(|ui| {
@@ -180,7 +184,9 @@ impl MsgBox {
                 ui.label(RichText::new(note).small().color(p.mu));
             }
             if let Some(value) = &mut self.input {
-                let r = ui.add(egui::TextEdit::singleline(value).desired_width(f32::INFINITY));
+                let r = ui
+                    .add(egui::TextEdit::singleline(value).desired_width(f32::INFINITY))
+                    .labelled_by(text_id);
                 if !self.focused {
                     r.request_focus();
                     self.focused = true;

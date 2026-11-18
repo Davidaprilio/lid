@@ -443,7 +443,7 @@ impl ChecksumEdit {
                         lider_core::checksum::algorithm_title(a).to_string(),
                     )
                 }));
-                changed |= combo_named(
+                changed |= combo_by(
                     ui,
                     "checksum-algo",
                     110.0,
@@ -597,10 +597,8 @@ impl TagInput {
     }
 }
 
-// ---- added for the progress dialogs
-
 /// [`combo`] named by the label `by` (screen readers, the tests).
-pub fn combo_named(
+pub fn combo_by(
     ui: &mut Ui,
     id: &str,
     width: f32,
@@ -627,5 +625,28 @@ pub fn combo_named(
         })
         .response
         .labelled_by(by);
+    changed
+}
+
+/// A segmented choice (a row of toggle buttons, one on); true when it changed.
+pub fn segmented<T: PartialEq + Clone>(
+    ui: &mut Ui,
+    p: &Palette,
+    value: &mut T,
+    choices: &[(T, &str)],
+) -> bool {
+    let mut changed = false;
+    ui.horizontal(|ui| {
+        ui.spacing_mut().item_spacing.x = 0.0;
+        for (v, label) in choices {
+            let on = value == v;
+            let text = RichText::new(*label).color(if on { p.actx } else { p.tx });
+            let b = egui::Button::selectable(on, text).min_size(vec2(0.0, 26.0));
+            if ui.add(b).clicked() && !on {
+                *value = v.clone();
+                changed = true;
+            }
+        }
+    });
     changed
 }

@@ -518,6 +518,13 @@ fn statusbar(app: &mut App, ui: &mut Ui) {
             ui.label(RichText::new(&app.status_tip).color(p.mu));
         }
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+            let browser = crate::dialogs::browsers::status_text(app);
+            let link = ui
+                .add(egui::Button::new(RichText::new(browser).color(p.actx)).frame(false))
+                .on_hover_text("Browser integration…");
+            if link.clicked() {
+                app.run("browsers");
+            }
             ui.label(RichText::new(&s.clipboard).color(p.mu));
             ui.label(RichText::new(&s.limiter).color(p.mu));
         });
