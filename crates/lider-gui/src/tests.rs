@@ -497,6 +497,9 @@ pub(crate) fn start_running(app: &mut App, url: &str, dir: &Path) -> i64 {
 #[test]
 fn closing_follows_the_tray_and_the_running_downloads() {
     let (tmp, mut app) = golden();
+    // The golden profile's queued download may already have failed (a notification): not this test's.
+    app.manager.stop_all();
+    app.effects.clear();
     // The tray is up and closing goes there.
     app.tray_shown = true;
     assert!(!app.close_requested());

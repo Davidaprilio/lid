@@ -326,42 +326,6 @@ pub fn mono_field(ui: &mut Ui, text: &mut String, by: egui::Id) -> egui::Respons
     .labelled_by(by)
 }
 
-/// A combo box over (value, label) pairs; true when the choice changed.
-pub fn combo(
-    ui: &mut Ui,
-    id: &str,
-    width: f32,
-    value: &mut String,
-    choices: &[(String, String)],
-) -> bool {
-    let shown = choices
-        .iter()
-        .find(|(v, _)| v == value)
-        .map(|(_, l)| l.clone())
-        .unwrap_or_else(|| value.clone());
-    let mut changed = false;
-    egui::ComboBox::from_id_salt(id)
-        .width(width)
-        .selected_text(shown)
-        .show_ui(ui, |ui| {
-            for (v, l) in choices {
-                if ui.selectable_label(value == v, l).clicked() && value != v {
-                    *value = v.clone();
-                    changed = true;
-                }
-            }
-        });
-    changed
-}
-
-/// Pairs for [`combo`] where the value is the label.
-pub fn same(names: &[&str]) -> Vec<(String, String)> {
-    names
-        .iter()
-        .map(|n| (n.to_string(), n.to_string()))
-        .collect()
-}
-
 /// A folder chooser next to a path field ("Browse..."); the chosen folder replaces the text.
 pub fn folder_field(ui: &mut Ui, p: &Palette, text: &mut String, by: egui::Id) -> bool {
     let mut changed = false;
@@ -606,7 +570,7 @@ impl TagInput {
     }
 }
 
-/// [`combo`] named by the label `by` (screen readers, the tests).
+/// A combo box over (value, label) pairs, named by the label `by`; true when the choice changed.
 pub fn combo_by(
     ui: &mut Ui,
     id: &str,

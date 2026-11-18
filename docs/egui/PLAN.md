@@ -65,7 +65,6 @@ references) moves into `lider-gui` without the JSON bridge: the window calls the
   case, Esc and F3, Delete with its question, View menu, themes, toolbar captions, status tips.
 - Left for E1: dragging column widths and pane sizes (saved), Alt mnemonics in the menu bar, the status
   bar's Browser link, density and list font from the settings, the window size and position saved.
-- Windows that come with E3 show a note for now ("comes with the dialogs").
 
 **E2 (2026-11-18): running, done; a few checks by hand left.**
 - Start-up in the order of 1.x `app.py`: legacy folders, settings, desktop entries refreshed, the list and
@@ -89,6 +88,24 @@ references) moves into `lider-gui` without the JSON bridge: the window calls the
 - Tests: 10 more kittest/app tests (18 in lider-gui).
 - To check by hand (no tray or notification server under Xvfb): the tray on KDE and GNOME, a notification,
   closing to the tray and opening again, starting with `--minimized`.
+
+**E3 (2026-11-19): dialogs, done; a few details left.**
+- Every dialog is an egui viewport drawn in the same pass as the main window (`crates/lider-gui/src/dialogs/`);
+  under the test harness it is an egui window over the main one. A window is named by its label, so opening
+  one that is open brings it forward; windows take the height of what they show. A dialog opened while the
+  main window is hidden in the tray asks for one paint of the hidden window, which makes its own window.
+- Built: Enter new address, the add flow (probe, "Add it anyway?", the duplicate rule, Download File Info,
+  YouTube variants), Batch download, Download All Links and the grabber, the progress window (with its options
+  on completion), Download complete, Checksum mismatch, Check hash, File Properties, LID options (7 tabs,
+  categories, server limits), Scheduler, Browser integration (and the status bar's Browser link), Speed
+  Limiter settings, Columns, Choose Font, Find file / Search settings, the category editor.
+- The rules of `src-tauri/src/dialogs.rs` are ported into the dialogs (src-tauri goes away in E6).
+- Tests: 27 more kittest checks (45 in lider-gui), including the 28 checks of the Tauri dialog scenario
+  except Alt+C on the Scheduler. Every field has an accessible name (kittest checks it).
+- `[~]` left: Alt mnemonics (with E1's); "Download yt-dlp?" and the Updates panel come with E4; the links
+  list has no Shift/Ctrl selection; the category form replaces the window's content instead of floating over
+  it; Choose Font previews the size, not the family (egui draws only the fonts it loaded).
+- To check by hand: a dialog opened from the tray (the browser's "Download with LID" while LID is hidden).
 
 ## Decisions
 
