@@ -185,7 +185,16 @@ pub fn icon_button(ui: &mut Ui, p: &Palette, name: &str, label: &str, look: Look
 /// name themselves after it (`.labelled_by(id)`) for screen readers and the tests.
 pub fn row<R>(ui: &mut Ui, label: &str, width: f32, f: impl FnOnce(&mut Ui, egui::Id) -> R) -> R {
     ui.horizontal(|ui| {
-        let l = ui.add_sized([width, 22.0], egui::Label::new(label).halign(Align::Min));
+        let l = ui
+            .allocate_ui_with_layout(
+                vec2(width, 22.0),
+                Layout::left_to_right(Align::Center),
+                |ui| {
+                    ui.set_min_width(width);
+                    ui.label(label)
+                },
+            )
+            .inner;
         f(ui, l.id)
     })
     .inner
@@ -267,7 +276,7 @@ pub fn pill(ui: &mut Ui, p: &Palette, text: &str, t: &str) -> egui::Response {
 pub fn tab_strip(ui: &mut Ui, p: &Palette, names: &[&str], active: &mut usize) -> bool {
     let mut changed = false;
     let r = ui.available_rect_before_wrap();
-    ui.horizontal(|ui| {
+    let strip = ui.horizontal(|ui| {
         ui.spacing_mut().item_spacing.x = 18.0;
         for (i, n) in names.iter().enumerate() {
             let on = *active == i;
@@ -285,7 +294,7 @@ pub fn tab_strip(ui: &mut Ui, p: &Palette, names: &[&str], active: &mut usize) -
             }
         }
     });
-    let y = ui.min_rect().bottom() + 3.0;
+    let y = strip.response.rect.bottom() + 3.0;
     ui.painter().hline(r.x_range(), y, Stroke::new(1.0, p.line));
     ui.add_space(8.0);
     changed
