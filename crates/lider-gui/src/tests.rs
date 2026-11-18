@@ -639,6 +639,9 @@ fn the_power_off_countdown() {
 fn manager_events_become_notifications() {
     use lider_core::manager::{Event, EventKind};
     let (_tmp, mut app) = golden();
+    // The golden profile's queued download may fail on its own (a notification): not this test's.
+    app.manager.stop_all();
+    app.effects.clear();
     let id = *app.manager.downloads.keys().next().unwrap();
     let name = app.manager.downloads[&id].filename.clone();
     let ev = |kind, message: &str| Event {

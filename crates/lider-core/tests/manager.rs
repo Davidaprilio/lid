@@ -534,8 +534,8 @@ fn remove_completed_and_stop_all() {
     t.m.queues.get_mut(MAIN_QUEUE).unwrap().running = true;
     t.m.stop_all();
     assert!(!t.m.queues[MAIN_QUEUE].running);
-    t.wait_for(|m| !m.is_running(b));
-    assert_eq!(t.d(b).status, Status::Paused);
+    // The task's flag drops before the next poll copies its state: wait for both.
+    t.wait_for(|m| !m.is_running(b) && m.downloads[&b].status == Status::Paused);
     assert_eq!(t.m.remove_completed(), vec![a]);
     assert!(t.m.downloads.contains_key(&b));
 }
