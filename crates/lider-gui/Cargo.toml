@@ -26,6 +26,7 @@ arboard = { version = "3", default-features = false, features = ["wayland-data-c
 notify-rust = "4"
 image = { version = "0.25", default-features = false, features = ["png"] }
 trash = "5"
+encoding_rs = "0.8"
 
 # The tray icon: StatusNotifierItem over D-Bus on Linux (no GTK), the shell icon on Windows.
 [target.'cfg(target_os = "linux")'.dependencies]

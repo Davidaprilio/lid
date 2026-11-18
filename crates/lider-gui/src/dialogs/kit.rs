@@ -185,7 +185,17 @@ pub fn icon_button(ui: &mut Ui, p: &Palette, name: &str, label: &str, look: Look
 /// name themselves after it (`.labelled_by(id)`) for screen readers and the tests.
 pub fn row<R>(ui: &mut Ui, label: &str, width: f32, f: impl FnOnce(&mut Ui, egui::Id) -> R) -> R {
     ui.horizontal(|ui| {
-        let l = ui.add_sized([width, 22.0], egui::Label::new(label).halign(Align::Min));
+        // The label at the left of a fixed column (add_sized would centre it).
+        let l = ui
+            .allocate_ui_with_layout(
+                vec2(width, 22.0),
+                Layout::left_to_right(Align::Center),
+                |ui| {
+                    ui.set_min_width(width);
+                    ui.label(label)
+                },
+            )
+            .inner;
         f(ui, l.id)
     })
     .inner
@@ -325,24 +335,7 @@ pub fn combo(
     value: &mut String,
     choices: &[(String, String)],
 ) -> bool {
-    let shown = choices
-        .iter()
-        .find(|(v, _)| v == value)
-        .map(|(_, l)| l.clone())
-        .unwrap_or_else(|| value.clone());
-    let mut changed = false;
-    egui::ComboBox::from_id_salt(id)
-        .width(width)
-        .selected_text(shown)
-        .show_ui(ui, |ui| {
-            for (v, l) in choices {
-                if ui.selectable_label(value == v, l).clicked() && value != v {
-                    *value = v.clone();
-                    changed = true;
-                }
-            }
-        });
-    changed
+    combo_named(ui, id, width, value, choices, None)
 }
 
 /// Pairs for [`combo`] where the value is the label.
@@ -443,7 +436,14 @@ impl ChecksumEdit {
                         lider_core::checksum::algorithm_title(a).to_string(),
                     )
                 }));
-                changed |= combo(ui, "checksum-algo", 110.0, &mut self.algorithm, &choices);
+                changed |= combo_by(
+                    ui,
+                    "checksum-algo",
+                    110.0,
+                    &mut self.algorithm,
+                    &choices,
+                    by,
+                );
                 let title = parsed
                     .as_ref()
                     .map(|v| lider_core::checksum::title(v))
@@ -588,4 +588,49 @@ impl TagInput {
             });
         });
     }
+}
+
+// ---- added for the add dialogs
+
+/// [`combo`] named by the label `by` (screen readers and the tests need a name).
+pub fn combo_by(
+    ui: &mut Ui,
+    id: &str,
+    width: f32,
+    value: &mut String,
+    choices: &[(String, String)],
+    by: egui::Id,
+) -> bool {
+    combo_named(ui, id, width, value, choices, Some(by))
+}
+
+fn combo_named(
+    ui: &mut Ui,
+    id: &str,
+    width: f32,
+    value: &mut String,
+    choices: &[(String, String)],
+    by: Option<egui::Id>,
+) -> bool {
+    let shown = choices
+        .iter()
+        .find(|(v, _)| v == value)
+        .map(|(_, l)| l.clone())
+        .unwrap_or_else(|| value.clone());
+    let mut changed = false;
+    let r = egui::ComboBox::from_id_salt(id)
+        .width(width)
+        .selected_text(shown)
+        .show_ui(ui, |ui| {
+            for (v, l) in choices {
+                if ui.selectable_label(value == v, l).clicked() && value != v {
+                    *value = v.clone();
+                    changed = true;
+                }
+            }
+        });
+    if let Some(by) = by {
+        r.response.labelled_by(by);
+    }
+    changed
 }

@@ -376,12 +376,10 @@ fn other_starts_and_the_browser_reach_the_window() {
         "a second start shows the window"
     );
     assert!(
-        app.boxx
-            .as_ref()
-            .is_some_and(|b| b.text.contains("https://example.com/a.zip")),
+        app.dialogs.iter().any(|d| d.label.starts_with("add-")),
         "the address goes to the add flow"
     );
-    app.boxx = None;
+    app.close_all_dialogs();
     app.effects.clear();
     app.on_line(
         r#"{"action":"download","url":"https://example.com/b.iso","page_url":"https://example.com/","cookies":"k=v","user_agent":"UA","filename":"b.iso"}"#,
