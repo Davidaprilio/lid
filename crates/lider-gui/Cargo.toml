@@ -20,4 +20,10 @@ include_dir = "0.7"
 lider-core.workspace = true
 lider-sys.workspace = true
 serde_json.workspace = true
+rfd = "0.15"
 tokio = { version = "1", features = ["rt-multi-thread"] }
+arboard = { version = "3", default-features = false, features = ["wayland-data-control"] }
+
+[dev-dependencies]
+egui_kittest = "0.37"
+tempfile = "3"

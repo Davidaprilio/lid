@@ -2,9 +2,12 @@
 //! before any window exists: the native messaging host and the browser CLI never start the GUI.
 
 mod app;
+mod boxes;
 mod fonts;
 mod icons;
 mod main_window;
+#[cfg(test)]
+mod tests;
 mod theme;
 
 use std::process::ExitCode;
@@ -21,6 +24,12 @@ struct Window {
 impl eframe::App for Window {
     fn logic(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.app.tick();
+        if std::mem::take(&mut self.app.restyle) {
+            theme::apply(ctx, self.app.theme);
+        }
+        if self.app.quit {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        }
         ctx.request_repaint_after(app::TICK);
     }
 

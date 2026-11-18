@@ -45,6 +45,28 @@ references) moves into `lider-gui` without the JSON bridge: the window calls the
 | E5 | Parity walk of 02 and 03, side-by-side screenshots in three themes, performance numbers | every item `[x]`/`[~]` |
 | E6 | Packaging without WebKit (AppImage, deb, Arch, Windows installer), release workflow, cut-over: remove `src-tauri/`, `ui/` | packages built and run |
 
+## Status
+
+**E0 (2026-11-12): done.** crates/lider-gui, theme, fonts, icons, the real list.
+
+**E1 (2026-11-18): main window built; a few details left.**
+- The menu description moved from src-tauri to `lider_core::menu` (one description for both windows).
+- `app.rs` holds the actions of the menus, the toolbar and the context menus (the logic of the Tauri
+  `commands.rs` without the JSON bridge); `boxes.rs` the message boxes (question, note, input, check box).
+- `main_window.rs`: menu bar with checkable items and status tips; toolbar (labels on/off, the Delete
+  arrow menu, the checked-rows count); search bar; category tree with its context menus; the list with
+  the check column and the header box, sorting by header, click, Ctrl and Shift selection, double-click,
+  keys (Up, Down, Home, End, Enter, Space, Delete, Ctrl+A), the row context menu; the details pane (three
+  tabs, segment bar, per-download speed limit); status bar; shortcuts Ctrl+N, Ctrl+Q, Ctrl+F, F3, F9.
+- Symbols (sort arrows, check marks, close buttons) are drawn or come from the icon set, never from a font
+  that might lack the glyph; the tests caught it.
+- Tests (`src/tests.rs`, egui_kittest, golden profile): 8 tests with the checks of the Tauri UI scenario:
+  layout, tree filters, header sorting, checks and the header box, details pane and F9, search with Match
+  case, Esc and F3, Delete with its question, View menu, themes, toolbar captions, status tips.
+- Left for E1: dragging column widths and pane sizes (saved), Alt mnemonics in the menu bar, the status
+  bar's Browser link, density and list font from the settings, the window size and position saved.
+- Windows that come with E3 show a note for now ("comes with the dialogs").
+
 ## Decisions
 
 | # | Item | Decision |

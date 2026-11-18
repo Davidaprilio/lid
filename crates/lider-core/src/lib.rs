@@ -14,6 +14,7 @@ pub mod links;
 pub mod manager;
 pub mod media;
 pub mod media_task;
+pub mod menu;
 pub mod models;
 pub mod names;
 pub mod paths;
