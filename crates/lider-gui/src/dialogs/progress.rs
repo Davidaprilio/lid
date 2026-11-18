@@ -243,7 +243,12 @@ impl Body for Progress {
                 } else {
                     fmt::size(d.downloaded)
                 };
-                ui.label(RichText::new(percent).monospace().size(22.0).strong());
+                ui.label(
+                    RichText::new(percent)
+                        .monospace()
+                        .size(22.0)
+                        .family(crate::fonts::bold()),
+                );
                 ui.vertical(|ui| {
                     ui.add_space(8.0);
                     crate::main_window::bar(ui, &p, d.progress() as f32, 10.0);
@@ -302,7 +307,12 @@ impl Body for Progress {
                                 .spacing([18.0, 4.0])
                                 .show(ui, |ui| {
                                     for h in ["N.", "DOWNLOADED", "SPEED", "INFO"] {
-                                        ui.label(RichText::new(h).small().strong().color(p.mu));
+                                        ui.label(
+                                            RichText::new(h)
+                                                .small()
+                                                .family(crate::fonts::bold())
+                                                .color(p.mu),
+                                        );
                                     }
                                     ui.end_row();
                                     for c in snap.iter().flat_map(|s| &s.connections) {

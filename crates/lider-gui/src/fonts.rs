@@ -23,6 +23,29 @@ fn fc_match(pattern: &str) -> Option<PathBuf> {
 /// The family of the download list.
 pub const LIST: &str = "list";
 
+/// The bold face of the UI font and of the monospace font (titles, pills, buttons, column headers).
+pub const BOLD: &str = "bold";
+pub const MONO_BOLD: &str = "mono-bold";
+
+pub fn bold() -> FontFamily {
+    FontFamily::Name(BOLD.into())
+}
+
+pub fn mono_bold() -> FontFamily {
+    FontFamily::Name(MONO_BOLD.into())
+}
+
+/// Bold font files: (UI, monospace).
+fn bold_fonts() -> (Option<PathBuf>, Option<PathBuf>) {
+    if cfg!(windows) {
+        let dir = PathBuf::from(std::env::var("WINDIR").unwrap_or_else(|_| r"C:\Windows".into()))
+            .join("Fonts");
+        let has = |n: &str| Some(dir.join(n)).filter(|p| p.is_file());
+        return (has("segoeuib.ttf"), has("consolab.ttf"));
+    }
+    (fc_match("sans:bold"), fc_match("monospace:bold"))
+}
+
 /// The file of a font family by its name, when fontconfig has that family (not a substitute).
 fn family_file(family: &str) -> Option<PathBuf> {
     if cfg!(windows) || family.trim().is_empty() {
@@ -129,5 +152,27 @@ pub fn install_with_list(ctx: &egui::Context, list_family: &str) {
     if let Some(file) = family_file(list_family) {
         add(FontFamily::Name(LIST.into()), &[file], &mut defs);
     }
+    // Bold: the bold face first, then the regular fonts (CJK has no bold face here).
+    let mono_list = defs
+        .families
+        .get(&FontFamily::Monospace)
+        .cloned()
+        .unwrap_or_default();
+    defs.families.insert(bold(), proportional_list(&defs));
+    defs.families.insert(mono_bold(), mono_list);
+    let (b, mb) = bold_fonts();
+    if let Some(b) = b {
+        add(bold(), &[b], &mut defs);
+    }
+    if let Some(mb) = mb {
+        add(mono_bold(), &[mb], &mut defs);
+    }
     ctx.set_fonts(defs);
+}
+
+fn proportional_list(defs: &FontDefinitions) -> Vec<String> {
+    defs.families
+        .get(&FontFamily::Proportional)
+        .cloned()
+        .unwrap_or_default()
 }

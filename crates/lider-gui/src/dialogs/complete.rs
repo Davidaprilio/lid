@@ -86,7 +86,7 @@ impl Body for Complete {
                             .font(egui::TextStyle::Monospace),
                     )
                     .labelled_by(by);
-                    ui.label(RichText::new("✓").strong().color(p.ok));
+                    ui.label(RichText::new("✓").family(crate::fonts::bold()).color(p.ok));
                 });
             }
         });

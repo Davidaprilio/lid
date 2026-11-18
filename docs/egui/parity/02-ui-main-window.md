@@ -142,7 +142,7 @@ Note: per the project rule this is the one allowed mention apart from the README
 - [x] Panel header: "CATEGORIES" (sectionTitle style) and a close button (icon close, tooltip "Hide categories") that hides the panel (`toggle_categories(True)`). — **egui:** MW `tree`
 - [x] Panel minimum width is 170. It sits in a horizontal splitter (object `sidebar`) that cannot collapse. Initial sizes are `[settings.sidebar_width (default 236), 800]`. — **egui:** `Panel::left` resizable, 170 … window width − 560; kittest `the_sidebar_is_dragged_and_its_width_kept`
 - [x] The width is persisted on save when the panel is visible (MW:1517-1518). The right side has a minimum width of 560, which is the details pane minimum and applies whether or not the pane shows (MW:430). — **egui:** saved into `sidebar_width` when the drag ends (MW `show`); kittest `the_sidebar_is_dragged_and_its_width_kept`
-- [x] Tree: header hidden, indentation 16, custom TreeDelegate with a count badge. — **egui:** MW `tree_node`: indentation 16, count badge
+- [x] Tree: header hidden, indentation 16, custom TreeDelegate with a count badge. — **egui:** MW `tree_node`: indentation 16, count badge; nodes with children fold and unfold with a chevron (open state in egui memory, first as the view model says); kittest `tree_branches_fold_and_unfold`
 - [x] Nodes (MW:524-535): — **egui:** `lider_core::view::tree`; `crates/lider-core/tests/view.rs` `category_tree`
   - `All Downloads` (icon folder-download, **expanded**), `Unfinished` (unfinished), `Finished` (finished). Each has one child per category except "General", using the icon from `category_icon(name)`: `category-<lower>` if it exists, else `folder`. The defaults are Compressed, Documents, Music, Programs and Video.
   - `Grabber projects` (grabber). It is a placeholder and always shows an empty list.
@@ -193,7 +193,7 @@ Note: per the project rule this is the one allowed mention apart from the README
   - Running: ("run", progress, text). The text is "12.3%" while DOWNLOADING with a known size, `fmt.size(downloaded)` with an unknown size, and `fmt.status(d)` in any other running state.
   - downloaded > 0: ("pause", progress, "12.3% · Paused"), or "{size} · Paused" with an unknown size.
   - else ("queue", 0, "Queued").
-- [x] Status pill drawing (widgets.py:916-935, `pill()` 517-543): — **egui:** MW `pill`: run/pause 150 px with the done part at alpha 70 and a 3 px edge; the check mark, `!`, and the shield marks drawn (no font glyphs)
+- [x] Status pill drawing (widgets.py:916-935, `pill()` 517-543): — **egui:** MW `pill`: bold text (the UI font's bold face, `fonts::bold`/`mono_bold`); run/pause 150 px with the done part at alpha 70 and a 3 px edge; the check mark, `!`, and the shield marks drawn (no font glyphs)
   - Text font: bold, 0.88× the list font.
   - run/pause: fixed width 150 with mono text. The background is `track`, the fill is the progress fraction in the colour at alpha 70/255 plus a solid 3 px left edge in the colour. The colour is `ac` for run and `fa` for pause; the text is `tx`.
   - done: "✓ Complete", `ok` text on `ok`@34 alpha.

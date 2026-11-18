@@ -128,6 +128,32 @@ references) moves into `lider-gui` without the JSON bridge: the window calls the
 - For E6: the release workflow keeps signing with `cargo tauri signer sign` (or `minisign`) and writing
   `latest.json`; no Tauri is needed to read them.
 
+**E5 (2026-11-19): parity walk, done.**
+- `docs/egui/parity/02-ui-main-window.md` (182 `[x]`, 11 `[~]`, 0 open) and `03-dialogs.md` (242 `[x]`, 2 `[~]`,
+  0 open): the Tauri checklists walked again for the egui window, each item with an **egui:** note. The walk
+  filled what was missing: column widths, sidebar and details pane dragged to size and kept; Alt mnemonics in
+  the menu bar, on dialog buttons and check boxes; density and the list font; the toolbar's button kinds; the
+  details pane's layout; the links list's selection; the category and server-limit forms floating over their
+  window; the Scheduler's calendar; Choose Font previewing the family; folding tree branches; the bold face of
+  the UI font for titles, pills, buttons and column headers.
+- The `[~]` items are the decisions G2 (links dropped on the window), G3 (native menu bar), the theme engine
+  (egui Visuals from the same tokens), no desktop icon theme, window geometry as `window_state`, and two
+  dialog details (a menu cannot leave its window; `choose_file` is unused in 1.x).
+- Side by side (`tests/egui/side_by_side.sh OUT`): the main window of both builds in the three themes.
+- Performance (`tests/egui/perf.sh`, release builds, golden profile, Xvfb with software OpenGL, mean of 3):
+
+  | | Tauri | egui |
+  |---|---|---|
+  | Window shown after start | 507 ms (page still loading) | 513 ms (drawn) |
+  | Memory (PSS of the program and its helper processes) | 383 MiB | 155 MiB |
+  | Idle CPU (one 500 ms tick each) | 1.6 % | 3.2 % (software rendering redraws the window) |
+  | Program size | 21.4 MiB (+ WebKitGTK) | 25.8 MiB |
+  | Shared libraries linked | 143 | 4 |
+
+  A dialog is drawn in the same frame it is asked for (the Tauri build keeps a spare WebView for that).
+- 62 tests in lider-gui. To check by hand (no Xvfb can): the tray on KDE and GNOME, a dialog opened from the
+  tray, typing CJK with fcitx5/IBus (G4: egui and winit pass IME events), the end of the power-off countdown.
+
 ## Decisions
 
 | # | Item | Decision |

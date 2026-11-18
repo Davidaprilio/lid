@@ -33,6 +33,25 @@ pub fn triangle(painter: &egui::Painter, center: egui::Pos2, down: bool, colour:
     painter.add(egui::Shape::convex_polygon(pts, colour, Stroke::NONE));
 }
 
+/// A chevron: pointing down when `open`, right otherwise (the tree's branches).
+pub fn chevron(painter: &egui::Painter, center: egui::Pos2, open: bool, colour: Color32) {
+    let s = 3.5;
+    let pts = if open {
+        vec![
+            center + vec2(-s, -s / 2.0),
+            center + vec2(0.0, s / 2.0),
+            center + vec2(s, -s / 2.0),
+        ]
+    } else {
+        vec![
+            center + vec2(-s / 2.0, -s),
+            center + vec2(s / 2.0, 0.0),
+            center + vec2(-s / 2.0, s),
+        ]
+    };
+    painter.add(egui::Shape::line(pts, Stroke::new(1.5, colour)));
+}
+
 /// A check mark in `rect`.
 pub fn check_mark(painter: &egui::Painter, rect: Rect, colour: Color32) {
     let c = rect.center();
@@ -460,7 +479,9 @@ fn tool(
         _ => (13.0, 17.0, 34.0, 17),
     };
     let image = icon(t.icon, glyph, &p, ink);
-    let text = RichText::new(t.label).color(ink).strong();
+    let text = RichText::new(t.label)
+        .color(ink)
+        .family(crate::fonts::bold());
     let mut b = if labels {
         egui::Button::image_and_text(image, text)
     } else {
@@ -605,7 +626,7 @@ fn toolbar(app: &mut App, ui: &mut Ui) {
                         check_box(ui.painter(), &p, b.center(), CheckState::Partial);
                         ui.label(
                             RichText::new(format!("{checked} checked"))
-                                .strong()
+                                .family(crate::fonts::bold())
                                 .color(p.actx),
                         );
                         if ui
@@ -689,7 +710,12 @@ fn searchbar(app: &mut App, ui: &mut Ui) {
         }
         let enter = field.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter));
         let find = ui.add(
-            egui::Button::new(RichText::new("Find").strong().color(Color32::WHITE)).fill(p.ac),
+            egui::Button::new(
+                RichText::new("Find")
+                    .family(crate::fonts::bold())
+                    .color(Color32::WHITE),
+            )
+            .fill(p.ac),
         );
         if find.clicked() || enter {
             app.run_search();
@@ -743,7 +769,12 @@ fn statusbar(app: &mut App, ui: &mut Ui) {
 fn tree(app: &mut App, ui: &mut Ui) {
     let p = app.palette;
     ui.horizontal(|ui| {
-        ui.label(RichText::new("CATEGORIES").size(11.0).strong().color(p.fa));
+        ui.label(
+            RichText::new("CATEGORIES")
+                .size(11.0)
+                .family(crate::fonts::bold())
+                .color(p.fa),
+        );
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             if close_button(ui, &p, "Hide categories") {
                 app.run("hide_categories");
@@ -801,7 +832,33 @@ fn tree_node(
         );
     }
     let ink = if selected { p.actx } else { p.tx };
-    let x = rect.left() + 8.0 + depth as f32 * 16.0;
+    // A node with children folds and unfolds with its chevron (open as the view model says at first).
+    let base = rect.left() + 4.0 + depth as f32 * 16.0;
+    let x = base + 16.0;
+    let key = ui.make_persistent_id(("lid-tree-open", n.title.as_str(), depth));
+    let mut open = ui.data(|d| d.get_temp::<bool>(key)).unwrap_or(n.expanded);
+    if !n.children.is_empty() {
+        let c = egui::pos2(base + 6.0, rect.center().y);
+        let hit = ui
+            .interact(
+                Rect::from_center_size(c, vec2(16.0, 22.0)),
+                key.with("chevron"),
+                Sense::click(),
+            )
+            .on_hover_text(if open { "Collapse" } else { "Expand" });
+        hit.widget_info(|| {
+            egui::WidgetInfo::labeled(
+                egui::Role::Button,
+                true,
+                format!("{} {}", if open { "Collapse" } else { "Expand" }, n.title),
+            )
+        });
+        if hit.clicked() {
+            open = !open;
+            ui.data_mut(|d| d.insert_temp(key, open));
+        }
+        chevron(ui.painter(), c, open, p.fa);
+    }
     icon(&n.icon, 16.0, p, ink).paint_at(
         ui,
         Rect::from_min_size(egui::pos2(x, rect.center().y - 8.0), vec2(16.0, 16.0)),
@@ -873,7 +930,7 @@ fn tree_node(
             }
         }
     });
-    if n.expanded {
+    if open {
         for c in &n.children {
             tree_node(ui, p, c, depth + 1, current, picked, action);
         }
@@ -971,7 +1028,7 @@ fn list(app: &mut App, ui: &mut Ui) {
                         egui::pos2(x + 8.0, cell.center().y),
                         Align2::LEFT_CENTER,
                         title,
-                        FontId::proportional(11.0),
+                        FontId::new(11.0, crate::fonts::bold()),
                         ink,
                     );
                     if sorted {
@@ -1449,7 +1506,7 @@ fn pill(
                 r.center(),
                 Align2::CENTER_CENTER,
                 &pill.text,
-                FontId::monospace(size),
+                FontId::new(size, crate::fonts::mono_bold()),
                 p.tx,
             );
             r
@@ -1471,8 +1528,7 @@ fn pill(
                 "done" => Some(""),
                 _ => None,
             };
-            let galley =
-                painter.layout_no_wrap(text, FontId::new(size, egui::FontFamily::Proportional), fg);
+            let galley = painter.layout_no_wrap(text, FontId::new(size, crate::fonts::bold()), fg);
             let pad = if mark.is_some() { 26.0 } else { 10.0 };
             let w = (galley.size().x + pad + 10.0).min(cell.width() - 8.0);
             let r = Rect::from_min_size(
@@ -1524,7 +1580,7 @@ fn details(app: &mut App, ui: &mut Ui) {
         {
             let on = app.details_tab == i;
             let text = RichText::new(*name)
-                .strong()
+                .family(crate::fonts::bold())
                 .color(if on { p.actx } else { p.mu });
             if ui.add(egui::Button::new(text).frame(false)).clicked() {
                 app.details_tab = i;
@@ -1585,7 +1641,9 @@ fn details(app: &mut App, ui: &mut Ui) {
                             ui.vertical(|ui| {
                                 ui.add(
                                     egui::Label::new(
-                                        RichText::new(&d.filename).strong().size(15.0),
+                                        RichText::new(&d.filename)
+                                            .family(crate::fonts::bold())
+                                            .size(15.0),
                                     )
                                     .truncate(),
                                 );
@@ -1602,11 +1660,13 @@ fn details(app: &mut App, ui: &mut Ui) {
                         ui.horizontal(|ui| {
                             ui.spacing_mut().item_spacing.x = 6.0;
                             let first = if d.action_icon.is_empty() {
-                                egui::Button::new(RichText::new(d.action_label).strong())
+                                egui::Button::new(
+                                    RichText::new(d.action_label).family(crate::fonts::bold()),
+                                )
                             } else {
                                 egui::Button::image_and_text(
                                     icon(d.action_icon, 13.0, &p, p.tx),
-                                    RichText::new(d.action_label).strong(),
+                                    RichText::new(d.action_label).family(crate::fonts::bold()),
                                 )
                             };
                             let compact = |b: egui::Button<'static>| {
@@ -1618,7 +1678,7 @@ fn details(app: &mut App, ui: &mut Ui) {
                             }
                             if ui
                                 .add(compact(egui::Button::new(
-                                    RichText::new("Open folder").strong(),
+                                    RichText::new("Open folder").family(crate::fonts::bold()),
                                 )))
                                 .clicked()
                             {
@@ -1630,7 +1690,12 @@ fn details(app: &mut App, ui: &mut Ui) {
                     ui.vertical(|ui| {
                         let stats = if wide { 330.0 + 24.0 } else { 0.0 };
                         ui.set_width((ui.available_width() - stats).max(160.0));
-                        ui.label(RichText::new(&d.percent).monospace().size(26.0).strong());
+                        ui.label(
+                            RichText::new(&d.percent)
+                                .monospace()
+                                .size(26.0)
+                                .family(crate::fonts::bold()),
+                        );
                         ui.label(RichText::new(&d.of).color(p.mu));
                         bar(ui, &p, d.bar as f32, 8.0);
                         ui.add_space(4.0);
@@ -1668,10 +1733,13 @@ fn details(app: &mut App, ui: &mut Ui) {
                                             RichText::new(cap.to_uppercase())
                                                 .color(p.fa)
                                                 .size(12.0)
-                                                .strong(),
+                                                .family(crate::fonts::bold()),
                                         );
                                         ui.label(
-                                            RichText::new(*val).monospace().strong().color(*ink),
+                                            RichText::new(*val)
+                                                .monospace()
+                                                .family(crate::fonts::bold())
+                                                .color(*ink),
                                         );
                                     });
                                 }
@@ -1705,7 +1773,14 @@ fn details(app: &mut App, ui: &mut Ui) {
                                 ("SPEED", 110.0),
                                 ("INFO", 200.0),
                             ] {
-                                cell(ui, w, RichText::new(h).size(11.0).strong().color(p.mu));
+                                cell(
+                                    ui,
+                                    w,
+                                    RichText::new(h)
+                                        .size(11.0)
+                                        .family(crate::fonts::bold())
+                                        .color(p.mu),
+                                );
                             }
                             ui.end_row();
                             for c in &d.rows {

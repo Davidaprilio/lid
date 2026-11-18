@@ -323,7 +323,12 @@ impl Scheduler {
                         .min_col_width(90.0)
                         .show(ui, |ui| {
                             for h in ["FILE NAME", "SIZE", "STATUS"] {
-                                ui.label(RichText::new(h).small().strong().color(p.mu));
+                                ui.label(
+                                    RichText::new(h)
+                                        .small()
+                                        .family(crate::fonts::bold())
+                                        .color(p.mu),
+                                );
                             }
                             ui.end_row();
                             for (id, name, ic, size, status) in &items {
@@ -418,7 +423,11 @@ impl Body for Scheduler {
                 ui.add_space(6.0);
                 ui.vertical(|ui| {
                     ui.horizontal(|ui| {
-                        ui.label(RichText::new(&self.queue).size(15.0).strong());
+                        ui.label(
+                            RichText::new(&self.queue)
+                                .size(15.0)
+                                .family(crate::fonts::bold()),
+                        );
                         let running = app
                             .manager
                             .queues

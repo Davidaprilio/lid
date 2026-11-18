@@ -347,7 +347,7 @@ impl Body for Options {
             let (ic, title) = HEAD[self.tab];
             ui.horizontal(|ui| {
                 ui.add(icon(ic, 22.0, &p, p.tx));
-                ui.label(RichText::new(title).size(15.0).strong());
+                ui.label(RichText::new(title).size(15.0).family(crate::fonts::bold()));
             });
             ui.separator();
             egui::ScrollArea::vertical()
@@ -626,7 +626,7 @@ impl Options {
         ui.add_space(6.0);
         ui.horizontal(|ui| {
             ui.add(icon("checksum", 18.0, p, p.tx));
-            ui.label(RichText::new("Checksum verification").strong());
+            ui.label(RichText::new("Checksum verification").family(crate::fonts::bold()));
         });
         ui.separator();
         ui.checkbox(
@@ -761,7 +761,7 @@ impl Options {
             ui.label(
                 RichText::new("Max. connections number for a server")
                     .size(15.0)
-                    .strong(),
+                    .family(crate::fonts::bold()),
             );
             kit::row(ui, "Server", 170.0, |ui, by| {
                 kit::mono_field(ui, &mut e.pattern, by);

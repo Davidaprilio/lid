@@ -986,3 +986,18 @@ fn another_tree_node_starts_find_next_again() {
     app.find_next();
     assert_eq!(app.selected, first, "a new node starts from the top again");
 }
+
+#[test]
+fn tree_branches_fold_and_unfold() {
+    let (_tmp, app) = golden();
+    let mut h = harness(app);
+    h.run();
+    let count = |h: &Harness<'static, App>| h.query_all_by_label("Compressed").count();
+    assert_eq!(count(&h), 1, "only All Downloads is open at first");
+    h.get_by_label("Expand Unfinished").click();
+    h.run();
+    assert_eq!(count(&h), 2, "Unfinished shows its categories");
+    h.get_by_label("Collapse All Downloads").click();
+    h.run();
+    assert_eq!(count(&h), 1, "All Downloads folds");
+}

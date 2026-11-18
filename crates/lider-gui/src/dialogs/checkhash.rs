@@ -279,7 +279,7 @@ impl Body for CheckHash {
                                         "Reading the file… {:.0}%",
                                         progress * 100.0
                                     ))
-                                    .strong(),
+                                    .family(crate::fonts::bold()),
                                 );
                                 kit::right(ui, |ui| {
                                     if ui.button("Stop").clicked() {
@@ -312,7 +312,7 @@ impl Body for CheckHash {
                                 ui.add(icon("shield-check", 18.0, &p, p.ok));
                                 ui.label(
                                     RichText::new("Matches — the file is intact")
-                                        .strong()
+                                        .family(crate::fonts::bold())
                                         .color(p.ok),
                                 );
                                 kit::right(ui, |ui| {

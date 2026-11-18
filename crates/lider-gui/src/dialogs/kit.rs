@@ -82,7 +82,11 @@ pub fn header(ui: &mut Ui, p: &Palette, head: &Head, extra: impl FnOnce(&mut Ui)
         }
         ui.vertical(|ui| {
             ui.add_space(2.0);
-            ui.label(RichText::new(head.title).size(16.0).strong());
+            ui.label(
+                RichText::new(head.title)
+                    .size(16.0)
+                    .family(crate::fonts::bold()),
+            );
             if !head.subtitle.is_empty() {
                 ui.add(egui::Label::new(RichText::new(head.subtitle).color(p.mu)).wrap());
             }
@@ -227,7 +231,10 @@ pub fn button(ui: &mut Ui, p: &Palette, label: &str, look: Look, enabled: bool) 
     let text = if label.contains('&') {
         mnemonic_text(ui, label, colour)
     } else {
-        RichText::new(label).strong().color(colour).into()
+        RichText::new(label)
+            .family(crate::fonts::bold())
+            .color(colour)
+            .into()
     };
     let mut b = egui::Button::new(text).min_size(vec2(76.0, 28.0));
     b = match look {
@@ -257,7 +264,10 @@ pub fn icon_button(ui: &mut Ui, p: &Palette, name: &str, label: &str, look: Look
     let text: egui::WidgetText = if label.contains('&') {
         mnemonic_text(ui, label, ink)
     } else {
-        RichText::new(label).strong().color(ink).into()
+        RichText::new(label)
+            .family(crate::fonts::bold())
+            .color(ink)
+            .into()
     };
     let mut b =
         egui::Button::image_and_text(icon(name, 14.0, p, ink), text).min_size(vec2(76.0, 28.0));
@@ -294,7 +304,7 @@ pub fn caption(ui: &mut Ui, p: &Palette, text: &str) -> egui::Id {
     ui.label(
         RichText::new(text.to_uppercase())
             .size(11.0)
-            .strong()
+            .family(crate::fonts::bold())
             .color(p.fa),
     )
     .id
@@ -367,9 +377,11 @@ pub fn tone(p: &Palette, tone: &str) -> (Color32, Color32) {
 /// A rounded label in a tone.
 pub fn pill(ui: &mut Ui, p: &Palette, text: &str, t: &str) -> egui::Response {
     let (fg, bg) = tone(p, t);
-    let galley = ui
-        .painter()
-        .layout_no_wrap(text.to_string(), FontId::proportional(11.5), fg);
+    let galley = ui.painter().layout_no_wrap(
+        text.to_string(),
+        FontId::new(11.5, crate::fonts::bold()),
+        fg,
+    );
     let (r, resp) = ui.allocate_exact_size(vec2(galley.size().x + 16.0, 20.0), Sense::hover());
     ui.painter().rect_filled(r, CornerRadius::same(10), bg);
     ui.painter().galley(
@@ -389,7 +401,11 @@ pub fn tab_strip(ui: &mut Ui, p: &Palette, names: &[&str], active: &mut usize) -
         for (i, n) in names.iter().enumerate() {
             let on = *active == i;
             let text = RichText::new(*n).color(if on { p.tx } else { p.mu });
-            let text = if on { text.strong() } else { text };
+            let text = if on {
+                text.family(crate::fonts::bold())
+            } else {
+                text
+            };
             let resp = ui.add(egui::Label::new(text).sense(Sense::click()));
             if on {
                 let b = resp.rect;
@@ -824,7 +840,9 @@ pub fn date_field(
                 {
                     month = month - chrono::Months::new(1);
                 }
-                ui.label(RichText::new(month.format("%B %Y").to_string()).strong());
+                ui.label(
+                    RichText::new(month.format("%B %Y").to_string()).family(crate::fonts::bold()),
+                );
                 if ui.small_button(">").on_hover_text("Next month").clicked() {
                     month = month + chrono::Months::new(1);
                 }

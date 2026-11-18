@@ -162,7 +162,11 @@ impl MsgBox {
                 );
                 text_id = ui
                     .vertical(|ui| {
-                        ui.label(RichText::new(&self.title).size(16.0).strong());
+                        ui.label(
+                            RichText::new(&self.title)
+                                .size(16.0)
+                                .family(crate::fonts::bold()),
+                        );
                         ui.label(&self.text).id
                     })
                     .inner;
@@ -205,13 +209,13 @@ impl MsgBox {
             }
             ui.add_space(6.0);
             let button = |ui: &mut egui::Ui, b: &Button| {
-                let text = RichText::new(b.label)
-                    .strong()
-                    .color(if b.primary || b.danger {
+                let text = RichText::new(b.label).family(crate::fonts::bold()).color(
+                    if b.primary || b.danger {
                         egui::Color32::WHITE
                     } else {
                         p.tx
-                    });
+                    },
+                );
                 let mut button = egui::Button::new(text);
                 if b.primary {
                     button = button.fill(p.ac);

@@ -1044,7 +1044,7 @@ impl Add {
                             size_text(self.size)
                         ))
                         .monospace()
-                        .strong(),
+                        .family(crate::fonts::bold()),
                     );
                     match self.resumable {
                         Some(true) => {
@@ -1121,7 +1121,9 @@ impl Add {
         };
         kit::panel(ui, &p, |ui| {
             kit::caption(ui, &p, "YouTube video");
-            ui.add(egui::Label::new(RichText::new(&info.title).strong()).wrap());
+            ui.add(
+                egui::Label::new(RichText::new(&info.title).family(crate::fonts::bold())).wrap(),
+            );
             let by: Vec<String> = [
                 info.uploader.clone(),
                 if info.duration > 0 {

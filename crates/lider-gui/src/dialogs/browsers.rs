@@ -141,7 +141,10 @@ impl Body for Browsers {
                     .spacing([10.0, 6.0])
                     .show(ui, |ui| {
                         let mut all = all_on;
-                        let head = RichText::new("BROWSER").small().strong().color(p.mu);
+                        let head = RichText::new("BROWSER")
+                            .small()
+                            .family(crate::fonts::bold())
+                            .color(p.mu);
                         if ui.checkbox(&mut all, head).changed() {
                             self.checked = if all_on {
                                 BTreeSet::new()
@@ -149,7 +152,12 @@ impl Body for Browsers {
                                 enabled.iter().cloned().collect()
                             };
                         }
-                        ui.label(RichText::new("LID HELPER").small().strong().color(p.mu));
+                        ui.label(
+                            RichText::new("LID HELPER")
+                                .small()
+                                .family(crate::fonts::bold())
+                                .color(p.mu),
+                        );
                         ui.end_row();
                         for r in &self.rows {
                             let mut on = self.checked.contains(r.name);

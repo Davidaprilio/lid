@@ -463,13 +463,23 @@ impl Links {
                             egui::Layout::left_to_right(egui::Align::Center),
                             |ui| {
                                 ui.set_min_width(w);
-                                ui.label(RichText::new(text).small().strong().color(p.mu));
+                                ui.label(
+                                    RichText::new(text)
+                                        .small()
+                                        .family(crate::fonts::bold())
+                                        .color(p.mu),
+                                );
                             },
                         );
                     };
                     head(ui, "FILE", 16.0 + gap + name_w);
                     head(ui, "TYPE", 64.0);
-                    ui.label(RichText::new("ADDRESS").small().strong().color(p.mu));
+                    ui.label(
+                        RichText::new("ADDRESS")
+                            .small()
+                            .family(crate::fonts::bold())
+                            .color(p.mu),
+                    );
                 });
                 egui::ScrollArea::vertical()
                     .max_height(300.0)
