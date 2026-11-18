@@ -222,6 +222,12 @@ fn label() -> String {
     format!("add-{}", NEXT.fetch_add(1, Ordering::Relaxed))
 }
 
+/// The category form open over Download File Info (tests).
+#[cfg(test)]
+pub fn new_category_form(a: &mut Add) -> Option<&mut CategoryForm> {
+    a.new_category.as_mut()
+}
+
 /// "Enter new address to download" (Tasks → Add new download).
 pub fn add_url(app: &mut App) {
     let mut body = Add::new(Page::Address);
@@ -695,21 +701,10 @@ impl Body for Add {
             ui.ctx()
                 .request_repaint_after(std::time::Duration::from_millis(100));
         }
-        if let Some(form) = &mut self.new_category {
-            match form.ui(ui, cx) {
-                Some(Some(c)) => {
-                    let name = c.name.clone();
-                    self.new_category = None;
-                    if super::small::save_category(app, None, c) {
-                        self.set_category(app, &name);
-                    }
-                }
-                Some(None) => self.new_category = None,
-                None => {}
-            }
-            self.flush_box(cx);
-            return;
-        }
+        // The category form floats over the window (the window's own keys wait meanwhile).
+        let form_open = self.new_category.is_some();
+        let blocked = cx.blocked;
+        cx.blocked |= form_open;
         match self.page {
             Page::Address => {
                 cx.title = Some("Enter new address to download".into());
@@ -733,6 +728,20 @@ impl Body for Add {
             Page::Info => {
                 cx.title = Some("Download File Info".into());
                 self.info_page(app, ui, cx);
+            }
+        }
+        cx.blocked = blocked;
+        if let Some(form) = &mut self.new_category {
+            match super::small::form_over(ui, cx, form) {
+                Some(Some(c)) => {
+                    let name = c.name.clone();
+                    self.new_category = None;
+                    if super::small::save_category(app, None, c) {
+                        self.set_category(app, &name);
+                    }
+                }
+                Some(None) => self.new_category = None,
+                None => {}
             }
         }
         self.flush_box(cx);
@@ -800,14 +809,25 @@ impl Add {
                 });
             });
             if media::is_youtube(self.address.trim()) {
-                kit::note(
-                    ui,
-                    &p,
-                    "YouTube video detected — choose the resolution or audio only in the next window.",
+                let mut job = egui::text::LayoutJob::default();
+                let font = egui::TextStyle::Body.resolve(ui.style());
+                job.append(
+                    "YouTube video detected",
+                    0.0,
+                    egui::TextFormat::simple(
+                        egui::FontId::new(font.size, font.family.clone()),
+                        p.tx,
+                    ),
                 );
+                job.append(
+                    " — choose the resolution or audio only in the next window.",
+                    0.0,
+                    egui::TextFormat::simple(font, p.mu),
+                );
+                kit::accent_note(ui, &p, "category-video", job);
             } else {
                 kit::panel(ui, &p, |ui| {
-                    ui.checkbox(&mut self.use_auth, "Use authorization");
+                    kit::check(ui, &mut self.use_auth, "Use &authorization");
                     ui.horizontal(|ui| {
                         let on = self.use_auth;
                         let half = (ui.available_width() - 140.0) / 2.0;
@@ -831,8 +851,8 @@ impl Add {
         });
         kit::footer(ui, &p, |ui| {
             kit::right(ui, |ui| {
-                ok |= kit::primary(ui, &p, "OK");
-                if kit::plain(ui, &p, "Cancel") {
+                ok |= kit::primary(ui, &p, "O&K");
+                if kit::plain(ui, &p, "&Cancel") {
                     cx.close = true;
                 }
             });
@@ -907,12 +927,12 @@ impl Add {
         let mut start = false;
         let mut later: Option<String> = None;
         let valid = self.checksum.valid();
-        let cats: Vec<(String, String)> = app
+        let cats: Vec<String> = app
             .manager
             .settings
             .categories
             .iter()
-            .map(|c| (c.name.clone(), c.name.clone()))
+            .map(|c| c.name.clone())
             .collect();
         let icon_name = cat_icon(&self.category);
         let subtitle = basename(&self.path);
@@ -938,7 +958,7 @@ impl Add {
                     });
                     kit::row(ui, "Category", 90.0, |ui, by| {
                         let mut c = self.category.clone();
-                        if kit::combo_by(ui, "add-category", 200.0, &mut c, &cats, by) {
+                        if kit::category_combo(ui, &p, "add-category", 200.0, &mut c, &cats, by) {
                             self.set_category(app, &c);
                         }
                         kit::right(ui, |ui| {
@@ -1039,26 +1059,29 @@ impl Add {
             });
         });
         let queues = app.view.queues.clone();
+        let keys = !cx.blocked;
         kit::footer(ui, &p, |ui| {
             kit::right(ui, |ui| {
-                if kit::plain(ui, &p, "Cancel") {
+                if kit::plain(ui, &p, "&Cancel") {
                     cx.close = true;
                 }
                 let b = egui::Button::image_and_text(
                     icon("add-white", 15.0, &p, egui::Color32::WHITE),
-                    RichText::new("Start Download")
-                        .strong()
-                        .color(egui::Color32::WHITE),
+                    kit::mnemonic_text(ui, "&Start Download", egui::Color32::WHITE),
                 )
                 .fill(p.ac)
                 .min_size(egui::vec2(76.0, 28.0));
-                start |= ui.add_enabled(valid, b).clicked();
+                start |= ui.add_enabled(valid, b).clicked()
+                    || (valid && keys && kit::mnemonic_pressed(ui, "&Start Download"));
                 let lb = egui::Button::image_and_text(
                     icon("queue", 15.0, &p, p.tx),
-                    RichText::new("Download Later").strong(),
+                    kit::mnemonic_text(ui, "Download &Later", p.tx),
                 )
                 .min_size(egui::vec2(76.0, 28.0));
                 let lr = ui.add_enabled(valid, lb);
+                if valid && keys && kit::mnemonic_pressed(ui, "Download &Later") {
+                    egui::Popup::open_id(ui.ctx(), egui::Popup::default_response_id(&lr));
+                }
                 egui::Popup::menu(&lr).show(|ui| {
                     for q in &queues {
                         if ui.button(q).clicked() {
@@ -1269,7 +1292,7 @@ impl Body for Batch {
                     .labelled_by(l);
                 });
             });
-            ui.checkbox(&mut self.use_auth, "Use authorization");
+            kit::check(ui, &mut self.use_auth, "Use &authorization");
             if self.use_auth {
                 ui.horizontal(|ui| {
                     let half = (ui.available_width() - 140.0) / 2.0;

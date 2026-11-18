@@ -328,22 +328,10 @@ impl Body for Options {
         if let Some(f) = app.font_chosen.take() {
             self.s.list_font = f;
         }
-        if let Some((form, index)) = &mut self.edit_cat {
-            let index = *index;
-            match form.ui(ui, cx) {
-                Some(Some(c)) => {
-                    self.edit_cat = None;
-                    self.saved_cat(c, index);
-                }
-                Some(None) => self.edit_cat = None,
-                None => {}
-            }
-            return;
-        }
-        if self.edit_limit.is_some() {
-            self.limit_editor(ui, cx);
-            return;
-        }
+        // The category form and the server editor float over the window; its own keys wait meanwhile.
+        let over = self.edit_cat.is_some() || self.edit_limit.is_some();
+        let blocked = cx.blocked;
+        cx.blocked |= over;
         let mut ok = false;
         egui::Frame::new()
             .inner_margin(egui::Margin {
@@ -387,12 +375,38 @@ impl Body for Options {
                 }
             });
         });
-        if ok {
+        if ok && !over {
             apply(app, self);
             cx.close = true;
         }
         if cx.escape(ui) {
             cx.close = true;
+        }
+        cx.blocked = blocked;
+        if let Some((form, index)) = &mut self.edit_cat {
+            let index = *index;
+            match small::form_over(ui, cx, form) {
+                Some(Some(c)) => {
+                    self.edit_cat = None;
+                    self.saved_cat(c, index);
+                }
+                Some(None) => self.edit_cat = None,
+                None => {}
+            }
+        }
+        if self.edit_limit.is_some() {
+            let p = cx.p;
+            egui::Modal::new(ui.scope_id().with("server-limit"))
+                .frame(
+                    egui::Frame::new()
+                        .fill(p.win)
+                        .stroke(egui::Stroke::new(1.0, p.line2))
+                        .corner_radius(10),
+                )
+                .show(ui.ctx(), |ui| {
+                    ui.set_width(480.0);
+                    self.limit_editor(ui, cx);
+                });
         }
     }
     any_body!();

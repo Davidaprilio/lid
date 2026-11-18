@@ -295,7 +295,7 @@ impl Body for Properties {
                     });
                 }
                 kit::row(ui, "Save To", w, |ui, by| {
-                    kit::folder_field(ui, &p, &mut self.save_dir, by);
+                    kit::folder_field_with(ui, &p, &mut self.save_dir, by, "&Browse...", "Save To");
                 });
                 kit::row(ui, "Address", w, |ui, by| {
                     ui.add_enabled(

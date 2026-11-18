@@ -136,17 +136,43 @@ pub fn apply_columns(app: &mut App, columns: Option<Vec<ColumnState>>) {
 }
 
 /// One column in the list: its check box, then its title, which selects the row. True when clicked.
-fn column_row(ui: &mut Ui, p: &crate::theme::Palette, c: &mut ColumnState, selected: bool) -> bool {
+/// What a click or a drag did to a column row.
+#[derive(Default)]
+struct RowAction {
+    clicked: bool,
+    /// The row dragged here (its index).
+    dropped: Option<usize>,
+}
+
+fn column_row(
+    ui: &mut Ui,
+    p: &crate::theme::Palette,
+    c: &mut ColumnState,
+    index: usize,
+    selected: bool,
+) -> RowAction {
     let id = ui.scope_id().with(("column", &c.0));
     let title = column_title(&c.0).to_string();
     let fixed = c.0 == "filename";
-    let mut clicked = false;
+    let mut out = RowAction::default();
     ui.horizontal(|ui| {
         ui.add_enabled(!fixed, egui::Checkbox::without_text(&mut c.1))
             .labelled_by(id);
         let size = egui::vec2(ui.available_width(), 22.0);
         let (rect, _) = ui.allocate_exact_size(size, egui::Sense::hover());
-        let resp = ui.interact(rect, id, egui::Sense::click());
+        // Drag a title onto another row to move it there (1.x's InternalMove).
+        let resp = ui.interact(rect, id, egui::Sense::click_and_drag());
+        resp.dnd_set_drag_payload(index);
+        if let Some(from) = resp.dnd_release_payload::<usize>() {
+            out.dropped = Some(*from);
+        }
+        if resp
+            .dnd_hover_payload::<usize>()
+            .is_some_and(|f| *f != index)
+        {
+            ui.painter()
+                .hline(rect.x_range(), rect.top(), egui::Stroke::new(2.0, p.ac));
+        }
         resp.widget_info(|| egui::WidgetInfo::selected(egui::Role::Button, true, selected, &title));
         if selected {
             ui.painter().rect_filled(rect, 4.0, p.acsel);
@@ -158,12 +184,22 @@ fn column_row(ui: &mut Ui, p: &crate::theme::Palette, c: &mut ColumnState, selec
             egui::FontId::proportional(13.0),
             if selected { p.actx } else { p.tx },
         );
-        clicked = resp.clicked();
+        out.clicked = resp.clicked();
     });
-    clicked
+    out
 }
 
 impl Columns {
+    /// Move a column to another place in the list (a drop); it becomes the current one.
+    pub fn move_column(&mut self, from: usize, to: usize) {
+        if from == to || from >= self.cols.len() || to >= self.cols.len() {
+            return;
+        }
+        let c = self.cols.remove(from);
+        self.cols.insert(to, c);
+        self.current = to;
+    }
+
     fn shift(&mut self, d: i64) {
         let j = self.current as i64 + d;
         if j < 0 || j as usize >= self.cols.len() {
@@ -183,7 +219,7 @@ impl Body for Columns {
             kit::muted(
                 ui,
                 &p,
-                "Check the columns to show. Use the buttons to change the order.",
+                "Check the columns to show. Drag or use the buttons to change the order.",
             );
             ui.horizontal_top(|ui| {
                 let list_w = ui.available_width() - 110.0;
@@ -191,10 +227,18 @@ impl Body for Columns {
                     ui.set_width(list_w);
                     kit::panel(ui, &p, |ui| {
                         ui.spacing_mut().item_spacing.y = 2.0;
+                        let mut moved = None;
                         for i in 0..self.cols.len() {
-                            if column_row(ui, &p, &mut self.cols[i], self.current == i) {
+                            let r = column_row(ui, &p, &mut self.cols[i], i, self.current == i);
+                            if r.clicked {
                                 self.current = i;
                             }
+                            if let Some(from) = r.dropped {
+                                moved = Some((from, i));
+                            }
+                        }
+                        if let Some((from, to)) = moved {
+                            self.move_column(from, to);
                         }
                     });
                 });
@@ -254,6 +298,59 @@ pub struct Font {
     pub filter: String,
     /// Chosen for the Options window: OK hands it there instead of writing it.
     pub for_options: bool,
+    /// Families whose font file was looked for (loaded or not), so each is looked for once.
+    tried: std::collections::HashSet<String>,
+}
+
+/// The egui font family that draws `family` for the preview, once its file is loaded. The first call
+/// loads it (fontconfig finds the file) and gives None: egui takes new fonts at its next pass.
+fn preview_family(
+    ctx: &egui::Context,
+    family: &str,
+    tried: &mut std::collections::HashSet<String>,
+) -> Option<egui::FontFamily> {
+    let name = format!("preview:{family}");
+    let fam = egui::FontFamily::Name(name.clone().into());
+    let loaded = ctx.fonts(|f| f.definitions().families.contains_key(&fam));
+    if loaded {
+        return Some(fam);
+    }
+    if !tried.insert(family.to_string()) {
+        return None;
+    }
+    let file = family_file(family)?;
+    let bytes = std::fs::read(file).ok()?;
+    let mut defs = ctx.fonts(|f| f.definitions().clone());
+    defs.font_data.insert(
+        name.clone(),
+        std::sync::Arc::new(egui::FontData::from_owned(bytes)),
+    );
+    // The system fonts after it: a glyph the family lacks still draws.
+    let mut list = vec![name];
+    list.extend(
+        defs.families
+            .get(&egui::FontFamily::Proportional)
+            .cloned()
+            .unwrap_or_default(),
+    );
+    defs.families.insert(fam, list);
+    ctx.set_fonts(defs);
+    None
+}
+
+/// The font file of a family, when fontconfig has that family (not a stand-in for it).
+fn family_file(family: &str) -> Option<std::path::PathBuf> {
+    if cfg!(windows) {
+        return None;
+    }
+    let out = std::process::Command::new("fc-match")
+        .args(["-f", "%{family[0]}\n%{file}", family])
+        .output()
+        .ok()?;
+    let text = String::from_utf8_lossy(&out.stdout).into_owned();
+    let (found, file) = text.split_once('\n')?;
+    let file = std::path::PathBuf::from(file.trim());
+    (found.trim().eq_ignore_ascii_case(family) && file.is_file()).then_some(file)
 }
 
 /// "family,size" of a font setting.
@@ -281,6 +378,7 @@ pub fn font(app: &mut App, current: Option<String>) {
         size,
         filter: String::new(),
         for_options,
+        tried: Default::default(),
     };
     app.open_dialog(Dialog::new("font", "Choose Font", (460.0, 520.0), body));
 }
@@ -334,9 +432,19 @@ impl Body for Font {
                 .labelled_by(by);
                 ui.label("pt");
             });
+            // The sample in the chosen family and size (1.x previews the QFont).
+            let fam = match preview_family(ui.ctx(), &self.family, &mut self.tried) {
+                Some(f) => f,
+                None => {
+                    // Loaded at the next pass.
+                    ui.ctx().request_repaint();
+                    egui::FontFamily::Proportional
+                }
+            };
             kit::panel(ui, &p, |ui| {
                 ui.label(
-                    RichText::new("AaBbCc 0123 · ubuntu-24.04.iso").size(self.size as f32 * 1.333),
+                    RichText::new("AaBbCc 0123 · ubuntu-24.04.iso")
+                        .font(egui::FontId::new(self.size as f32 * 1.333, fam)),
                 );
             });
         });
@@ -411,7 +519,12 @@ impl Body for Find {
         kit::body(ui, |ui| {
             if self.with_query {
                 let by = kit::caption(ui, &p, "Find");
-                let r = kit::field(ui, &mut self.query, by);
+                let r = ui
+                    .horizontal(|ui| {
+                        ui.add(crate::icons::icon("search", 16.0, &p, p.mu));
+                        kit::field(ui, &mut self.query, by)
+                    })
+                    .inner;
                 if !self.focused {
                     r.request_focus();
                     self.focused = true;
@@ -627,6 +740,25 @@ impl CategoryForm {
         }
         out
     }
+}
+
+/// The category form floating over another window (Download File Info, Options), as the Tauri build's
+/// overlay: Some(Some(category)) on OK, Some(None) on Cancel.
+pub fn form_over(ui: &mut Ui, cx: &mut Cx, form: &mut CategoryForm) -> Option<Option<Category>> {
+    let p = cx.p;
+    let mut out = None;
+    egui::Modal::new(ui.scope_id().with("category-form"))
+        .frame(
+            egui::Frame::new()
+                .fill(p.win)
+                .stroke(egui::Stroke::new(1.0, p.line2))
+                .corner_radius(10),
+        )
+        .show(ui.ctx(), |ui| {
+            ui.set_width(600.0);
+            out = form.ui(ui, cx);
+        });
+    out
 }
 
 /// Add a category (`old` None; refused when the name exists) or replace one; a rename moves its

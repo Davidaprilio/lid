@@ -205,14 +205,7 @@ impl Scheduler {
             ui.add_enabled_ui(s.start_enabled, |ui| {
                 ui.horizontal(|ui| {
                     let r = ui.radio_value(&mut s.daily, false, "Once at");
-                    let e = ui.add_enabled(
-                        !s.daily,
-                        egui::TextEdit::singleline(&mut self.date)
-                            .font(egui::TextStyle::Monospace)
-                            .char_limit(10)
-                            .desired_width(100.0),
-                    );
-                    let e = e.labelled_by(r.id);
+                    let e = kit::date_field(ui, &p, &mut self.date, !s.daily, r.id);
                     if e.lost_focus() && !valid_date(&self.date) {
                         self.date = if s.once_date.is_empty() {
                             today()
@@ -293,16 +286,7 @@ impl Scheduler {
         ui.checkbox(&mut s.shutdown_when_done, "Turn off computer when done");
         let stored = self.stored();
         if let Some(t) = next_run_text(&stored, chrono::Local::now().naive_local()) {
-            egui::Frame::new()
-                .fill(crate::theme::alpha(p.ac, 0.1))
-                .corner_radius(8)
-                .inner_margin(egui::Margin::symmetric(10, 6))
-                .show(ui, |ui| {
-                    ui.horizontal(|ui| {
-                        ui.add(icon("clock", 16.0, &p, p.actx));
-                        ui.label(RichText::new(t).color(p.actx));
-                    });
-                });
+            kit::accent_note(ui, &p, "clock", RichText::new(t).color(p.actx));
         }
     }
 
@@ -423,10 +407,10 @@ impl Body for Scheduler {
                     ui.set_width(230.0);
                     pick = self.queues(app, ui, cx);
                     ui.horizontal(|ui| {
-                        if kit::plain(ui, &p, "New queue") {
+                        if kit::plain(ui, &p, "&New queue") {
                             action = Some("new");
                         }
-                        if kit::plain(ui, &p, "Delete") {
+                        if kit::plain(ui, &p, "&Delete") {
                             action = Some("delete");
                         }
                     });
@@ -459,17 +443,17 @@ impl Body for Scheduler {
             });
         });
         kit::footer(ui, &p, |ui| {
-            if kit::icon_button(ui, &p, "play-white", "Start now", kit::Look::Primary) {
+            if kit::icon_button(ui, &p, "play-white", "&Start now", kit::Look::Primary) {
                 action = Some("start");
             }
-            if kit::plain(ui, &p, "Stop") {
+            if kit::plain(ui, &p, "S&top") {
                 action = Some("stop");
             }
             kit::right(ui, |ui| {
-                if kit::plain(ui, &p, "Close") {
+                if kit::plain(ui, &p, "&Close") {
                     action = Some("close");
                 }
-                if kit::plain(ui, &p, "Apply") {
+                if kit::plain(ui, &p, "&Apply") {
                     action = Some("apply");
                 }
             });

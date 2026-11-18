@@ -62,7 +62,8 @@ pub fn open(app: &mut App, id: i64, force: bool) {
         },
     };
     let title = title(d);
-    app.open_dialog(Dialog::new(&label(id), &title, (640.0, 520.0), body));
+    // 1.x keeps the progress window at least 600 px wide.
+    app.open_dialog(Dialog::new(&label(id), &title, (640.0, 520.0), body).min_width(600.0));
 }
 
 /// What the open progress window of `id` asks for when the download completes (None without one).
@@ -242,7 +243,7 @@ impl Body for Progress {
                 } else {
                     fmt::size(d.downloaded)
                 };
-                ui.label(RichText::new(percent).size(22.0).strong());
+                ui.label(RichText::new(percent).monospace().size(22.0).strong());
                 ui.vertical(|ui| {
                     ui.add_space(8.0);
                     crate::main_window::bar(ui, &p, d.progress() as f32, 10.0);

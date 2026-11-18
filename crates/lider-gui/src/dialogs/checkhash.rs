@@ -249,17 +249,14 @@ impl Body for CheckHash {
                     } else {
                         String::new()
                     };
-                    kit::panel(ui, &p, |ui| {
-                        ui.horizontal(|ui| {
-                            ui.add(icon("clock", 16.0, &p, p.ac));
-                            ui.add(
-                                egui::Label::new(format!(
-                                    "The file is still downloading{percent}. LID checks it as soon as the download finishes."
-                                ))
-                                .wrap(),
-                            );
-                        });
-                    });
+                    kit::accent_note(
+                        ui,
+                        &p,
+                        "clock",
+                        format!(
+                            "The file is still downloading{percent}. LID checks it as soon as the download finishes."
+                        ),
+                    );
                 }
                 State::Ready => {
                     if finished && !exists {
