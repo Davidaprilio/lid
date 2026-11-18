@@ -389,11 +389,11 @@ impl Shared {
         url: &str,
         headers: &IndexMap<String, String>,
     ) -> Result<(), String> {
-        let probe = self
-            .client
-            .probe(url, headers, true)
-            .await
-            .map_err(|e| e.message())?;
+        // Stop also while the server has not answered yet.
+        let probe = tokio::select! {
+            r = self.client.probe(url, headers, true) => r.map_err(|e| e.message())?,
+            _ = self.stop.cancelled() => return Ok(()),
+        };
         let mut first = None;
         {
             let mut st = self.lock();
@@ -598,10 +598,10 @@ impl Shared {
         let mut piece_end: Option<i64> = None;
         let mut resp = match response.take() {
             Some(r) => r,
-            None => {
-                self.open_piece(conn, segment, headers, limit, &mut piece_end)
-                    .await?
-            }
+            None => tokio::select! {
+                r = self.open_piece(conn, segment, headers, limit, &mut piece_end) => r?,
+                _ = self.stop.cancelled() => return Ok(Fetch::Stopped),
+            },
         };
         self.conn_status(conn, "Receiving data...");
         let conn_meter = self.lock().conns[conn].meter.clone();
@@ -633,9 +633,10 @@ impl Shared {
                         s.pos >= end && (s.end < 0 || s.pos < s.end)
                     };
                     if more {
-                        resp = self
-                            .open_piece(conn, segment, headers, limit, &mut piece_end)
-                            .await?;
+                        resp = tokio::select! {
+                            r = self.open_piece(conn, segment, headers, limit, &mut piece_end) => r?,
+                            _ = self.stop.cancelled() => return Ok(Fetch::Stopped),
+                        };
                         self.conn_status(conn, "Receiving data...");
                         continue;
                     }

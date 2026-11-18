@@ -302,6 +302,33 @@ async fn closed_port_is_an_error() {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn stop_while_the_server_is_silent() {
+    // A server that takes the connection and never answers: Stop (or closing LID) must not wait for
+    // the read timeout.
+    let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = l.local_addr().unwrap();
+    let _keep = tokio::spawn(async move {
+        let mut held = vec![];
+        while let Ok((s, _)) = l.accept().await {
+            held.push(s);
+        }
+    });
+    let e = env();
+    let (t, rx) = e.task(e.download(&format!("http://{addr}/never.bin")), 2, None);
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert!(t.is_running());
+    let at = Instant::now();
+    t.stop();
+    finished(rx, 5).await;
+    assert!(
+        at.elapsed() < Duration::from_secs(2),
+        "stopped in {:?}",
+        at.elapsed()
+    );
+    assert_ne!(t.download().status, Status::Error);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn http_404_is_fatal_with_its_reason() {
     let e = env();
     let srv = FileServer::start(Options {
