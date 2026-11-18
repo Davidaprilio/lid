@@ -427,36 +427,54 @@ struct Tool {
     tip: &'static str,
 }
 
-fn tool(
-    app: &mut App,
-    ui: &mut Ui,
-    t: &Tool,
-    enabled: bool,
-    primary: bool,
-    picked: &mut Option<&'static str>,
-) {
+/// A toolbar button's kind (1.x MW:286, 297): (padding, icon, height) primary (16, 17, 38), ghost
+/// (11, 20, 36), pill and danger (13, 17, 34).
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Kind {
+    Primary,
+    Pill,
+    Danger,
+    Ghost,
+}
+
+fn tool(app: &mut App, ui: &mut Ui, t: &Tool, enabled: bool, kind: Kind, picked: &mut Option<&'static str>) {
     let p = app.palette;
+    let primary = kind == Kind::Primary;
     let labels = app.manager.settings.toolbar_labels || primary;
-    let ink = if primary {
-        Color32::WHITE
-    } else if enabled {
-        p.tx
-    } else {
-        p.fa
+    let ink = match kind {
+        _ if !enabled => p.fa,
+        Kind::Primary => Color32::WHITE,
+        Kind::Danger => p.bad,
+        _ => p.tx,
     };
-    let image = icon(t.icon, 17.0, &p, ink);
+    let (pad, glyph, height, radius) = match kind {
+        Kind::Primary => (16.0, 17.0, 38.0, 19),
+        Kind::Ghost => (11.0, 20.0, 36.0, 9),
+        _ => (13.0, 17.0, 34.0, 17),
+    };
+    let image = icon(t.icon, glyph, &p, ink);
+    let text = RichText::new(t.label).color(ink).strong();
     let mut b = if labels {
-        egui::Button::image_and_text(image, RichText::new(t.label).strong().color(ink))
+        egui::Button::image_and_text(image, text)
     } else {
         egui::Button::image(image)
     };
     b = b
-        .corner_radius(CornerRadius::same(16))
-        .min_size(vec2(34.0, 32.0));
-    if primary {
-        b = b.fill(p.ac).stroke(Stroke::NONE);
-    }
-    let r = ui.add_enabled(enabled, b);
+        .corner_radius(CornerRadius::same(radius))
+        .min_size(vec2(height, height));
+    b = match kind {
+        Kind::Primary => b.fill(p.ac).stroke(Stroke::NONE),
+        Kind::Pill | Kind::Danger => b
+            .fill(if enabled { p.pane } else { p.win })
+            .stroke(Stroke::new(1.0, if enabled { p.line2 } else { p.line })),
+        Kind::Ghost => b.frame_when_inactive(false),
+    };
+    let r = ui
+        .scope(|ui| {
+            ui.spacing_mut().button_padding = vec2(pad, 5.0);
+            ui.add_enabled(enabled, b)
+        })
+        .inner;
     if r.hovered() {
         app.status_tip = t.tip.to_string();
     }
@@ -481,7 +499,7 @@ fn toolbar(app: &mut App, ui: &mut Ui) {
                 tip: "Add new download address manually",
             },
             true,
-            true,
+            Kind::Primary,
             &mut picked,
         );
         ui.separator();
@@ -495,7 +513,7 @@ fn toolbar(app: &mut App, ui: &mut Ui) {
                 tip: "Start or resume the checked (or selected) downloads",
             },
             on(|a| a.resume),
-            false,
+            Kind::Pill,
             &mut picked,
         );
         tool(
@@ -508,7 +526,7 @@ fn toolbar(app: &mut App, ui: &mut Ui) {
                 tip: "Stop the checked (or selected) downloads",
             },
             on(|a| a.stop),
-            false,
+            Kind::Pill,
             &mut picked,
         );
         ui.separator();
@@ -522,14 +540,16 @@ fn toolbar(app: &mut App, ui: &mut Ui) {
                 tip: "Remove the checked (or selected) files from the list",
             },
             on(|a| a.remove),
-            false,
+            Kind::Danger,
             &mut picked,
         );
         // The arrow next to Delete: the other ways to delete.
         let arrow = ui.add(
             egui::Button::new("")
-                .min_size(vec2(22.0, 32.0))
-                .corner_radius(CornerRadius::same(10)),
+                .min_size(vec2(24.0, 34.0))
+                .fill(p.pane)
+                .stroke(Stroke::new(1.0, p.line2))
+                .corner_radius(CornerRadius::same(12)),
         );
         triangle(ui.painter(), arrow.rect.center(), true, p.mu);
         let arrow = arrow.on_hover_text("More ways to delete");
@@ -600,7 +620,7 @@ fn toolbar(app: &mut App, ui: &mut Ui) {
                     tip: "Run site grabber",
                 },
                 true,
-                false,
+                Kind::Ghost,
                 &mut picked,
             );
             tool(
@@ -613,7 +633,7 @@ fn toolbar(app: &mut App, ui: &mut Ui) {
                     tip: "Scheduler and download queues",
                 },
                 true,
-                false,
+                Kind::Ghost,
                 &mut picked,
             );
             tool(
@@ -626,7 +646,7 @@ fn toolbar(app: &mut App, ui: &mut Ui) {
                     tip: "Integration, file types, save folders, connections, proxy and others",
                 },
                 true,
-                false,
+                Kind::Ghost,
                 &mut picked,
             );
         });
