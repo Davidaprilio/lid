@@ -25,6 +25,7 @@ pub mod search;
 pub mod settings;
 pub mod store;
 pub mod tools;
+pub mod update;
 pub mod view;
 
 /// Short name shown in the UI.

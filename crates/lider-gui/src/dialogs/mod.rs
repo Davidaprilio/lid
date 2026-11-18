@@ -27,6 +27,7 @@ pub mod progress;
 pub mod properties;
 pub mod scheduler;
 pub mod small;
+pub mod update;
 
 /// What a dialog's drawing asks of its window.
 pub struct Cx<'a> {

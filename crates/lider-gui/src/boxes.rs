@@ -22,6 +22,8 @@ pub enum Then {
     PowerOff,
     /// "Add LID to the application menu?"
     OfferMenu,
+    /// "LID x is available": skip, later, install or the release page.
+    Update(Box<lider_core::update::Found>),
 }
 
 #[derive(Debug, Clone, Default)]
@@ -31,6 +33,8 @@ pub struct Button {
     pub primary: bool,
     /// Red, on the left (a button that stops something).
     pub danger: bool,
+    /// On the left, in the normal colours ("Skip this version").
+    pub left: bool,
 }
 
 #[derive(Debug, Clone)]
@@ -64,18 +68,21 @@ const OK: Button = Button {
     label: "OK",
     primary: true,
     danger: false,
+    left: false,
 };
 const YES: Button = Button {
     id: "yes",
     label: "Yes",
     primary: true,
     danger: false,
+    left: false,
 };
 const NO: Button = Button {
     id: "no",
     label: "No",
     primary: false,
     danger: false,
+    left: false,
 };
 
 impl MsgBox {
@@ -111,6 +118,7 @@ impl MsgBox {
                     label: "Cancel",
                     primary: false,
                     danger: false,
+                    left: false,
                 },
             ],
             input: Some(String::new()),
@@ -213,13 +221,13 @@ impl MsgBox {
                 ui.add(button.min_size(egui::vec2(70.0, 28.0))).clicked()
             };
             ui.horizontal(|ui| {
-                for b in self.buttons.iter().filter(|b| b.danger) {
+                for b in self.buttons.iter().filter(|b| b.danger || b.left) {
                     if button(ui, b) {
                         pressed = Some(b.id);
                     }
                 }
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    for b in self.buttons.iter().filter(|b| !b.danger).rev() {
+                    for b in self.buttons.iter().filter(|b| !b.danger && !b.left).rev() {
                         if button(ui, b) {
                             pressed = Some(b.id);
                         }

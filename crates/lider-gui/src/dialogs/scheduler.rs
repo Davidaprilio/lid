@@ -504,12 +504,14 @@ impl Body for Scheduler {
                                 label: "Yes",
                                 primary: true,
                                 danger: false,
+                                left: false,
                             },
                             Button {
                                 id: "no",
                                 label: "No",
                                 primary: false,
                                 danger: false,
+                                left: false,
                             },
                         ]),
                     );

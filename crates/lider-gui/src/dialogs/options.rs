@@ -69,6 +69,8 @@ pub struct Options {
     /// The category form over the window (None: New, Some(i): Edit).
     pub edit_cat: Option<(CategoryForm, Option<usize>)>,
     pub edit_limit: Option<LimitEdit>,
+    /// Updates (lider_core::update): kept in updates.json, written on OK like the rest.
+    pub updates: lider_core::update::Prefs,
 }
 
 /// Open Options on a tab ("" for the first, "Appearance" from View → Appearance...).
@@ -95,7 +97,8 @@ pub fn open(app: &mut App, tab: &str) {
         browsers_connected: sys.browsers().iter().filter(|b| b.installed).count(),
         global_menu: sys.global_menu_available(),
     };
-    let body = Options::new(&app.manager.settings, desk, tab);
+    let mut body = Options::new(&app.manager.settings, desk, tab);
+    body.updates = lider_core::update::load(&app.dirs);
     app.open_dialog(Dialog::new("options", "LID options", (720.0, 712.0), body));
 }
 
@@ -160,6 +163,7 @@ impl Options {
             },
             edit_cat: None,
             edit_limit: None,
+            updates: lider_core::update::Prefs::default(),
         };
         o.select_cat(0);
         o
@@ -294,6 +298,9 @@ pub fn apply(app: &mut App, o: &mut Options) {
     let on = app.manager.settings.speed_limiter_on;
     app.manager.set_speed_limiter(on, None);
     app.save_settings();
+    if let Err(e) = lider_core::update::save(&app.dirs, &o.updates) {
+        app.info("LID", &e.to_string());
+    }
     app.apply_theme();
     app.browser_ok = None;
     // The test harness never writes desktop entries into the real home.
@@ -428,6 +435,38 @@ impl Options {
                     kit::pill(ui, p, "Not set up yet", "muted");
                 }
             });
+        });
+        kit::panel(ui, p, |ui| {
+            kit::caption(ui, p, "Updates");
+            ui.checkbox(
+                &mut self.updates.check_at_startup,
+                "Check for a new version when LID starts",
+            );
+            kit::row(ui, "Versions", 80.0, |ui, by| {
+                let choices = [
+                    ("stable".to_string(), "Stable releases".to_string()),
+                    (
+                        "prerelease".to_string(),
+                        "Pre-releases too (beta, alpha)".to_string(),
+                    ),
+                ];
+                kit::combo_by(
+                    ui,
+                    "update-channel",
+                    240.0,
+                    &mut self.updates.channel,
+                    &choices,
+                    by,
+                );
+                if kit::plain(ui, p, "Check now") {
+                    let _ = lider_core::update::save(&app.dirs, &self.updates);
+                    app.update_note = "Checking…".into();
+                    app.check_for_update(false);
+                }
+            });
+            if !app.update_note.is_empty() {
+                kit::faint(ui, p, &app.update_note);
+            }
         });
     }
 

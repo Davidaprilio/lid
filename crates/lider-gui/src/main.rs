@@ -24,6 +24,8 @@ mod tests_dialogs;
 mod tests_progress;
 #[cfg(test)]
 mod tests_settings;
+#[cfg(test)]
+mod tests_update;
 mod theme;
 mod tray;
 
@@ -335,6 +337,9 @@ fn gui(cli: cli::Cli, socket: String) -> ExitCode {
         viewport,
         ..Default::default()
     };
+    // After an update: the new program starts once this one has closed (and let go of the socket).
+    let restart = app.restart.clone();
+    app.check_for_update(true);
     let run = eframe::run_native(
         "lider",
         options,
@@ -362,6 +367,11 @@ fn gui(cli: cli::Cli, socket: String) -> ExitCode {
             }))
         }),
     );
+    if let Some(p) = restart.lock().unwrap_or_else(|e| e.into_inner()).take()
+        && let Err(e) = std::process::Command::new(&p).spawn()
+    {
+        eprintln!("lider: cannot start {}: {e}", p.display());
+    }
     match run {
         Ok(()) => ExitCode::SUCCESS,
         Err(e) => {

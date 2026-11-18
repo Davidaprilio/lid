@@ -172,6 +172,8 @@ pub struct Add {
     pub variant: Option<Variant>,
     file_name: String,
     new_category: Option<CategoryForm>,
+    /// Another window took over (Download yt-dlp?): close on the next frame.
+    close_now: bool,
 }
 
 impl Add {
@@ -211,6 +213,7 @@ impl Add {
             variant: None,
             file_name: String::new(),
             new_category: None,
+            close_now: false,
         }
     }
 }
@@ -334,16 +337,21 @@ impl Add {
         self.page = Page::Busy;
         if media::is_youtube(&self.flow_url) {
             if !media::available() {
-                // The "Download yt-dlp?" window comes with phase E4.
-                self.asking = Asking::CloseAfter;
-                self.pending_box = Some(
-                    MsgBox::info(
-                        "LID",
-                        "Downloading from YouTube needs yt-dlp, which is not on this computer yet. Downloading it from LID comes with the update window (phase E4 of docs/egui/PLAN.md); until then install it with: pip install yt-dlp",
-                    )
-                    .with_icon("info", true),
-                );
-                return false;
+                // "Download yt-dlp?" takes over; this address is added again once yt-dlp is there.
+                let request = Request::AddUrl {
+                    url: self.flow_url.clone(),
+                    referer: self.referer.clone(),
+                    parent_page: self.parent_page.clone(),
+                    headers: self
+                        .headers
+                        .iter()
+                        .map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone())))
+                        .collect(),
+                    filename: self.browser_name.clone(),
+                };
+                super::update::offer_yt_dlp(app, request);
+                self.close_now = true;
+                return true;
             }
             let slot: Slot<Result<MediaInfo, String>> = Default::default();
             let s = slot.clone();
@@ -671,6 +679,10 @@ impl Add {
 
 impl Body for Add {
     fn ui(&mut self, app: &mut App, ui: &mut Ui, cx: &mut Cx) {
+        if self.close_now {
+            cx.close = true;
+            return;
+        }
         if let Some(r) = take(&self.probe) {
             self.probe = None;
             self.probed(app, cx, r);
@@ -1338,12 +1350,14 @@ impl Body for Batch {
                         label: "Yes",
                         primary: true,
                         danger: false,
+                        left: false,
                     },
                     Button {
                         id: "no",
                         label: "No",
                         primary: false,
                         danger: false,
+                        left: false,
                     },
                 ]),
             );

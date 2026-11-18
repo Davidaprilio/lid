@@ -102,10 +102,31 @@ references) moves into `lider-gui` without the JSON bridge: the window calls the
 - The rules of `src-tauri/src/dialogs.rs` are ported into the dialogs (src-tauri goes away in E6).
 - Tests: 27 more kittest checks (45 in lider-gui), including the 28 checks of the Tauri dialog scenario
   except Alt+C on the Scheduler. Every field has an accessible name (kittest checks it).
-- `[~]` left: Alt mnemonics (with E1's); "Download yt-dlp?" and the Updates panel come with E4; the links
+- `[~]` left: Alt mnemonics (with E1's); the links
   list has no Shift/Ctrl selection; the category form replaces the window's content instead of floating over
   it; Choose Font previews the size, not the family (egui draws only the fonts it loaded).
 - To check by hand: a dialog opened from the tray (the browser's "Download with LID" while LID is hidden).
+
+**E4 (2026-11-19): updater and yt-dlp, done.**
+- The updater moved out of Tauri into `lider_core::update`: the releases list and the channel (Stable or
+  Pre-release), `updates.json` (check at start, channel, skipped version), `latest.json` (the Tauri updater's
+  format, so releases of both builds update each other), the minisign check against LID's key (the same key
+  as `tauri.conf.json`; a file signed by the real release key verifies), the AppImage replaced whole (written
+  beside it, then moved over it), the Windows installer started with `/P /UPDATE /R`. src-tauri reuses it.
+- The window: a quiet check 5 s after start (not in a source checkout unless `LIDER_UPDATE_CHECK=1`; it waits
+  while another question is open), the offer (Skip this version / Later / Update now, or Open release page for
+  a deb or Arch install), "Updating LID" with its progress and Cancel, "LID was not updated" with the reason,
+  then LID closes and the new program starts once the old one has let go of its socket. Options → General has
+  the Updates panel (check at start, versions, Check now).
+- "Download yt-dlp?" and "Downloading yt-dlp" (checked against the release's SHA2-256SUMS); the address that
+  needed it is added again afterwards.
+- Tests: core (newest version, prefs, AppImage replacement, a local signed release: good signature, another
+  key, a changed file, the releases list) and kittest (Check now and Skip, the offer, a refused signature,
+  "Download yt-dlp?"). End to end under Xvfb: a release served locally and signed with the real key replaced a
+  stand-in AppImage and started the new program. `LIDER_UPDATE_API` and `LIDER_UPDATE_KEY` point a build at a
+  test release.
+- For E6: the release workflow keeps signing with `cargo tauri signer sign` (or `minisign`) and writing
+  `latest.json`; no Tauri is needed to read them.
 
 ## Decisions
 

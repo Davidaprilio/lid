@@ -40,3 +40,5 @@ tray-icon = "0.25"
 [dev-dependencies]
 egui_kittest = "0.37"
 tempfile = "3"
+minisign = "0.7"
+base64 = "0.22"

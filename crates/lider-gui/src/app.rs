@@ -133,6 +133,12 @@ pub struct App {
     pub requests: Vec<Request>,
     /// The open dialog windows (crate::dialogs).
     pub dialogs: Vec<Dialog>,
+    /// The running check for a newer LID.
+    pub update_check: Option<dialogs::update::Check>,
+    /// What the last check found (Options → General shows it).
+    pub update_note: String,
+    /// After an update: the program to start once this one has closed.
+    pub restart: std::sync::Arc<std::sync::Mutex<Option<std::path::PathBuf>>>,
     /// A font chosen in Choose Font for the Options window (it takes it on its next frame).
     pub font_chosen: Option<String>,
     /// Lines from the instance socket (other starts, the browser helper), taken each tick.
@@ -201,6 +207,9 @@ impl App {
             requests: vec![],
             dialogs: vec![],
             font_chosen: None,
+            update_check: None,
+            update_note: String::new(),
+            restart: Default::default(),
             inbox: Default::default(),
             clip_seen: None,
             last_clip: String::new(),
@@ -227,6 +236,7 @@ impl App {
         let events = self.manager.poll(None);
         self.handle_events(&events);
         self.countdown();
+        self.update_checked();
         self.take_requests();
         self.rebuild();
         true
@@ -368,6 +378,7 @@ impl App {
                     label: "Cancel",
                     primary: true,
                     danger: false,
+                    left: false,
                 }]),
         );
         if let Some(b) = &mut self.boxx {
@@ -608,6 +619,7 @@ impl App {
             },
             primary: false,
             danger: true,
+            left: false,
         }];
         if background {
             buttons.push(Button {
@@ -615,6 +627,7 @@ impl App {
                 label: "Continue in background",
                 primary: true,
                 danger: false,
+                left: false,
             });
         }
         buttons.push(Button {
@@ -622,6 +635,7 @@ impl App {
             label: "Keep downloading",
             primary: false,
             danger: false,
+            left: false,
         });
         let mut b = MsgBox::question(&title, &text, Then::CloseChoice)
             .with_icon("queue", false)
@@ -679,12 +693,14 @@ impl App {
                     label: "Not now",
                     primary: false,
                     danger: false,
+                    left: false,
                 },
                 Button {
                     id: "add",
                     label: "Add to menu",
                     primary: true,
                     danger: false,
+                    left: false,
                 },
             ]),
         );
@@ -1282,6 +1298,7 @@ impl App {
                 _ => {}
             },
             Then::PowerOff => self.power_off_at = None,
+            Then::Update(f) => self.update_answer(a.button, *f),
             Then::OfferMenu if a.button == "add" => {
                 if let Err(e) = os().add_to_menu() {
                     self.info("LID", &e.to_string());
