@@ -3337,6 +3337,7 @@ dependencies = [
  "egui",
  "egui_extras",
  "egui_kittest",
+ "encoding_rs",
  "image",
  "include_dir",
  "ksni",
