@@ -141,12 +141,14 @@ pub fn show(app: &mut App, ui: &mut Ui) {
             None => app.boxx = Some(b),
         }
     }
+    crate::dialogs::show_all(app, ui.ctx());
 }
 
 // ---------------------------------------------------------------------- keyboard
 
 fn keyboard(app: &mut App, ctx: &egui::Context) {
-    if app.boxx.is_some() {
+    // Drawn over the main window (the test harness), a dialog has the keys.
+    if app.boxx.is_some() || (ctx.embed_viewports() && !app.dialogs.is_empty()) {
         return;
     }
     let typing = ctx.egui_wants_keyboard_input();
@@ -1189,6 +1191,18 @@ fn details(app: &mut App, ui: &mut Ui) {
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             if close_button(ui, &p, "Hide the details pane") {
                 app.run("details");
+            }
+            let id = app.view.details.as_ref().map(|d| d.id);
+            let open = ui
+                .add_enabled(
+                    id.is_some(),
+                    egui::Button::image(icon("open-window", 13.0, &p, p.mu)).frame(false),
+                )
+                .on_hover_text("Open in a window");
+            if open.clicked()
+                && let Some(id) = id
+            {
+                crate::dialogs::progress::open(app, id, true);
             }
         });
     });

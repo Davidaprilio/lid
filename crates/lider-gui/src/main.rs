@@ -10,11 +10,20 @@
 
 mod app;
 mod boxes;
+mod dialogs;
 mod fonts;
 mod icons;
 mod main_window;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_add;
+#[cfg(test)]
+mod tests_dialogs;
+#[cfg(test)]
+mod tests_progress;
+#[cfg(test)]
+mod tests_settings;
 mod theme;
 mod tray;
 
@@ -176,6 +185,12 @@ impl eframe::App for Window {
             theme::apply(ctx, self.app.theme);
         }
         self.effects();
+        // A dialog opened while the window is hidden (in the tray): the hidden window needs a full pass
+        // to make the dialog's own window.
+        if self.app.dialogs.iter().any(|d| !d.shown) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::RequestPaintWhileHidden);
+            ctx.request_repaint();
+        }
         ctx.request_repaint_after(app::TICK);
     }
 
@@ -188,6 +203,7 @@ impl eframe::App for Window {
         if !self.app.quit {
             self.app.stop_and_exit();
         }
+        self.app.close_all_dialogs();
         self.tray = None;
     }
 }
@@ -280,6 +296,14 @@ fn gui(cli: cli::Cli, socket: String) -> ExitCode {
     {
         let mut inbox = app.inbox.lock().unwrap_or_else(|e| e.into_inner());
         inbox.extend(cli.urls.iter().cloned());
+    }
+    // Debug builds: LIDER_RUN="action;action" runs menu actions at start (screenshots of dialogs).
+    #[cfg(debug_assertions)]
+    if let Ok(actions) = std::env::var("LIDER_RUN") {
+        app.tick();
+        for a in actions.split(';').filter(|a| !a.is_empty()) {
+            app.run(a);
+        }
     }
     if offer_menu && !start_hidden {
         let name = sys.self_contained_name().unwrap_or_else(|| "LID".into());

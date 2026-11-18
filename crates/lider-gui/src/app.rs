@@ -19,6 +19,7 @@ use lider_sys::platform::prelude::*;
 use serde_json::{Map, Value};
 
 use crate::boxes::{Answer, Button, MsgBox, Then};
+use crate::dialogs::{self, Dialog};
 use crate::theme::{Palette, ThemeName};
 
 pub const TICK: Duration = Duration::from_millis(500);
@@ -58,7 +59,7 @@ pub enum Effect {
     PowerOff,
 }
 
-/// A window that a dialog of phase E3 opens; until then each shows a note.
+/// A dialog window that the manager, another start or the browser asks for (opened on the next tick).
 #[derive(Debug, Clone, PartialEq)]
 pub enum Request {
     /// Add one address (the add flow: probe, duplicate rule, Download File Info).
@@ -128,8 +129,12 @@ pub struct App {
     last_tick: Option<Instant>,
     /// What the window should do on the desktop (drained each frame).
     pub effects: Vec<Effect>,
-    /// Windows a dialog of phase E3 opens.
+    /// Dialog windows asked for; opened on the next tick.
     pub requests: Vec<Request>,
+    /// The open dialog windows (crate::dialogs).
+    pub dialogs: Vec<Dialog>,
+    /// A font chosen in Choose Font for the Options window (it takes it on its next frame).
+    pub font_chosen: Option<String>,
     /// Lines from the instance socket (other starts, the browser helper), taken each tick.
     pub inbox: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
     /// The clipboard text of the last tick: None until the first read, so only a change counts.
@@ -191,6 +196,8 @@ impl App {
             last_tick: None,
             effects: vec![],
             requests: vec![],
+            dialogs: vec![],
+            font_chosen: None,
             inbox: Default::default(),
             clip_seen: None,
             last_clip: String::new(),
@@ -266,10 +273,14 @@ impl App {
             match e.kind {
                 EventKind::Complete => self.download_complete(id),
                 EventKind::Error => {
-                    let text = format!("{}\n{}", self.file_of(id), e.message);
-                    self.notify("Download failed", &text);
+                    // The progress window shows the error itself.
+                    if !self.dialog_open(&dialogs::progress::label(id)) {
+                        let text = format!("{}\n{}", self.file_of(id), e.message);
+                        self.notify("Download failed", &text);
+                    }
                 }
                 EventKind::Mismatch => {
+                    self.close_dialog(&dialogs::progress::label(id));
                     if e.message == "kept" {
                         let text = format!("{}\nThe file was kept.", self.file_of(id));
                         self.notify("Checksum mismatch", &text);
@@ -306,11 +317,37 @@ impl App {
         }
     }
 
+    /// A download finished: its progress window closes; "Download complete" (or a notification), then
+    /// what the progress window's "on completion" options ask for.
     fn download_complete(&mut self, id: i64) {
-        let name = self.file_of(id);
-        // "Download complete" (a dialog of phase E3) shows as a notification until then, as it does
-        // when that dialog is turned off.
-        self.notify("Download complete", &name);
+        let mut opts = dialogs::progress::completion_options(self, id).unwrap_or(
+            dialogs::progress::CompletionOptions {
+                show_complete: self.manager.settings.show_complete_dialog,
+                exit: false,
+                shutdown: false,
+            },
+        );
+        self.close_dialog(&dialogs::progress::label(id));
+        let in_running_queue = self
+            .manager
+            .downloads
+            .get(&id)
+            .and_then(|d| self.manager.queues.get(&d.queue))
+            .is_some_and(|q| q.running);
+        if in_running_queue {
+            opts.show_complete = false;
+        }
+        if opts.show_complete {
+            dialogs::complete::complete(self, id);
+        } else {
+            let name = self.file_of(id);
+            self.notify("Download complete", &name);
+        }
+        if opts.shutdown {
+            self.start_power_off();
+        } else if opts.exit {
+            self.exit();
+        }
     }
 
     // ------------------------------------------------------------------ the power-off countdown
@@ -482,22 +519,18 @@ impl App {
         }
     }
 
-    /// Until the dialogs of phase E3 exist, a request shows what it would open.
-    fn take_requests(&mut self) {
-        if self.boxx.is_some() {
-            return;
-        }
-        let Some(r) = (!self.requests.is_empty()).then(|| self.requests.remove(0)) else {
-            return;
-        };
-        match r {
-            Request::AddUrl { url, .. } => self.later(&format!("Download File Info for {url}")),
-            Request::Links { items, .. } => {
-                self.later(&format!("Download All Links ({} links)", items.len()))
-            }
-            Request::Mismatch(id) => {
-                let name = self.file_of(id);
-                self.later(&format!("Checksum mismatch for {name}"))
+    /// Open the windows asked for.
+    pub fn take_requests(&mut self) {
+        for r in std::mem::take(&mut self.requests) {
+            match r {
+                r @ Request::AddUrl { .. } => dialogs::add::from_request(self, r),
+                Request::Links {
+                    items,
+                    referer,
+                    parent_page,
+                    headers,
+                } => dialogs::links::open(self, items, referer, parent_page, headers),
+                Request::Mismatch(id) => dialogs::complete::mismatch(self, id),
             }
         }
     }
@@ -605,6 +638,7 @@ impl App {
 
     pub fn stop_and_exit(&mut self) {
         self.closing = true;
+        self.close_all_dialogs();
         self.save_settings();
         self.manager.shutdown();
         self.effects.push(Effect::Close);
@@ -727,8 +761,9 @@ impl App {
         self.boxx = Some(MsgBox::info(title, text));
     }
 
-    /// A window of the dialogs phase that is not built yet.
-    fn later(&mut self, what: &str) {
+    /// A window that is not built yet.
+    #[allow(dead_code)]
+    pub fn later(&mut self, what: &str) {
         self.info(
             "LID",
             &format!(
@@ -755,7 +790,9 @@ impl App {
                 }
             }
             "resume" => {
-                for i in self.targets() {
+                let ids = self.targets();
+                let one = ids.len() == 1 && !self.manager.settings.show_details;
+                for i in ids {
                     let start = self
                         .manager
                         .downloads
@@ -764,6 +801,9 @@ impl App {
                         && !self.manager.is_running(i);
                     if start {
                         self.manager.start(i);
+                        if one {
+                            dialogs::progress::open(self, i, false);
+                        }
                     }
                 }
             }
@@ -869,7 +909,11 @@ impl App {
                 if urls.is_empty() {
                     self.info("LID", "Cannot find any web address in the clipboard!");
                 } else {
-                    self.later("Download All Links");
+                    let items = urls
+                        .iter()
+                        .map(|u| (u.to_string(), String::new(), "a".to_string()))
+                        .collect();
+                    dialogs::links::open(self, items, String::new(), String::new(), Map::new());
                 }
             }
             // Context menu of the list.
@@ -916,18 +960,26 @@ impl App {
                     Then::DeleteCategory(arg.into()),
                 ));
             }
-            // Windows of phase E3.
-            "add" => self.later("Enter new address to download"),
-            "batch" => self.later("Batch download"),
-            "grabber" => self.later("The site grabber"),
-            "scheduler" | "q_scheduler" => self.later("The Scheduler"),
-            "limiter_settings" => self.later("Speed Limiter settings"),
-            "options" | "appearance" => self.later("LID options"),
-            "columns" => self.later("Columns"),
-            "font_choose" => self.later("Choose Font"),
-            "find_settings" => self.later("LID Search settings"),
-            "ctx_properties" | "cat_add" | "cat_properties" => self.later("This window"),
-            "ctx_check_hash" => self.later("Check hash"),
+            // Dialog windows.
+            "add" => dialogs::add::add_url(self),
+            "batch" => dialogs::add::batch(self),
+            "grabber" => dialogs::links::grabber(self),
+            "scheduler" => dialogs::scheduler::open(self, MAIN_QUEUE),
+            "q_scheduler" => {
+                let q = if arg.is_empty() { MAIN_QUEUE } else { arg };
+                dialogs::scheduler::open(self, q)
+            }
+            "limiter_settings" => dialogs::small::limiter(self),
+            "options" => dialogs::options::open(self, ""),
+            "appearance" => dialogs::options::open(self, "Appearance"),
+            "browsers" => dialogs::browsers::open(self),
+            "columns" => dialogs::small::columns(self),
+            "font_choose" => dialogs::small::font(self, None),
+            "find_settings" => dialogs::small::find(self, false),
+            "cat_add" => dialogs::small::category(self, None),
+            "cat_properties" => dialogs::small::category(self, Some(arg)),
+            "ctx_properties" => self.first_target(dialogs::properties::open),
+            "ctx_check_hash" => self.first_target(dialogs::checkhash::open),
             _ => {}
         }
         self.rebuild();
@@ -959,9 +1011,12 @@ impl App {
             .get(&id)
             .is_some_and(|d| d.status == Status::Complete);
         if complete {
-            self.later("File Properties");
-        } else if !self.manager.is_running(id) {
-            self.manager.start(id);
+            dialogs::properties::open(self, id);
+        } else {
+            if !self.manager.is_running(id) {
+                self.manager.start(id);
+            }
+            dialogs::progress::open(self, id, false);
         }
         self.rebuild();
     }
@@ -1088,7 +1143,7 @@ impl App {
 
     // ------------------------------------------------------------------ search
 
-    fn persist_search(&mut self) {
+    pub fn save_search(&mut self) {
         self.manager.settings.search_string = self.search.query.clone();
         self.manager.settings.search_flags = self.search.flags;
         self.save_settings();
@@ -1100,7 +1155,7 @@ impl App {
         self.search.active = !self.search.query.is_empty();
         let checked = self.search.validate().map_err(|e| e.to_string());
         self.finder = FindNext::new(self.search.clone());
-        self.persist_search();
+        self.save_search();
         if let Err(e) = checked {
             self.info("LID Search settings", &e);
         }
@@ -1116,9 +1171,19 @@ impl App {
     /// F3: select the next match in the list as it is shown.
     pub fn find_next(&mut self) {
         if self.search.query.is_empty() {
-            self.later("LID Search settings");
+            dialogs::small::find(self, true);
             return;
         }
+        match self.find_next_match() {
+            Ok(Some(_)) => {}
+            Ok(None) => self.info("Find file", "No such files found"),
+            Err(e) => self.info("LID Search settings", &e),
+        }
+        self.rebuild();
+    }
+
+    /// Select the next match in the list as it is shown; its id, None when nothing matches.
+    pub fn find_next_match(&mut self) -> Result<Option<i64>, String> {
         let rows: Vec<lider_core::models::Download> = self
             .visible
             .iter()
@@ -1126,18 +1191,15 @@ impl App {
             .collect();
         self.finder.settings.query = self.search.query.clone();
         self.finder.settings.flags = self.search.flags;
-        match self.finder.next(&rows) {
-            Ok(Some(i)) => {
-                let id = rows[i].id;
-                self.selected = vec![id];
-                self.current = Some(id);
-                self.scroll_to = Some(id);
-            }
-            Ok(None) => self.info("Find file", "No such files found"),
-            Err(e) => self.info("LID Search settings", &e.to_string()),
+        let found = self.finder.next(&rows).map_err(|e| e.to_string());
+        let id = found.as_ref().ok().copied().flatten().map(|i| rows[i].id);
+        if let Some(id) = id {
+            self.selected = vec![id];
+            self.current = Some(id);
+            self.scroll_to = Some(id);
         }
-        self.persist_search();
-        self.rebuild();
+        self.save_search();
+        found.map(|_| id)
     }
 
     // ------------------------------------------------------------------ export, import, boxes

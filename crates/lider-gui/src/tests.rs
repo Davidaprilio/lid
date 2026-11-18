@@ -15,7 +15,7 @@ use crate::app::App;
 use crate::main_window;
 use crate::theme::ThemeName;
 
-fn copy_dir(from: &Path, to: &Path) {
+pub(crate) fn copy_dir(from: &Path, to: &Path) {
     std::fs::create_dir_all(to).unwrap();
     for e in std::fs::read_dir(from).unwrap().flatten() {
         let target = to.join(e.file_name());
@@ -28,7 +28,7 @@ fn copy_dir(from: &Path, to: &Path) {
 }
 
 /// The app on a temporary copy of tests/golden/v1.2 (the real home is never touched).
-fn golden() -> (tempfile::TempDir, App) {
+pub(crate) fn golden() -> (tempfile::TempDir, App) {
     let tmp = tempfile::tempdir().unwrap();
     let golden = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tests/golden/v1.2");
     copy_dir(&golden, tmp.path());
@@ -51,7 +51,7 @@ fn golden() -> (tempfile::TempDir, App) {
     (tmp, app)
 }
 
-fn harness(app: App) -> Harness<'static, App> {
+pub(crate) fn harness(app: App) -> Harness<'static, App> {
     // The same system fonts as the program (decision G1): CJK file names must have their glyphs.
     let mut fonts_ready = false;
     Harness::builder()
@@ -70,7 +70,7 @@ fn harness(app: App) -> Harness<'static, App> {
 }
 
 /// The names of the rows as the list shows them, in order.
-fn names(app: &App) -> Vec<String> {
+pub(crate) fn names(app: &App) -> Vec<String> {
     let at = app
         .view
         .columns
@@ -356,7 +356,7 @@ fn view_menu_theme_toolbar_and_tips() {
 
 use crate::app::{Effect, Request};
 
-fn box_title(app: &App) -> String {
+pub(crate) fn box_title(app: &App) -> String {
     app.boxx
         .as_ref()
         .map(|b| b.title.clone())
@@ -474,13 +474,13 @@ fn ctrl_v_adds_the_pasted_addresses() {
 }
 
 /// A server that accepts and never answers: a download to it keeps running.
-fn silent_server() -> (std::net::TcpListener, String) {
+pub(crate) fn silent_server() -> (std::net::TcpListener, String) {
     let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
     let url = format!("http://{}/never.bin", l.local_addr().unwrap());
     (l, url)
 }
 
-fn start_running(app: &mut App, url: &str, dir: &Path) -> i64 {
+pub(crate) fn start_running(app: &mut App, url: &str, dir: &Path) -> i64 {
     // The golden profile's proxy (127.0.0.1:8080) is not there: connect straight.
     app.manager.settings.proxy.clear();
     let d = app.manager.add(
@@ -663,17 +663,26 @@ fn manager_events_become_notifications() {
         .collect();
     assert_eq!(
         titles,
-        [
-            "Download complete",
-            "Download failed",
-            "Checksum mismatch",
-            "Checksum mismatch"
-        ]
+        ["Download failed", "Checksum mismatch", "Checksum mismatch"]
     );
     assert!(app.effects.contains(&Effect::Notify(
         "Download failed".into(),
         format!("{name}\nHTTP 404")
     )));
+    assert!(
+        app.dialog_open(&crate::dialogs::complete::label(id)),
+        "Download complete opens its window"
+    );
+    // With that window turned off, a notification says it.
+    app.close_dialog(&crate::dialogs::complete::label(id));
+    app.effects.clear();
+    app.manager.settings.show_complete_dialog = false;
+    app.handle_events(&[ev(EventKind::Complete, "")]);
+    assert_eq!(
+        app.effects,
+        [Effect::Notify("Download complete".into(), name.clone())]
+    );
+    app.effects.clear();
     assert_eq!(
         app.requests,
         [Request::Mismatch(id)],

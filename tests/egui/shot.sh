@@ -4,7 +4,10 @@
 #
 #     tests/egui/shot.sh OUT.png ['{"theme": "ember", "show_details": true}'] [WIDTHxHEIGHT]
 #
-# The JSON is merged into the copy's settings.json. Needs xvfb-run and ImageMagick's import (/usr/bin).
+# LIDER_RUN="action;action" (debug builds) runs menu actions at start, e.g. LIDER_RUN=options for a dialog.
+#
+# The JSON is merged into the copy's settings.json. Needs xvfb-run, xdotool and ImageMagick's import
+# (/usr/bin).
 set -eu
 cd "$(dirname "$0")/../.."
 out="$(realpath -m "${1:?usage: tests/egui/shot.sh OUT.png [settings-json] [WxH]}")"
@@ -21,6 +24,14 @@ env -u WAYLAND_DISPLAY XDG_CONFIG_HOME=$work/config XDG_DATA_HOME=$work/data XDG
     LIDER_SOCKET_NAME=lider-egui-shot-\$\$ $PWD/target/debug/lider-egui > $work/app.log 2>&1 &
 pid=\$!
 sleep 5
+# No window manager under Xvfb: move the dialog windows beside the main window and raise them.
+x=120
+for w in \$(xdotool search --onlyvisible --name . 2>/dev/null); do
+    case "\$(xdotool getwindowname \$w)" in "Linux Internet Downloader"*) continue ;; esac
+    xdotool windowmove \$w \$x 60 windowraise \$w
+    x=\$((x + 60))
+done
+sleep 1
 /usr/bin/import -window root "$out"
 kill \$pid
 SH

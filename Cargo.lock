@@ -3346,6 +3346,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "tokio",
+ "trash",
  "tray-icon",
 ]
 
