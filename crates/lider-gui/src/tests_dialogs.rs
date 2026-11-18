@@ -18,6 +18,16 @@ pub(crate) fn click(h: &mut H, label: &str) {
     h.run();
 }
 
+/// Press the topmost button with this label (a form floating over a window has its own OK).
+pub(crate) fn click_top(h: &mut H, label: &str) {
+    let last = h
+        .query_all_by_role_and_label(egui::accesskit::Role::Button, label)
+        .last()
+        .expect("no such button");
+    last.click();
+    h.run();
+}
+
 /// Something with this label shows (the window title and the header may both say it).
 pub(crate) fn shows(h: &H, label: &str) -> bool {
     h.query_all_by_label(label).next().is_some()
@@ -283,4 +293,212 @@ fn a_mismatch_keeps_or_deletes_the_file() {
         !h.state().manager.downloads.contains_key(&id),
         "Delete file removes it"
     );
+}
+
+// ---------------------------------------------------------------------- phase E5: the parity walk
+
+fn body<T: 'static>(h: &mut H) -> &mut T {
+    h.state_mut()
+        .dialogs
+        .iter_mut()
+        .find_map(|d| d.body.as_any().downcast_mut::<T>())
+        .expect("the dialog is open")
+}
+
+#[test]
+fn alt_mnemonics_press_buttons_and_check_boxes() {
+    use egui::{Key, Modifiers};
+    let (_tmp, app) = golden();
+    let mut h = harness(app);
+    // The Tauri dialog scenario: Alt+C (the mnemonic of Close) closes the Scheduler.
+    h.state_mut().run("scheduler");
+    h.run();
+    assert!(shows(&h, "Scheduler"));
+    h.key_press_modifiers(Modifiers::ALT, Key::C);
+    h.run();
+    assert!(h.state().dialogs.is_empty(), "Alt+C closes the Scheduler");
+    // "Use &authorization": Alt+A checks it; "O&K" with no address keeps the window.
+    h.state_mut().run("add");
+    h.run();
+    body::<crate::dialogs::add::Add>(&mut h).address.clear();
+    h.key_press_modifiers(Modifiers::ALT, Key::A);
+    h.run();
+    assert!(body::<crate::dialogs::add::Add>(&mut h).use_auth);
+    h.key_press_modifiers(Modifiers::ALT, Key::K);
+    h.run();
+    assert_eq!(
+        body::<crate::dialogs::add::Add>(&mut h).page,
+        crate::dialogs::add::Page::Address
+    );
+    // "&Cancel" closes it.
+    h.key_press_modifiers(Modifiers::ALT, Key::C);
+    h.run();
+    assert!(h.state().dialogs.is_empty());
+}
+
+#[test]
+fn the_links_list_selects_and_space_toggles_checks() {
+    use crate::dialogs::links::Links;
+    use egui::{Key, Modifiers};
+    let (_tmp, app) = golden();
+    let mut h = harness(app);
+    let items = ["a.zip", "b.zip", "c.zip"]
+        .iter()
+        .map(|n| {
+            (
+                format!("http://127.0.0.1:9/{n}"),
+                String::new(),
+                "a".to_string(),
+            )
+        })
+        .collect();
+    crate::dialogs::links::open(
+        h.state_mut(),
+        items,
+        String::new(),
+        String::new(),
+        Default::default(),
+    );
+    h.run();
+    assert_eq!(body::<Links>(&mut h).checked, [true, true, true]);
+    // The header box: all checked, so it unchecks all; again, it checks all.
+    h.get_by_role_and_label(egui::accesskit::Role::CheckBox, "Check all")
+        .click();
+    h.run();
+    assert_eq!(body::<Links>(&mut h).checked, [false, false, false]);
+    // A click on a row selects it; Shift+click extends; Space checks the selection.
+    h.get_by_role_and_label(egui::accesskit::Role::Label, "b.zip")
+        .click();
+    h.run();
+    assert_eq!(body::<Links>(&mut h).selected, [1]);
+    body::<Links>(&mut h).click(2, false, true);
+    assert_eq!(body::<Links>(&mut h).selected, [1, 2]);
+    h.key_press(Key::Space);
+    h.run();
+    assert_eq!(body::<Links>(&mut h).checked, [false, true, true]);
+    // Ctrl+click toggles one row; Ctrl+A selects all, and Space gives all the first one's opposite.
+    body::<Links>(&mut h).click(1, true, false);
+    assert_eq!(body::<Links>(&mut h).selected, [2]);
+    h.key_press_modifiers(Modifiers::COMMAND, Key::A);
+    h.run();
+    assert_eq!(body::<Links>(&mut h).selected, [0, 1, 2]);
+    h.key_press(Key::Space);
+    h.run();
+    assert_eq!(body::<Links>(&mut h).checked, [true, true, true]);
+}
+
+#[test]
+fn the_category_form_floats_over_download_file_info() {
+    use crate::dialogs::add::{Add, Page};
+    let (_tmp, mut app) = golden();
+    app.manager.settings.proxy.clear();
+    let mut h = harness(app);
+    crate::dialogs::add::from_request(
+        h.state_mut(),
+        crate::app::Request::add("http://127.0.0.1:9/x.zip"),
+    );
+    let end = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while h.query_by_label_contains("Add it anyway?").is_none() {
+        assert!(std::time::Instant::now() < end, "the probe answers");
+        std::thread::sleep(std::time::Duration::from_millis(30));
+        h.run();
+    }
+    click(&mut h, "Yes");
+    assert_eq!(body::<Add>(&mut h).page, Page::Info);
+    click(&mut h, "+");
+    assert!(shows(&h, "New category"), "the form opens");
+    assert!(
+        shows(&h, "Start Download"),
+        "Download File Info stays under it"
+    );
+    {
+        let a = body::<Add>(&mut h);
+        let f = crate::dialogs::add::new_category_form(a).expect("the form is open");
+        f.name = "Floating".into();
+    }
+    click_top(&mut h, "OK");
+    assert_eq!(body::<Add>(&mut h).category, "Floating", "and is selected");
+    assert!(
+        h.state()
+            .manager
+            .settings
+            .categories
+            .iter()
+            .any(|c| c.name == "Floating")
+    );
+}
+
+#[test]
+fn the_scheduler_calendar_picks_a_date() {
+    use crate::dialogs::scheduler::Scheduler;
+    let (_tmp, app) = golden();
+    let mut h = harness(app);
+    h.state_mut().run("scheduler");
+    h.run();
+    {
+        let s = body::<Scheduler>(&mut h);
+        s.sch.start_enabled = true;
+        s.sch.daily = false;
+        s.date = "2031-03-02".into();
+    }
+    h.run();
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "Choose a date")
+        .click();
+    h.run();
+    assert!(
+        shows(&h, "March 2031"),
+        "the calendar shows the date's month"
+    );
+    h.get_by_role_and_label(egui::accesskit::Role::Button, "15")
+        .click();
+    h.run();
+    assert_eq!(body::<Scheduler>(&mut h).date, "2031-03-15");
+}
+
+#[test]
+fn columns_move_by_dragging_a_title() {
+    use egui::{Event, PointerButton, Pos2};
+    use egui_kittest::kittest::NodeT;
+    let (_tmp, app) = golden();
+    let mut h = harness(app);
+    h.state_mut().run("columns");
+    h.run();
+    let at = |h: &H, title: &str| {
+        let r = h
+            .get_by_role_and_label(egui::accesskit::Role::Button, title)
+            .accesskit_node()
+            .bounding_box()
+            .unwrap();
+        Pos2::new(((r.x0 + r.x1) / 2.0) as f32, ((r.y0 + r.y1) / 2.0) as f32)
+    };
+    let from = at(&h, "Description");
+    let to = at(&h, "File Name");
+    let press = |pos: Pos2, pressed: bool| Event::PointerButton {
+        pos,
+        button: PointerButton::Primary,
+        pressed,
+        modifiers: Default::default(),
+    };
+    h.event(Event::PointerMoved(from));
+    h.run();
+    h.event(press(from, true));
+    h.run();
+    for k in 1..=6 {
+        let t = k as f32 / 6.0;
+        h.event(Event::PointerMoved(from + (to - from) * t));
+        h.run();
+    }
+    h.event(press(to, false));
+    h.run();
+    h.run();
+    let keys: Vec<String> = body::<Columns>(&mut h)
+        .cols
+        .iter()
+        .map(|c| c.0.clone())
+        .collect();
+    assert_eq!(
+        keys[1], "description",
+        "Description is where File Name was: {keys:?}"
+    );
+    assert_eq!(keys[2], "filename");
 }

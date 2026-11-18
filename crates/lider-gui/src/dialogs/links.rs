@@ -45,6 +45,10 @@ pub struct Links {
     headers: Vec<(String, String)>,
     pub rows: Vec<LinkRow>,
     pub checked: Vec<bool>,
+    /// The selected rows (click, Ctrl, Shift, Ctrl+A); Space toggles their checks.
+    pub selected: Vec<usize>,
+    /// The row Shift selects from.
+    anchor: Option<usize>,
     pub hide_html: bool,
     pub hide_images: bool,
     pub hide_repeated: bool,
@@ -74,6 +78,8 @@ impl Links {
             headers: vec![],
             rows: vec![],
             checked: vec![],
+            selected: vec![],
+            anchor: None,
             hide_html: true,
             hide_images: false,
             hide_repeated: true,
@@ -98,6 +104,46 @@ impl Links {
         };
         self.rows = lider_core::links::rows(&app.manager.settings, &self.links, f);
         self.checked = self.rows.iter().map(|r| r.checked).collect();
+        self.selected.clear();
+        self.anchor = None;
+    }
+
+    /// A click on a row: plain selects it, Ctrl toggles it, Shift selects from the anchor to it.
+    pub fn click(&mut self, i: usize, ctrl: bool, shift: bool) {
+        if shift && let Some(a) = self.anchor {
+            let range: Vec<usize> = (a.min(i)..=a.max(i)).collect();
+            if ctrl {
+                for r in range {
+                    if !self.selected.contains(&r) {
+                        self.selected.push(r);
+                    }
+                }
+            } else {
+                self.selected = range;
+            }
+            return;
+        }
+        if ctrl {
+            if let Some(at) = self.selected.iter().position(|x| *x == i) {
+                self.selected.remove(at);
+            } else {
+                self.selected.push(i);
+            }
+        } else {
+            self.selected = vec![i];
+        }
+        self.anchor = Some(i);
+    }
+
+    /// Space: the selected rows all get the opposite of the first one's check.
+    pub fn toggle_selected(&mut self) {
+        let Some(first) = self.selected.first() else {
+            return;
+        };
+        let on = !self.checked[*first];
+        for i in &self.selected {
+            self.checked[*i] = on;
+        }
     }
 }
 
@@ -366,12 +412,12 @@ impl Links {
         let mut ok = false;
         let mut refill = false;
         let subtitle = format!("{} links found · check the ones to add", self.links.len());
-        let cats: Vec<(String, String)> = app
+        let cats: Vec<String> = app
             .manager
             .settings
             .categories
             .iter()
-            .map(|c| (c.name.clone(), c.name.clone()))
+            .map(|c| c.name.clone())
             .collect();
         kit::body(ui, |ui| {
             kit::header(
@@ -380,13 +426,49 @@ impl Links {
                 &Head::new("grabber", "Download All Links", &subtitle, Badge::None),
                 |_| {},
             );
+            // FILE fits the longest name, up to 480 px (1.x resizes the column to its contents).
+            let font = egui::TextStyle::Body.resolve(ui.style());
+            let name_w = self
+                .rows
+                .iter()
+                .map(|r| {
+                    ui.painter()
+                        .layout_no_wrap(r.name.clone(), font.clone(), p.tx)
+                        .size()
+                        .x
+                })
+                .fold(120.0_f32, f32::max)
+                .min(480.0)
+                + 4.0;
+            let gap = ui.spacing().item_spacing.x;
             kit::panel(ui, &p, |ui| {
                 ui.horizontal(|ui| {
-                    ui.add_space(28.0);
-                    ui.label(RichText::new("FILE").small().strong().color(p.mu));
-                    ui.add_space(200.0);
-                    ui.label(RichText::new("TYPE").small().strong().color(p.mu));
-                    ui.add_space(30.0);
+                    // The check-all box: checks everything, or unchecks it when all are checked.
+                    let all = !self.checked.is_empty() && self.checked.iter().all(|c| *c);
+                    let some = self.checked.iter().any(|c| *c);
+                    let mut on = all;
+                    let r =
+                        ui.add(egui::Checkbox::without_text(&mut on).indeterminate(some && !all));
+                    let r = r.on_hover_text("Check all");
+                    r.widget_info(|| {
+                        egui::WidgetInfo::selected(egui::Role::CheckBox, true, all, "Check all")
+                    });
+                    if r.clicked() {
+                        let to = !all;
+                        self.checked.iter_mut().for_each(|c| *c = to);
+                    }
+                    let head = |ui: &mut Ui, text: &str, w: f32| {
+                        ui.allocate_ui_with_layout(
+                            egui::vec2(w, 20.0),
+                            egui::Layout::left_to_right(egui::Align::Center),
+                            |ui| {
+                                ui.set_min_width(w);
+                                ui.label(RichText::new(text).small().strong().color(p.mu));
+                            },
+                        );
+                    };
+                    head(ui, "FILE", 16.0 + gap + name_w);
+                    head(ui, "TYPE", 64.0);
                     ui.label(RichText::new("ADDRESS").small().strong().color(p.mu));
                 });
                 egui::ScrollArea::vertical()
@@ -395,17 +477,19 @@ impl Links {
                     .auto_shrink([false, false])
                     .show(ui, |ui| {
                         ui.spacing_mut().item_spacing.y = 2.0;
+                        let mut clicked = None;
                         for (i, r) in self.rows.iter().enumerate() {
-                            ui.horizontal(|ui| {
-                                ui.add(egui::Checkbox::without_text(&mut self.checked[i]))
+                            let row = ui.horizontal(|ui| {
+                                let check = ui
+                                    .add(egui::Checkbox::without_text(&mut self.checked[i]))
                                     .accessible_name(&r.name);
                                 ui.add(icon(&r.icon, 16.0, &p, p.tx));
                                 let name = ui
                                     .allocate_ui_with_layout(
-                                        egui::vec2(214.0, 20.0),
+                                        egui::vec2(name_w, 20.0),
                                         egui::Layout::left_to_right(egui::Align::Center),
                                         |ui| {
-                                            ui.set_min_width(214.0);
+                                            ui.set_min_width(name_w);
                                             ui.add(egui::Label::new(&r.name).truncate())
                                         },
                                     )
@@ -426,7 +510,30 @@ impl Links {
                                     .truncate(),
                                 )
                                 .on_hover_text(&r.url);
+                                check.rect.right()
                             });
+                            // The row (right of its check box) selects; the selection is drawn over it.
+                            let mut rect = row.response.rect;
+                            rect.min.x = row.inner + 2.0;
+                            let hit = ui.interact(
+                                rect,
+                                ui.scope_id().with(("link-row", i)),
+                                egui::Sense::click(),
+                            );
+                            if self.selected.contains(&i) {
+                                ui.painter().rect_filled(
+                                    rect,
+                                    4.0,
+                                    crate::theme::alpha(p.ac, 0.14),
+                                );
+                            }
+                            if hit.clicked() {
+                                clicked = Some(i);
+                            }
+                        }
+                        if let Some(i) = clicked {
+                            let m = ui.input(|x| x.modifiers);
+                            self.click(i, m.command, m.shift);
                         }
                     });
             });
@@ -465,8 +572,9 @@ impl Links {
                             "All files to one category",
                         )
                         .id;
-                    if kit::combo_by(
+                    if kit::category_combo(
                         ui,
+                        &p,
                         "links-category",
                         180.0,
                         &mut self.one_category,
@@ -484,7 +592,7 @@ impl Links {
                             "All files to one directory",
                         )
                         .id;
-                    if kit::folder_field(ui, &p, &mut self.dir, by) {
+                    if kit::folder_field_with(ui, &p, &mut self.dir, by, "Browse...", "Save To") {
                         self.save_mode = SaveMode::OneDir;
                     }
                 });
@@ -506,6 +614,20 @@ impl Links {
         });
         if refill {
             self.refill(app);
+        }
+        if !cx.blocked && !ui.ctx().egui_wants_keyboard_input() {
+            let (space, all) = ui.input_mut(|i| {
+                (
+                    i.consume_key(egui::Modifiers::NONE, egui::Key::Space),
+                    i.consume_key(egui::Modifiers::COMMAND, egui::Key::A),
+                )
+            });
+            if all {
+                self.selected = (0..self.rows.len()).collect();
+            }
+            if space {
+                self.toggle_selected();
+            }
         }
         if ok || cx.enter(ui) {
             add_choices(app, self);

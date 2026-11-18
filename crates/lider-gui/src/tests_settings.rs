@@ -9,7 +9,7 @@ use lider_core::models::{MAIN_QUEUE, SYNC_QUEUE};
 use crate::dialogs::options::{Options, TABS};
 use crate::dialogs::scheduler::Scheduler;
 use crate::tests::{golden, harness};
-use crate::tests_dialogs::{click, shows};
+use crate::tests_dialogs::{click, click_top, shows};
 
 type H = egui_kittest::Harness<'static, crate::app::App>;
 
@@ -106,7 +106,7 @@ fn a_category_and_a_server_limit_from_options() {
         form.name = "E2E files".into();
         form.types.text = "e2e".into();
     }
-    click(&mut h, "OK");
+    click_top(&mut h, "OK");
     let o = h.state_mut().dialog_body::<Options>("options").unwrap();
     assert!(o.edit_cat.is_none(), "OK goes back to the tabs");
     assert_eq!(
@@ -122,7 +122,7 @@ fn a_category_and_a_server_limit_from_options() {
     h.get_by_role_and_label(Role::TextInput, "Server")
         .type_text("*.e2e.test");
     h.run();
-    click(&mut h, "OK");
+    click_top(&mut h, "OK");
     assert!(shows(&h, "*.e2e.test"), "the exception is listed");
     click(&mut h, "OK");
     let s = &h.state().manager.settings;

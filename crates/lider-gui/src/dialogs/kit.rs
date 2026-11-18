@@ -137,20 +137,106 @@ pub enum Look {
     Danger,
 }
 
-/// A dialog button (1.x `primary()` for the accent one).
+// ---------------------------------------------------------------------- Alt mnemonics
+
+/// A Qt label with its "&" mnemonic: the text without the "&", and the letter's char index and letter.
+pub fn mnemonic(label: &str) -> (String, Option<(usize, char)>) {
+    let mut text = String::new();
+    let mut found = None;
+    let mut chars = label.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '&' {
+            match chars.next() {
+                Some('&') => text.push('&'),
+                Some(n) => {
+                    if found.is_none() {
+                        found = Some((text.chars().count(), n));
+                    }
+                    text.push(n);
+                }
+                None => {}
+            }
+        } else {
+            text.push(c);
+        }
+    }
+    (text, found)
+}
+
+/// The label as a text, its mnemonic letter underlined while Alt is held (Qt shows it only then).
+pub fn mnemonic_text(ui: &Ui, label: &str, colour: Color32) -> egui::WidgetText {
+    let (text, m) = mnemonic(label);
+    let alt = ui.input(|i| i.modifiers.alt);
+    let style = ui.style();
+    let font = egui::TextStyle::Button.resolve(style);
+    let mut job = egui::text::LayoutJob::default();
+    let fmt = |underline: bool| egui::TextFormat {
+        font_id: font.clone(),
+        color: colour,
+        underline: if underline {
+            Stroke::new(1.0, colour)
+        } else {
+            Stroke::NONE
+        },
+        ..Default::default()
+    };
+    for (i, c) in text.chars().enumerate() {
+        let under = alt && m.is_some_and(|(at, _)| at == i);
+        job.append(&c.to_string(), 0.0, fmt(under));
+    }
+    job.into()
+}
+
+/// Alt plus the label's mnemonic letter was pressed (and taken, so nothing else sees it). Only while the
+/// widget's window takes input: not under a message box.
+pub fn mnemonic_pressed(ui: &Ui, label: &str) -> bool {
+    let Some((_, letter)) = mnemonic(label).1 else {
+        return false;
+    };
+    if !ui.is_enabled() {
+        return false;
+    }
+    let modal = ui.ctx().memory(|m| m.top_modal_layer());
+    if modal.is_some_and(|l| l != ui.layer_id()) {
+        return false;
+    }
+    let Some(key) = egui::Key::from_name(&letter.to_ascii_uppercase().to_string()) else {
+        return false;
+    };
+    ui.input_mut(|i| i.consume_key(egui::Modifiers::ALT, key))
+}
+
+/// A check box whose label may carry a "&" mnemonic (Alt+letter toggles it).
+pub fn check(ui: &mut Ui, on: &mut bool, label: &str) -> egui::Response {
+    let colour = ui.visuals().text_color();
+    let text = mnemonic_text(ui, label, colour);
+    let mut r = ui.checkbox(on, text);
+    if mnemonic_pressed(ui, label) {
+        *on = !*on;
+        r.mark_changed();
+    }
+    r
+}
+
+/// A dialog button (1.x `primary()` for the accent one). A "&" in the label is its Alt mnemonic.
 pub fn button(ui: &mut Ui, p: &Palette, label: &str, look: Look, enabled: bool) -> bool {
     let colour = match look {
         Look::Normal => p.tx,
         _ => Color32::WHITE,
     };
-    let mut b =
-        egui::Button::new(RichText::new(label).strong().color(colour)).min_size(vec2(76.0, 28.0));
+    let text = if label.contains('&') {
+        mnemonic_text(ui, label, colour)
+    } else {
+        RichText::new(label).strong().color(colour).into()
+    };
+    let mut b = egui::Button::new(text).min_size(vec2(76.0, 28.0));
     b = match look {
         Look::Primary => b.fill(p.ac),
         Look::Danger => b.fill(p.bad),
         Look::Normal => b,
     };
-    ui.add_enabled(enabled, b).clicked()
+    let clicked = ui.add_enabled(enabled, b).clicked();
+    clicked || (enabled && mnemonic_pressed(ui, label))
 }
 
 pub fn primary(ui: &mut Ui, p: &Palette, label: &str) -> bool {
@@ -168,17 +254,19 @@ pub fn icon_button(ui: &mut Ui, p: &Palette, name: &str, label: &str, look: Look
     } else {
         Color32::WHITE
     };
-    let mut b = egui::Button::image_and_text(
-        icon(name, 14.0, p, ink),
-        RichText::new(label).strong().color(ink),
-    )
-    .min_size(vec2(76.0, 28.0));
+    let text: egui::WidgetText = if label.contains('&') {
+        mnemonic_text(ui, label, ink)
+    } else {
+        RichText::new(label).strong().color(ink).into()
+    };
+    let mut b =
+        egui::Button::image_and_text(icon(name, 14.0, p, ink), text).min_size(vec2(76.0, 28.0));
     b = match look {
         Look::Primary => b.fill(p.ac),
         Look::Danger => b.fill(p.bad),
         Look::Normal => b,
     };
-    ui.add(b).clicked()
+    ui.add(b).clicked() || mnemonic_pressed(ui, label)
 }
 
 /// A form row: a label column of `width`, then the controls. The closure gets the label's id: fields
@@ -200,10 +288,16 @@ pub fn row<R>(ui: &mut Ui, label: &str, width: f32, f: impl FnOnce(&mut Ui, egui
     .inner
 }
 
-/// A small muted caption over a field; its id names the field (`.labelled_by`).
+/// A caption over a field or a group (1.x `caption()`: small, upper case, faint); its id names the field
+/// (`.labelled_by`).
 pub fn caption(ui: &mut Ui, p: &Palette, text: &str) -> egui::Id {
-    ui.label(RichText::new(text).small().strong().color(p.mu))
-        .id
+    ui.label(
+        RichText::new(text.to_uppercase())
+            .size(11.0)
+            .strong()
+            .color(p.fa),
+    )
+    .id
 }
 
 /// A muted line.
@@ -219,16 +313,30 @@ pub fn error_text(ui: &mut Ui, p: &Palette, text: &str) {
     ui.add(egui::Label::new(RichText::new(text).small().color(p.bad)).wrap());
 }
 
-/// A note in a tinted box (1.x `note()`).
+/// A note in a box (1.x `note(boxed=True)`, the Tauri build's `noteBox`).
 pub fn note(ui: &mut Ui, p: &Palette, text: &str) {
     egui::Frame::new()
-        .fill(alpha(p.ac, 0.07))
-        .stroke(Stroke::new(1.0, alpha(p.ac, 0.25)))
-        .corner_radius(CornerRadius::same(8))
-        .inner_margin(Margin::symmetric(10, 8))
+        .fill(p.track)
+        .corner_radius(CornerRadius::same(9))
+        .inner_margin(Margin::symmetric(12, 9))
         .show(ui, |ui| {
             ui.set_width(ui.available_width());
             ui.add(egui::Label::new(RichText::new(text).color(p.mu)).wrap());
+        });
+}
+
+/// An accent box with an icon (the running note of Check hash, the Scheduler's next run).
+pub fn accent_note(ui: &mut Ui, p: &Palette, icon_name: &str, text: impl Into<egui::WidgetText>) {
+    egui::Frame::new()
+        .fill(p.acsel)
+        .corner_radius(CornerRadius::same(9))
+        .inner_margin(Margin::symmetric(12, 9))
+        .show(ui, |ui| {
+            ui.set_width(ui.available_width());
+            ui.horizontal(|ui| {
+                ui.add(icon(icon_name, 16.0, p, p.actx));
+                ui.add(egui::Label::new(text).wrap());
+            });
         });
 }
 
@@ -328,6 +436,18 @@ pub fn mono_field(ui: &mut Ui, text: &mut String, by: egui::Id) -> egui::Respons
 
 /// A folder chooser next to a path field ("Browse..."); the chosen folder replaces the text.
 pub fn folder_field(ui: &mut Ui, p: &Palette, text: &mut String, by: egui::Id) -> bool {
+    folder_field_with(ui, p, text, by, "Browse...", "Select a Folder")
+}
+
+/// [`folder_field`] with its button's label (a "&" mnemonic too) and the folder dialog's title.
+pub fn folder_field_with(
+    ui: &mut Ui,
+    p: &Palette,
+    text: &mut String,
+    by: egui::Id,
+    button: &str,
+    title: &str,
+) -> bool {
     let mut changed = false;
     ui.horizontal(|ui| {
         let browse = ui.available_width() - 90.0;
@@ -337,9 +457,9 @@ pub fn folder_field(ui: &mut Ui, p: &Palette, text: &mut String, by: egui::Id) -
                 .desired_width(browse.max(80.0)),
         )
         .labelled_by(by);
-        if plain(ui, p, "Browse...")
+        if plain(ui, p, button)
             && let Some(d) = rfd::FileDialog::new()
-                .set_title("Select a Folder")
+                .set_title(title)
                 .set_directory(&*text)
                 .pick_folder()
         {
@@ -444,6 +564,8 @@ impl ChecksumEdit {
         });
         match &parsed {
             Err(e) => error_text(ui, p, e),
+            // Properties shows no hint (1.x: an empty message line takes no room).
+            Ok(_) if self.hint.is_empty() => {}
             Ok(_) => faint(ui, p, &self.hint),
         }
         changed
@@ -622,4 +744,133 @@ pub fn segmented<T: PartialEq + Clone>(
         }
     });
     changed
+}
+
+/// A category combo: each choice with its category icon (1.x's category combos).
+pub fn category_combo(
+    ui: &mut Ui,
+    p: &Palette,
+    id: &str,
+    width: f32,
+    value: &mut String,
+    names: &[String],
+    by: egui::Id,
+) -> bool {
+    let mut changed = false;
+    egui::ComboBox::from_id_salt(id)
+        .width(width)
+        .selected_text(value.clone())
+        .show_ui(ui, |ui| {
+            for n in names {
+                let ic = icon(&lider_core::view::category_icon(n), 16.0, p, p.tx);
+                let b = egui::Button::selectable(value == n, (ic, n.as_str()));
+                if ui.add(b).clicked() && value != n {
+                    *value = n.clone();
+                    changed = true;
+                }
+            }
+        })
+        .response
+        .labelled_by(by);
+    changed
+}
+
+/// A date field (yyyy-mm-dd) with a calendar under its button (1.x's calendar popup); true when the
+/// date changed. A bad date typed into the field is left for the caller to check.
+pub fn date_field(
+    ui: &mut Ui,
+    p: &Palette,
+    text: &mut String,
+    enabled: bool,
+    by: egui::Id,
+) -> egui::Response {
+    use chrono::{Datelike, NaiveDate};
+    let r = ui
+        .add_enabled(
+            enabled,
+            egui::TextEdit::singleline(text)
+                .font(egui::TextStyle::Monospace)
+                .char_limit(10)
+                .desired_width(100.0),
+        )
+        .labelled_by(by);
+    let button = ui
+        .add_enabled(
+            enabled,
+            egui::Button::image(icon("scheduler", 14.0, p, p.tx)),
+        )
+        .on_hover_text("Choose a date")
+        .accessible_name("Choose a date");
+    let id = ui.make_persistent_id(("calendar", by));
+    let today = chrono::Local::now().date_naive();
+    let shown = NaiveDate::parse_from_str(text, "%Y-%m-%d").unwrap_or(today);
+    // The month the calendar shows (kept while it is open).
+    let open = egui::Popup::is_id_open(ui.ctx(), egui::Popup::default_response_id(&button));
+    let first = shown.with_day(1).unwrap_or(shown);
+    let mut month: NaiveDate = if open {
+        ui.data(|d| d.get_temp(id)).unwrap_or(first)
+    } else {
+        first
+    };
+    let mut picked = None;
+    egui::Popup::menu(&button)
+        .close_behavior(egui::PopupCloseBehavior::CloseOnClickOutside)
+        .show(|ui| {
+            ui.horizontal(|ui| {
+                if ui
+                    .small_button("<")
+                    .on_hover_text("Previous month")
+                    .clicked()
+                {
+                    month = month - chrono::Months::new(1);
+                }
+                ui.label(RichText::new(month.format("%B %Y").to_string()).strong());
+                if ui.small_button(">").on_hover_text("Next month").clicked() {
+                    month = month + chrono::Months::new(1);
+                }
+            });
+            egui::Grid::new(("calendar-grid", by)).show(ui, |ui| {
+                for d in ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"] {
+                    ui.label(RichText::new(d).small().color(p.mu));
+                }
+                ui.end_row();
+                let lead = month.weekday().num_days_from_monday();
+                for _ in 0..lead {
+                    ui.label("");
+                }
+                let mut day = month;
+                let mut col = lead;
+                while day.month() == month.month() {
+                    let sel = day == shown;
+                    if ui
+                        .selectable_label(sel, RichText::new(day.day().to_string()).monospace())
+                        .clicked()
+                    {
+                        picked = Some(day);
+                    }
+                    col += 1;
+                    if col == 7 {
+                        col = 0;
+                        ui.end_row();
+                    }
+                    day = day.succ_opt().unwrap_or(day);
+                    if day.day() == 1 {
+                        break;
+                    }
+                }
+            });
+            if picked.is_some() {
+                ui.close();
+            }
+        });
+    ui.data_mut(|d| d.insert_temp(id, month));
+    if let Some(d) = picked {
+        *text = d.format("%Y-%m-%d").to_string();
+        ui.data_mut(|m| m.remove::<NaiveDate>(id));
+    }
+    let mut r = r;
+    if picked.is_some() {
+        r.mark_changed();
+    }
+    r
 }

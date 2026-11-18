@@ -87,6 +87,8 @@ pub struct Dialog {
     fitted: f32,
     /// Where the window opens: centred over the main window.
     at: Option<egui::Pos2>,
+    /// The narrowest the window may get (its own width up to 360 px unless set).
+    min_width: Option<f32>,
 }
 
 impl Dialog {
@@ -102,7 +104,14 @@ impl Dialog {
             shown: false,
             fitted: 0.0,
             at: None,
+            min_width: None,
         }
+    }
+
+    /// Keep the window at least this wide (the progress window: 600 px, as in 1.x).
+    pub fn min_width(mut self, w: f32) -> Dialog {
+        self.min_width = Some(w);
+        self
     }
 
     fn id(&self) -> ViewportId {
@@ -180,7 +189,10 @@ fn show(app: &mut App, ctx: &egui::Context, d: &mut Dialog) -> bool {
         .with_title(d.title.clone())
         .with_app_id("lider")
         .with_inner_size([d.width, d.height])
-        .with_min_inner_size([d.width.min(360.0), d.height.min(200.0)]);
+        .with_min_inner_size([
+            d.min_width.unwrap_or(d.width.min(360.0)),
+            d.height.min(200.0),
+        ]);
     if let Some(at) = d.at {
         builder = builder.with_position(at);
     }
