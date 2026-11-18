@@ -1,19 +1,24 @@
 //! The running program: the download manager, what the user has selected, the 500 ms tick that polls the
 //! manager and rebuilds what the window shows (the view model of `lider_core::view`), and every action of
-//! the menus, the toolbar and the context menus (`main_window.py` in 1.x).
+//! the menus, the toolbar and the context menus (`main_window.py` in 1.x). Also what LID does while it
+//! runs (phase E2): the manager's events, lines from other starts and the browser, the clipboard monitor,
+//! closing and the tray, the power-off countdown. What touches the desktop leaves as an [`Effect`] that
+//! the window carries out, so tests see it without side effects.
 
 use std::collections::{HashMap, HashSet};
 use std::time::{Duration, Instant};
 
-use lider_core::manager::DownloadManager;
+use lider_core::manager::{DownloadManager, Event, EventKind};
 use lider_core::menu::Menu;
 use lider_core::models::{MAIN_QUEUE, Status};
 use lider_core::paths::Dirs;
 use lider_core::search::{FindNext, SearchSettings};
+use lider_core::settings::WindowState;
 use lider_core::view::{self, ActionState, Details, Row, StatusBar, TreeFilter, TreeNode};
 use lider_sys::platform::prelude::*;
+use serde_json::{Map, Value};
 
-use crate::boxes::{Answer, MsgBox, Then};
+use crate::boxes::{Answer, Button, MsgBox, Then};
 use crate::theme::{Palette, ThemeName};
 
 pub const TICK: Duration = Duration::from_millis(500);
@@ -37,6 +42,58 @@ pub struct View {
     pub details: Option<Details>,
     pub queues: Vec<String>,
 }
+
+/// Something only the desktop can do; the window carries it out.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Effect {
+    /// A desktop notification: title, text.
+    Notify(String, String),
+    /// Show the window (unminimise, raise).
+    Show,
+    /// Hide the window (to the tray).
+    Hide,
+    /// Close the window for good (the manager is already stopped).
+    Close,
+    /// Turn the computer off (the countdown ended).
+    PowerOff,
+}
+
+/// A window that a dialog of phase E3 opens; until then each shows a note.
+#[derive(Debug, Clone, PartialEq)]
+pub enum Request {
+    /// Add one address (the add flow: probe, duplicate rule, Download File Info).
+    AddUrl {
+        url: String,
+        referer: String,
+        parent_page: String,
+        headers: Map<String, Value>,
+        filename: String,
+    },
+    /// Links to choose from (browser "all links", grabber, clipboard batch).
+    Links {
+        items: Vec<(String, String, String)>,
+        referer: String,
+        parent_page: String,
+        headers: Map<String, Value>,
+    },
+    /// "Checksum mismatch": what to do with the file.
+    Mismatch(i64),
+}
+
+impl Request {
+    pub fn add(url: &str) -> Request {
+        Request::AddUrl {
+            url: url.into(),
+            referer: String::new(),
+            parent_page: String::new(),
+            headers: Map::new(),
+            filename: String::new(),
+        }
+    }
+}
+
+/// The power-off countdown, seconds.
+pub const POWER_OFF_SECONDS: u64 = 30;
 
 pub struct App {
     /// The engine runs on this runtime; it lives as long as the window.
@@ -69,6 +126,27 @@ pub struct App {
     pub scroll_to: Option<i64>,
     pub quit: bool,
     last_tick: Option<Instant>,
+    /// What the window should do on the desktop (drained each frame).
+    pub effects: Vec<Effect>,
+    /// Windows a dialog of phase E3 opens.
+    pub requests: Vec<Request>,
+    /// Lines from the instance socket (other starts, the browser helper), taken each tick.
+    pub inbox: std::sync::Arc<std::sync::Mutex<Vec<String>>>,
+    /// The clipboard text of the last tick: None until the first read, so only a change counts.
+    clip_seen: Option<String>,
+    last_clip: String,
+    /// The desktop prefers a dark theme (for "follow the system").
+    pub dark_system: bool,
+    /// The tray icon is shown (the window keeps it; closing may hide to it).
+    pub tray_shown: bool,
+    /// Exit was chosen (Tasks → Exit or the tray), not the window's close button.
+    really_quit: bool,
+    /// The manager is stopped and the window closes; a second close request just goes through.
+    closing: bool,
+    /// When the power-off countdown ends.
+    pub power_off_at: Option<Instant>,
+    /// The window's place and size (kept while it is shown, saved with the settings).
+    pub geometry: Option<WindowState>,
 }
 
 fn column_width(key: &str, saved: i64) -> f32 {
@@ -81,7 +159,7 @@ fn column_width(key: &str, saved: i64) -> f32 {
 
 impl App {
     pub fn new(rt: tokio::runtime::Runtime, manager: DownloadManager, dirs: Dirs) -> App {
-        let theme = ThemeName::parse(&manager.settings.theme);
+        let theme = ThemeName::parse(&view::resolve_theme(&manager.settings, false));
         let search = SearchSettings {
             query: manager.settings.search_string.clone(),
             flags: manager.settings.search_flags & 0x1F,
@@ -111,6 +189,17 @@ impl App {
             scroll_to: None,
             quit: false,
             last_tick: None,
+            effects: vec![],
+            requests: vec![],
+            inbox: Default::default(),
+            clip_seen: None,
+            last_clip: String::new(),
+            dark_system: false,
+            tray_shown: false,
+            really_quit: false,
+            closing: false,
+            power_off_at: None,
+            geometry: None,
         }
     }
 
@@ -120,13 +209,447 @@ impl App {
             return false;
         }
         self.last_tick = Some(Instant::now());
-        let _events = self.manager.poll(None);
+        let lines = std::mem::take(&mut *self.inbox.lock().unwrap_or_else(|e| e.into_inner()));
+        for l in lines {
+            self.on_line(&l);
+        }
+        let events = self.manager.poll(None);
+        self.handle_events(&events);
+        self.countdown();
+        self.take_requests();
         self.rebuild();
         true
     }
 
-    pub fn save_settings(&self) {
+    /// A tick now, whenever the last one was (tests).
+    #[cfg(test)]
+    pub fn tick_now(&mut self) {
+        self.last_tick = None;
+        self.tick();
+    }
+
+    pub fn save_settings(&mut self) {
+        if let Some(g) = self.geometry {
+            self.manager.settings.window_state = Some(g);
+        }
         let _ = lider_core::settings::save(&self.manager.settings, &self.dirs);
+    }
+
+    fn notify(&mut self, title: &str, text: &str) {
+        self.effects
+            .push(Effect::Notify(title.to_string(), text.to_string()));
+    }
+
+    fn file_of(&self, id: i64) -> String {
+        self.manager
+            .downloads
+            .get(&id)
+            .map(|d| d.filename.clone())
+            .unwrap_or_default()
+    }
+
+    /// The theme that applies now: the chosen one, or the system's light or dark one.
+    pub fn apply_theme(&mut self) {
+        let name = view::resolve_theme(&self.manager.settings, self.dark_system);
+        let t = ThemeName::parse(&name);
+        if t != self.theme {
+            self.set_theme(&name);
+        }
+    }
+
+    // ------------------------------------------------------------------ the manager's events
+
+    /// `handle_events` of 1.x: what the window does with the manager's events.
+    pub fn handle_events(&mut self, events: &[Event]) {
+        for e in events {
+            let id = e.download_id.unwrap_or(0);
+            match e.kind {
+                EventKind::Complete => self.download_complete(id),
+                EventKind::Error => {
+                    let text = format!("{}\n{}", self.file_of(id), e.message);
+                    self.notify("Download failed", &text);
+                }
+                EventKind::Mismatch => {
+                    if e.message == "kept" {
+                        let text = format!("{}\nThe file was kept.", self.file_of(id));
+                        self.notify("Checksum mismatch", &text);
+                    } else {
+                        self.requests.push(Request::Mismatch(id));
+                    }
+                }
+                EventKind::Changed if !e.message.is_empty() => {
+                    let text = format!("{}\nDownloading it again.", self.file_of(id));
+                    self.notify("Checksum mismatch", &text);
+                }
+                EventKind::QueueDone => {
+                    let name = e.queue.clone().unwrap_or_default();
+                    let Some(s) = self.manager.queues.get(&name).map(|q| q.schedule.clone()) else {
+                        continue;
+                    };
+                    let how = if e.message.is_empty() {
+                        "finished"
+                    } else {
+                        "stopped"
+                    };
+                    self.notify("LID", &format!("\"{name}\" processing {how}"));
+                    if !s.open_when_done.is_empty() {
+                        let _ = os().open_path(&s.open_when_done);
+                    }
+                    if s.shutdown_when_done {
+                        self.start_power_off();
+                    } else if s.exit_when_done {
+                        self.exit();
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+
+    fn download_complete(&mut self, id: i64) {
+        let name = self.file_of(id);
+        // "Download complete" (a dialog of phase E3) shows as a notification until then, as it does
+        // when that dialog is turned off.
+        self.notify("Download complete", &name);
+    }
+
+    // ------------------------------------------------------------------ the power-off countdown
+
+    /// The 30 s countdown before the computer is turned off (a scheduler queue or a progress window).
+    pub fn start_power_off(&mut self) {
+        self.effects.push(Effect::Show);
+        self.power_off_at = Some(Instant::now() + Duration::from_secs(POWER_OFF_SECONDS));
+        self.boxx = Some(
+            MsgBox::info("Shut down", &power_off_text(POWER_OFF_SECONDS))
+                .with_icon("info", true)
+                .with_buttons(vec![Button {
+                    id: "cancel",
+                    label: "Cancel",
+                    primary: true,
+                    danger: false,
+                }]),
+        );
+        if let Some(b) = &mut self.boxx {
+            b.then = Then::PowerOff;
+        }
+    }
+
+    fn countdown(&mut self) {
+        let Some(at) = self.power_off_at else { return };
+        let left = at.saturating_duration_since(Instant::now());
+        if left.is_zero() {
+            self.power_off_at = None;
+            self.boxx = None;
+            self.save_settings();
+            self.manager.shutdown();
+            self.effects.push(Effect::PowerOff);
+            return;
+        }
+        if let Some(b) = self.boxx.as_mut().filter(|b| b.then == Then::PowerOff) {
+            b.text = power_off_text(left.as_secs_f64().ceil() as u64);
+        }
+    }
+
+    // ------------------------------------------------------------------ other starts, the browser, the clipboard
+
+    /// A line from another start or from the browser helper.
+    pub fn on_line(&mut self, line: &str) {
+        if line.starts_with('{') {
+            if let Ok(Value::Object(req)) = serde_json::from_str::<Value>(line) {
+                self.browser_request(&req);
+            }
+            return;
+        }
+        self.effects.push(Effect::Show);
+        if line != "--show" {
+            self.requests.push(Request::add(line));
+        }
+    }
+
+    /// `handle_browser_request` of 1.x.
+    pub fn browser_request(&mut self, req: &Map<String, Value>) {
+        let get = |k: &str| req.get(k).and_then(Value::as_str).unwrap_or("").to_string();
+        if get("action") == "show" {
+            self.effects.push(Effect::Show);
+            return;
+        }
+        let mut headers = Map::new();
+        if !get("cookies").is_empty() {
+            headers.insert("Cookie".into(), get("cookies").into());
+        }
+        if !get("user_agent").is_empty() {
+            headers.insert("User-Agent".into(), get("user_agent").into());
+        }
+        let page = get("page_url");
+        let referer = if get("referer").is_empty() {
+            page.clone()
+        } else {
+            get("referer")
+        };
+        match get("action").as_str() {
+            "download" => {
+                let url = get("url");
+                if view::is_url(&url) {
+                    self.requests.push(Request::AddUrl {
+                        url,
+                        referer,
+                        parent_page: page,
+                        headers,
+                        filename: get("filename"),
+                    });
+                }
+            }
+            "links" => {
+                let items: Vec<(String, String, String)> = req
+                    .get("items")
+                    .and_then(Value::as_array)
+                    .into_iter()
+                    .flatten()
+                    .filter_map(|i| {
+                        let url = i.get("url")?.as_str()?;
+                        let text = |k: &str, d: &str| {
+                            i.get(k).and_then(Value::as_str).unwrap_or(d).to_string()
+                        };
+                        view::is_url(url)
+                            .then(|| (url.to_string(), text("text", ""), text("kind", "a")))
+                    })
+                    .collect();
+                if !items.is_empty() {
+                    self.effects.push(Effect::Show);
+                    self.requests.push(Request::Links {
+                        items,
+                        referer,
+                        parent_page: page,
+                        headers,
+                    });
+                }
+            }
+            _ => {}
+        }
+    }
+
+    /// The clipboard monitor (1.x `_clipboard_changed`), called with the clipboard's text each tick.
+    pub fn clipboard_text(&mut self, text: &str) {
+        let text = text.trim();
+        // Polling stands in for a change signal: what is there at startup, or while the monitor is off,
+        // is not a change.
+        let first = self.clip_seen.is_none();
+        if self.clip_seen.as_deref() == Some(text) {
+            return;
+        }
+        self.clip_seen = Some(text.to_string());
+        if first || !self.manager.settings.monitor_clipboard {
+            return;
+        }
+        if text == self.last_clip || !view::is_url(text) {
+            return;
+        }
+        self.last_clip = text.to_string();
+        let s = &self.manager.settings;
+        let host = lider_core::pyutil::url_hostname(text).unwrap_or_default();
+        if s.no_auto_sites
+            .split_whitespace()
+            .any(|site| host.ends_with(&site.to_lowercase()))
+        {
+            return;
+        }
+        let name = lider_core::names::filename_from_url(text);
+        if lider_core::media::is_youtube(text)
+            || lider_core::categories::is_auto_capture_type(s, &name)
+        {
+            self.requests.push(Request::add(text));
+        }
+    }
+
+    /// Ctrl+V on the window (decision G2, in place of dropping a link): one address opens the add flow,
+    /// several go to the Main queue.
+    pub fn paste(&mut self, text: &str) {
+        let urls: Vec<String> = text
+            .split_whitespace()
+            .filter(|w| !w.starts_with('#') && view::is_url(w))
+            .map(String::from)
+            .collect();
+        match urls.len() {
+            0 => {}
+            1 => self.requests.push(Request::add(&urls[0])),
+            _ => {
+                let items: Vec<_> = urls
+                    .into_iter()
+                    .map(|u| (u, String::new(), String::new()))
+                    .collect();
+                self.add_many(&items);
+            }
+        }
+    }
+
+    /// Until the dialogs of phase E3 exist, a request shows what it would open.
+    fn take_requests(&mut self) {
+        if self.boxx.is_some() {
+            return;
+        }
+        let Some(r) = (!self.requests.is_empty()).then(|| self.requests.remove(0)) else {
+            return;
+        };
+        match r {
+            Request::AddUrl { url, .. } => self.later(&format!("Download File Info for {url}")),
+            Request::Links { items, .. } => {
+                self.later(&format!("Download All Links ({} links)", items.len()))
+            }
+            Request::Mismatch(id) => {
+                let name = self.file_of(id);
+                self.later(&format!("Checksum mismatch for {name}"))
+            }
+        }
+    }
+
+    // ------------------------------------------------------------------ closing
+
+    /// The downloads that are running or being checked, as the closing question lists them.
+    fn busy(&self) -> Vec<(String, String, String)> {
+        let m = &self.manager;
+        let mut v: Vec<_> = m
+            .downloads
+            .values()
+            .filter(|d| m.is_running(d.id) || d.status == Status::Verifying)
+            .map(|d| {
+                let done = if d.size > 0 {
+                    format!("{:.0}%", d.progress() * 100.0)
+                } else {
+                    lider_core::fmt::size(d.downloaded)
+                };
+                (view::category_icon(&d.category), d.filename.clone(), done)
+            })
+            .collect();
+        v.sort_by(|a, b| a.1.cmp(&b.1));
+        v
+    }
+
+    /// The close button or Exit. True when the window may close now.
+    pub fn close_requested(&mut self) -> bool {
+        if self.closing {
+            return true;
+        }
+        let really = self.really_quit;
+        let s = &self.manager.settings;
+        if s.tray_icon && self.tray_shown && s.close_to_tray && !really {
+            self.effects.push(Effect::Hide);
+            return false;
+        }
+        let running = self.busy();
+        if running.is_empty() {
+            self.stop_and_exit();
+            return true;
+        }
+        self.really_quit = false;
+        self.effects.push(Effect::Show);
+        let background = !(really && self.tray_shown);
+        let n = running.len();
+        let what = if really {
+            "Exiting"
+        } else {
+            "Closing the window"
+        };
+        let them = if n == 1 { "it" } else { "them" };
+        let title = if n == 1 {
+            "1 download is still running".to_string()
+        } else {
+            format!("{n} downloads are still running")
+        };
+        let text = if background {
+            format!(
+                "{what} stops {them}. LID can keep downloading in the background, with an icon in the system tray."
+            )
+        } else {
+            format!("{what} stops {them}. Unfinished downloads can be resumed later.")
+        };
+        let mut buttons = vec![Button {
+            id: "stop",
+            label: if really {
+                "Stop and exit"
+            } else {
+                "Stop and close"
+            },
+            primary: false,
+            danger: true,
+        }];
+        if background {
+            buttons.push(Button {
+                id: "background",
+                label: "Continue in background",
+                primary: true,
+                danger: false,
+            });
+        }
+        buttons.push(Button {
+            id: "keep",
+            label: "Keep downloading",
+            primary: false,
+            danger: false,
+        });
+        let mut b = MsgBox::question(&title, &text, Then::CloseChoice)
+            .with_icon("queue", false)
+            .with_buttons(buttons);
+        b.more = (n > 3).then(|| format!("and {} more", n - 3));
+        b.items = running.into_iter().take(3).collect();
+        self.boxx = Some(b);
+        false
+    }
+
+    /// "Exit": closing for real, also when the window would go to the tray.
+    pub fn exit(&mut self) {
+        self.really_quit = true;
+        if self.close_requested() {
+            self.quit = true;
+        }
+    }
+
+    pub fn stop_and_exit(&mut self) {
+        self.closing = true;
+        self.save_settings();
+        self.manager.shutdown();
+        self.effects.push(Effect::Close);
+        self.quit = true;
+    }
+
+    /// "Continue in background": the tray takes over.
+    fn keep_in_background(&mut self) {
+        self.manager.settings.tray_icon = true;
+        self.manager.settings.close_to_tray = true;
+        self.save_settings();
+        self.effects.push(Effect::Hide);
+        self.notify(
+            "LID keeps downloading",
+            "Open LID from this icon. Turn the icon off again in Options → Appearance.",
+        );
+    }
+
+    /// Ask once whether to add LID to the application menu (a copy no package installed).
+    pub fn offer_menu(&mut self, name: &str) {
+        self.manager.settings.menu_offered = true;
+        self.save_settings();
+        self.boxx = Some(
+            MsgBox::question(
+                "Add LID to the application menu?",
+                &format!("{name} runs on its own, so the application menu does not list LID yet."),
+                Then::OfferMenu,
+            )
+            .with_icon("general", false)
+            .with_note("LID keeps the entry pointed at the AppImage you start, also after you move or update it, and it disappears when the AppImage is deleted. You can change this later in Options → General.")
+            .with_buttons(vec![
+                Button {
+                    id: "later",
+                    label: "Not now",
+                    primary: false,
+                    danger: false,
+                },
+                Button {
+                    id: "add",
+                    label: "Add to menu",
+                    primary: true,
+                    danger: false,
+                },
+            ]),
+        );
     }
 
     /// The downloads an action applies to: the checked ones, else the selected ones.
@@ -224,7 +747,7 @@ impl App {
     pub fn run(&mut self, id: &str) {
         let (kind, arg) = id.split_once(':').unwrap_or((id, ""));
         match kind {
-            "exit" => self.quit = true,
+            "exit" => self.exit(),
             "pause_all" | "stop_all" => self.manager.stop_all(),
             "stop" => {
                 for i in self.targets() {
@@ -283,6 +806,7 @@ impl App {
             "theme" => {
                 if arg == "system" {
                     self.manager.settings.follow_system = true;
+                    self.apply_theme();
                 } else {
                     self.manager.settings.follow_system = false;
                     self.manager.settings.theme = arg.into();
@@ -686,6 +1210,17 @@ impl App {
         let yes = a.button == "yes" || a.button == "ok";
         match a.then {
             Then::Nothing => {}
+            Then::CloseChoice => match a.button {
+                "stop" => self.stop_and_exit(),
+                "background" => self.keep_in_background(),
+                _ => {}
+            },
+            Then::PowerOff => self.power_off_at = None,
+            Then::OfferMenu if a.button == "add" => {
+                if let Err(e) = os().add_to_menu() {
+                    self.info("LID", &e.to_string());
+                }
+            }
             Then::Remove(ids) if yes => {
                 self.manager.remove(&ids, a.checked);
                 for i in &ids {
@@ -724,4 +1259,8 @@ impl App {
         }
         self.rebuild();
     }
+}
+
+fn power_off_text(left: u64) -> String {
+    format!("LID has finished downloading. The computer will be turned off in {left} seconds.")
 }

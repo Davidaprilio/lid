@@ -3,7 +3,7 @@ name: Rust port
 # Checks for the Rust + Tauri port (docs/tauri/PLAN.md). Runs next to the Python tests until the cut-over.
 on:
   push:
-    branches: [tauri, ports]
+    branches: [tauri, ports, egui]
   pull_request:
   workflow_dispatch:
 
@@ -71,7 +71,7 @@ jobs:
           pnpm --dir ui install --frozen-lockfile
           pnpm --dir ui build
       - run: cargo test -p lider-core -p lider-sys --locked
-      - run: cargo clippy -p lider-sys -p lider --all-targets --locked -- -D warnings
+      - run: cargo clippy -p lider-sys -p lider -p lider-gui --all-targets --locked -- -D warnings
       - name: Installer (NSIS)
         run: |
           cargo install tauri-cli --version "~2.12" --locked

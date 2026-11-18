@@ -1,4 +1,4 @@
-//! Command-line arguments of GUI mode (argparse in `app.py` in 1.x).
+//! Command-line arguments of GUI mode (argparse in `app.py` in 1.x), shared by both windows.
 
 pub const USAGE: &str = "usage: lider [-h] [--minimized] [urls ...]
 

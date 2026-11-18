@@ -150,6 +150,21 @@ fn keyboard(app: &mut App, ctx: &egui::Context) {
         return;
     }
     let typing = ctx.egui_wants_keyboard_input();
+    // Ctrl+V on the window (not in a text field) adds the addresses in the clipboard (decision G2).
+    let pasted = (!typing)
+        .then(|| {
+            ctx.input(|i| {
+                i.events.iter().find_map(|e| match e {
+                    egui::Event::Paste(t) => Some(t.clone()),
+                    _ => None,
+                })
+            })
+        })
+        .flatten();
+    if let Some(text) = pasted {
+        app.paste(&text);
+        return;
+    }
     let hit = |m: Modifiers, k: Key| ctx.input_mut(|i| i.consume_key(m, k));
     if hit(Modifiers::CTRL, Key::N) {
         app.run("add");

@@ -23,6 +23,15 @@ serde_json.workspace = true
 rfd = "0.15"
 tokio = { version = "1", features = ["rt-multi-thread"] }
 arboard = { version = "3", default-features = false, features = ["wayland-data-control"] }
+notify-rust = "4"
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+# The tray icon: StatusNotifierItem over D-Bus on Linux (no GTK), the shell icon on Windows.
+[target.'cfg(target_os = "linux")'.dependencies]
+ksni = { version = "0.3", features = ["blocking"] }
+
+[target.'cfg(windows)'.dependencies]
+tray-icon = "0.25"
 
 [dev-dependencies]
 egui_kittest = "0.37"

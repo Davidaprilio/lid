@@ -5,7 +5,6 @@
 #![cfg_attr(all(windows, not(debug_assertions)), windows_subsystem = "windows")]
 
 mod app;
-mod cli;
 mod commands;
 mod dialogs;
 mod gui;
@@ -16,6 +15,8 @@ mod update;
 mod windows;
 
 use std::process::ExitCode;
+
+use lider_core::cli;
 
 use lider_sys::platform::prelude::*;
 

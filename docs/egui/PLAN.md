@@ -67,6 +67,29 @@ references) moves into `lider-gui` without the JSON bridge: the window calls the
   bar's Browser link, density and list font from the settings, the window size and position saved.
 - Windows that come with E3 show a note for now ("comes with the dialogs").
 
+**E2 (2026-11-18): running, done; a few checks by hand left.**
+- Start-up in the order of 1.x `app.py`: legacy folders, settings, desktop entries refreshed, the list and
+  the manager, the instance socket, the window (hidden when starting in the tray), the command-line URLs.
+  `--help`, `--minimized` and a second start (URLs or "show") work as in the Tauri build; the command-line
+  parsing moved to `lider_core::cli`, the theme choice to `lider_core::view::resolve_theme`.
+- Lines from other starts and the browser helper (download, links, show) and the clipboard monitor reach
+  the window; the windows they open (Download File Info, Download All Links, Checksum mismatch) come with
+  E3 and show a note until then.
+- The manager's events become notifications (complete, failed, checksum mismatch, queue finished), a
+  queue's "open when done", "exit when done" and "turn off when done" (the 30 s countdown with Cancel).
+- Closing: to the tray when it is up and "close to tray" is on; otherwise, with downloads running, the
+  question with Stop and close / Continue in background / Keep downloading (Exit drops the background
+  choice when the tray is already there). Exit always ends LID. The window's place and size are saved.
+- Tray icon (decision G6): Open LID, Add new download, Speed Limiter on/off, Exit; its tip shows the speed.
+- Ctrl+V on the window adds the addresses in the clipboard (decision G2): one opens the add flow, several
+  go to the Main queue.
+- "Follow the system" theme follows the desktop's light or dark setting while LID runs.
+- Engine fix found by the tests: Stop (and closing LID) now also ends a connection whose server has not
+  answered yet, instead of waiting for the read timeout (`stop_while_the_server_is_silent`).
+- Tests: 10 more kittest/app tests (18 in lider-gui).
+- To check by hand (no tray or notification server under Xvfb): the tray on KDE and GNOME, a notification,
+  closing to the tray and opening again, starting with `--minimized`.
+
 ## Decisions
 
 | # | Item | Decision |
@@ -76,3 +99,4 @@ references) moves into `lider-gui` without the JSON bridge: the window calls the
 | G3 | Menu bar mode "Native" (GTK menu bar, D1) | Proposed: the menu bar is always drawn in the window; the setting keeps its three values and treats Native as In window. |
 | G4 | Input methods (CJK typing) on Linux are weaker in egui | Accepted risk; checked in E5. |
 | G5 | Dialog windows | Each dialog is an egui viewport (a real OS window, like 1.x and the Tauri build), not an overlay. |
+| G6 | Tray icon without GTK | Linux: a StatusNotifierItem over D-Bus (`ksni`), the same protocol the Tauri build's tray library speaks, so no GTK is needed; Windows: the shell icon (`tray-icon`). A desktop without a tray gets no icon, and closing then never hides LID. |

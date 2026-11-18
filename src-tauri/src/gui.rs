@@ -18,7 +18,7 @@ use lider_sys::platform::prelude::*;
 use tauri::{Emitter, Manager, WindowEvent};
 
 use crate::app::{self, AppState};
-use crate::cli::Cli;
+use lider_core::cli::Cli;
 
 pub fn run(cli: Cli, socket: String) -> ExitCode {
     let dirs = Dirs::from_env();

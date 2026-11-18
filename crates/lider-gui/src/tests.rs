@@ -351,3 +351,355 @@ fn view_menu_theme_toolbar_and_tips() {
         "the tip of the button under the mouse shows in the status bar"
     );
 }
+
+// ---------------------------------------------------------------------- phase E2: running
+
+use crate::app::{Effect, Request};
+
+fn box_title(app: &App) -> String {
+    app.boxx
+        .as_ref()
+        .map(|b| b.title.clone())
+        .unwrap_or_default()
+}
+
+#[test]
+fn other_starts_and_the_browser_reach_the_window() {
+    let (_tmp, mut app) = golden();
+    app.inbox.lock().unwrap().extend([
+        "--show".to_string(),
+        "https://example.com/a.zip".to_string(),
+    ]);
+    app.tick_now();
+    assert!(
+        app.effects.contains(&Effect::Show),
+        "a second start shows the window"
+    );
+    assert!(
+        app.boxx
+            .as_ref()
+            .is_some_and(|b| b.text.contains("https://example.com/a.zip")),
+        "the address goes to the add flow"
+    );
+    app.boxx = None;
+    app.effects.clear();
+    app.on_line(
+        r#"{"action":"download","url":"https://example.com/b.iso","page_url":"https://example.com/","cookies":"k=v","user_agent":"UA","filename":"b.iso"}"#,
+    );
+    match app.requests.last() {
+        Some(Request::AddUrl {
+            url,
+            referer,
+            headers,
+            filename,
+            ..
+        }) => {
+            assert_eq!(url, "https://example.com/b.iso");
+            assert_eq!(referer, "https://example.com/", "the page is the referer");
+            assert_eq!(headers["Cookie"], "k=v");
+            assert_eq!(headers["User-Agent"], "UA");
+            assert_eq!(filename, "b.iso");
+        }
+        r => panic!("a download request: {r:?}"),
+    }
+    app.on_line(
+        r#"{"action":"links","page_url":"https://example.com/","items":[{"url":"https://example.com/1.zip","text":"one"},{"url":"javascript:void(0)"},{"url":"https://example.com/2.png","kind":"img"}]}"#,
+    );
+    match app.requests.last() {
+        Some(Request::Links { items, .. }) => {
+            assert_eq!(items.len(), 2, "only web addresses: {items:?}");
+            assert_eq!(
+                items[0],
+                ("https://example.com/1.zip".into(), "one".into(), "a".into())
+            );
+            assert_eq!(items[1].2, "img");
+        }
+        r => panic!("a links request: {r:?}"),
+    }
+    assert!(app.effects.contains(&Effect::Show), "links show the window");
+    app.on_line(r#"{"action":"show"}"#);
+    app.on_line("{not json");
+    assert_eq!(app.requests.len(), 2);
+}
+
+#[test]
+fn the_clipboard_monitor_takes_new_addresses_of_known_types() {
+    let (_tmp, mut app) = golden();
+    app.clipboard_text("https://example.com/at-start.zip");
+    assert!(
+        app.requests.is_empty(),
+        "what is there at start is not a change"
+    );
+    app.clipboard_text("https://example.com/file.zip");
+    assert_eq!(app.requests, [Request::add("https://example.com/file.zip")]);
+    app.clipboard_text("https://example.com/file.zip");
+    app.clipboard_text("https://example.com/page.html");
+    app.clipboard_text("some words");
+    assert_eq!(
+        app.requests.len(),
+        1,
+        "same text, other types and words are left alone"
+    );
+    app.manager.settings.monitor_clipboard = false;
+    app.clipboard_text("https://example.com/off.zip");
+    assert_eq!(app.requests.len(), 1, "the monitor can be turned off");
+}
+
+#[test]
+fn ctrl_v_adds_the_pasted_addresses() {
+    let (_tmp, app) = golden();
+    let mut h = harness(app);
+    h.run();
+    h.event(egui::Event::Paste(
+        "https://example.com/1.zip\nhttps://example.com/2.zip # note".into(),
+    ));
+    h.run();
+    assert_eq!(h.state().view.rows.len(), 12, "two addresses are added");
+    assert!(
+        h.query_by_label(
+            "2 file(s) were added to the \"Main download queue\". Start the queue now?"
+        )
+        .is_some()
+            || box_title(h.state()) == "LID",
+        "and the Main queue is offered"
+    );
+    h.get_by_label("No").click();
+    h.run();
+    h.event(egui::Event::Paste("https://example.com/one.iso".into()));
+    h.run();
+    assert_eq!(
+        h.state().requests,
+        [Request::add("https://example.com/one.iso")]
+    );
+}
+
+/// A server that accepts and never answers: a download to it keeps running.
+fn silent_server() -> (std::net::TcpListener, String) {
+    let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+    let url = format!("http://{}/never.bin", l.local_addr().unwrap());
+    (l, url)
+}
+
+fn start_running(app: &mut App, url: &str, dir: &Path) -> i64 {
+    // The golden profile's proxy (127.0.0.1:8080) is not there: connect straight.
+    app.manager.settings.proxy.clear();
+    let d = app.manager.add(
+        url,
+        "never.bin",
+        lider_core::manager::NewDownload {
+            save_dir: Some(dir.to_string_lossy().into_owned()),
+            start: true,
+            ..Default::default()
+        },
+    );
+    assert!(app.manager.is_running(d.id));
+    d.id
+}
+
+#[test]
+fn closing_follows_the_tray_and_the_running_downloads() {
+    let (tmp, mut app) = golden();
+    // The tray is up and closing goes there.
+    app.tray_shown = true;
+    assert!(!app.close_requested());
+    assert_eq!(
+        app.effects,
+        [Effect::Hide],
+        "the close button hides to the tray"
+    );
+    app.effects.clear();
+    // Without the tray, a download keeps the window open with the question.
+    app.tray_shown = false;
+    let (_server, url) = silent_server();
+    let id = start_running(&mut app, &url, tmp.path());
+    assert!(!app.close_requested());
+    let b = app.boxx.clone().unwrap();
+    assert_eq!(b.title, "1 download is still running");
+    assert!(b.text.starts_with("Closing the window stops it."));
+    let ids: Vec<&str> = b.buttons.iter().map(|b| b.id).collect();
+    assert_eq!(ids, ["stop", "background", "keep"]);
+    assert_eq!(b.items[0].1, "never.bin");
+    let mut h = harness(app);
+    h.run();
+    h.get_by_label("Keep downloading").click();
+    h.run();
+    assert!(
+        h.state().manager.is_running(id),
+        "Keep downloading keeps it"
+    );
+    assert!(!h.state().quit);
+    // Exit with the tray up: no "background" (the tray is already there).
+    h.state_mut().tray_shown = true;
+    h.state_mut().run("exit");
+    h.run();
+    let ids: Vec<&str> = h
+        .state()
+        .boxx
+        .as_ref()
+        .unwrap()
+        .buttons
+        .iter()
+        .map(|b| b.id)
+        .collect();
+    assert_eq!(ids, ["stop", "keep"]);
+    assert!(h.query_by_label("Stop and exit").is_some());
+    h.get_by_label("Stop and exit").click();
+    h.run();
+    let s = h.state();
+    assert!(
+        s.quit && s.effects.contains(&Effect::Close),
+        "stop and exit closes"
+    );
+    let t = std::time::Instant::now();
+    while s.manager.is_running(id) && t.elapsed().as_secs() < 5 {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    assert!(!s.manager.is_running(id), "the manager is stopped");
+    assert!(
+        h.state_mut().close_requested(),
+        "the window's own close then goes through"
+    );
+}
+
+#[test]
+fn continue_in_background_turns_the_tray_on() {
+    let (tmp, mut app) = golden();
+    app.manager.settings.tray_icon = false;
+    let (_server, url) = silent_server();
+    start_running(&mut app, &url, tmp.path());
+    assert!(!app.close_requested());
+    let mut h = harness(app);
+    h.run();
+    h.get_by_label("Continue in background").click();
+    h.run();
+    let s = h.state();
+    assert!(s.manager.settings.tray_icon && s.manager.settings.close_to_tray);
+    assert!(s.effects.contains(&Effect::Hide));
+    assert!(
+        s.effects
+            .iter()
+            .any(|e| matches!(e, Effect::Notify(t, _) if t == "LID keeps downloading"))
+    );
+    assert!(!s.quit);
+}
+
+#[test]
+fn nothing_running_closes_at_once() {
+    let (_tmp, mut app) = golden();
+    app.tray_shown = false;
+    assert!(app.close_requested());
+    assert!(app.effects.contains(&Effect::Close) && app.quit);
+}
+
+#[test]
+fn the_power_off_countdown() {
+    let (_tmp, mut app) = golden();
+    app.start_power_off();
+    assert_eq!(box_title(&app), "Shut down");
+    assert!(app.boxx.as_ref().unwrap().text.contains("in 30 seconds"));
+    let mut h = harness(app);
+    h.run();
+    h.get_by_label("Cancel").click();
+    h.run();
+    assert!(
+        h.state().power_off_at.is_none(),
+        "Cancel stops the countdown"
+    );
+    let app = h.state_mut();
+    app.start_power_off();
+    app.power_off_at = Some(std::time::Instant::now() + std::time::Duration::from_millis(2500));
+    app.tick_now();
+    assert!(
+        app.boxx.as_ref().unwrap().text.contains("in 3 seconds"),
+        "the box counts down"
+    );
+    app.power_off_at = Some(std::time::Instant::now());
+    app.tick_now();
+    assert!(
+        app.effects.contains(&Effect::PowerOff),
+        "at 0 the computer is turned off"
+    );
+    assert!(app.boxx.is_none());
+}
+
+#[test]
+fn manager_events_become_notifications() {
+    use lider_core::manager::{Event, EventKind};
+    let (_tmp, mut app) = golden();
+    let id = *app.manager.downloads.keys().next().unwrap();
+    let name = app.manager.downloads[&id].filename.clone();
+    let ev = |kind, message: &str| Event {
+        kind,
+        download_id: Some(id),
+        queue: None,
+        message: message.into(),
+    };
+    app.handle_events(&[
+        ev(EventKind::Complete, ""),
+        ev(EventKind::Error, "HTTP 404"),
+        ev(EventKind::Mismatch, "kept"),
+        ev(EventKind::Changed, "again"),
+        ev(EventKind::Mismatch, ""),
+    ]);
+    let titles: Vec<&str> = app
+        .effects
+        .iter()
+        .filter_map(|e| match e {
+            Effect::Notify(t, _) => Some(t.as_str()),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(
+        titles,
+        [
+            "Download complete",
+            "Download failed",
+            "Checksum mismatch",
+            "Checksum mismatch"
+        ]
+    );
+    assert!(app.effects.contains(&Effect::Notify(
+        "Download failed".into(),
+        format!("{name}\nHTTP 404")
+    )));
+    assert_eq!(
+        app.requests,
+        [Request::Mismatch(id)],
+        "a mismatch to decide opens its window"
+    );
+}
+
+#[test]
+fn follow_the_system_theme() {
+    let (_tmp, mut app) = golden();
+    app.manager.settings.follow_system = true;
+    app.manager.settings.dark_theme = "dark".into();
+    app.dark_system = true;
+    app.apply_theme();
+    assert_eq!(app.theme, ThemeName::Dark);
+    app.dark_system = false;
+    app.apply_theme();
+    assert_eq!(app.theme, ThemeName::Ember, "a light desktop gets Ember");
+}
+
+#[test]
+fn the_menu_is_offered_once() {
+    let (_tmp, mut app) = golden();
+    app.manager.settings.menu_offered = false;
+    app.offer_menu("LID-2.0.0-x86_64.AppImage");
+    assert!(
+        app.manager.settings.menu_offered,
+        "remembered before the answer"
+    );
+    let saved = lider_core::settings::load(&app.dirs);
+    assert!(saved.menu_offered, "and saved");
+    let mut h = harness(app);
+    h.run();
+    assert!(
+        h.query_by_label("Add LID to the application menu?")
+            .is_some()
+    );
+    h.get_by_label("Not now").click();
+    h.run();
+    assert!(h.state().boxx.is_none());
+}

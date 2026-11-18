@@ -160,25 +160,7 @@ pub struct SearchView {
     pub active: bool,
 }
 
-/// Which theme applies now (`theme.resolve` in 1.x).
-pub fn resolve_theme(s: &Settings, dark_system: bool) -> String {
-    let valid = |t: &str| ["ember", "ember-dark", "dark"].contains(&t);
-    if s.follow_system {
-        if dark_system {
-            if valid(&s.dark_theme) {
-                s.dark_theme.clone()
-            } else {
-                "ember-dark".into()
-            }
-        } else {
-            "ember".into()
-        }
-    } else if valid(&s.theme) {
-        s.theme.clone()
-    } else {
-        "ember".into()
-    }
-}
+pub use lider_core::view::resolve_theme;
 
 pub fn inline_menubar(s: &Settings, global_menu: bool) -> bool {
     match s.menubar.as_str() {

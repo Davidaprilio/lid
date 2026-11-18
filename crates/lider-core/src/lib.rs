@@ -3,6 +3,7 @@
 pub mod batch;
 pub mod categories;
 pub mod checksum;
+pub mod cli;
 pub mod ef2;
 pub mod engine;
 pub mod fmt;
