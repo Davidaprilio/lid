@@ -320,8 +320,7 @@ fn scheduler_starts_and_stops_queue() {
             .any(|e| e.kind == EventKind::QueueDone && e.message == "stopped by schedule")
     );
     assert!(!t.m.queues[MAIN_QUEUE].running);
-    t.wait_for(|m| !m.is_running(id));
-    assert_eq!(t.d(id).status, Status::Paused);
+    t.wait_for(|m| !m.is_running(id) && m.downloads[&id].status == Status::Paused);
 }
 
 #[test]
