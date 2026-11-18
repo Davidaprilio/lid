@@ -586,6 +586,18 @@ fn continue_in_background_turns_the_tray_on() {
 #[test]
 fn nothing_running_closes_at_once() {
     let (_tmp, mut app) = golden();
+    // The golden profile starts a queued download at launch: let it end first.
+    app.manager.stop_all();
+    let t = std::time::Instant::now();
+    while app
+        .manager
+        .downloads
+        .keys()
+        .any(|i| app.manager.is_running(*i))
+        && t.elapsed().as_secs() < 5
+    {
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
     app.tray_shown = false;
     assert!(app.close_requested());
     assert!(app.effects.contains(&Effect::Close) && app.quit);
