@@ -205,12 +205,9 @@ fn details_pane_follows_the_selection_and_f9() {
     );
     h.key_press(Key::F9);
     h.run();
-    assert!(
-        h.query_by_label(
-            "Select a download to see its progress, connections and speed limit here."
-        )
-        .is_some()
-    );
+    assert!(h.state().manager.settings.show_details);
+    // Nothing selected: the pane stays hidden (1.x MW:1241-1252).
+    assert!(h.query_by_label("Download status").is_none());
     h.get_by_label("Download big.tar.gz").click();
     h.run();
     assert_eq!(
@@ -727,4 +724,239 @@ fn the_menu_is_offered_once() {
     h.get_by_label("Not now").click();
     h.run();
     assert!(h.state().boxx.is_none());
+}
+
+// ---------------------------------------------------------------------- phase E5: the parity walk
+
+#[test]
+fn alt_letters_open_the_menus_and_pick_items() {
+    let (_tmp, app) = golden();
+    let mut h = harness(app);
+    h.run();
+    h.key_press_modifiers(Modifiers::ALT, Key::T);
+    h.run();
+    h.run();
+    assert!(
+        h.query_all_by_label_contains("Add batch download")
+            .next()
+            .is_some(),
+        "Alt+T opens Tasks"
+    );
+    // In an open menu an item's letter picks it: b = Add &batch download.
+    h.key_press(Key::B);
+    h.run();
+    assert!(h.state().dialog_open("batch"), "B picks Add batch download");
+    assert_eq!(main_window::mnemonic("S&cheduler"), Some('c'));
+    assert_eq!(main_window::mnemonic("Drag && drop"), None);
+}
+
+#[test]
+fn density_and_the_list_font() {
+    let (_tmp, mut app) = golden();
+    app.manager.settings.density = "comfortable".into();
+    assert_eq!(main_window::row_height(&app), 32.0);
+    app.manager.settings.density = "compact".into();
+    assert_eq!(main_window::row_height(&app), 26.0);
+    // No font chosen: 13 px in the list's family; a choice in points becomes pixels.
+    app.manager.settings.list_font.clear();
+    let (text, mono) = main_window::list_fonts(&app);
+    assert_eq!(text.size, 13.0);
+    assert_eq!(
+        text.family,
+        egui::FontFamily::Name(crate::fonts::LIST.into())
+    );
+    assert_eq!(mono.family, egui::FontFamily::Monospace);
+    app.manager.settings.list_font = "DejaVu Serif,12".into();
+    assert_eq!(main_window::list_fonts(&app).0.size, (12.0 * 1.333) as f32);
+    // The list draws with it (the harness installs the list family).
+    let mut h = harness(app);
+    h.run();
+    assert!(h.query_by_label("Download big.tar.gz").is_some());
+}
+
+#[test]
+fn a_column_is_dragged_to_size_and_kept() {
+    let (_tmp, app) = golden();
+    let mut h = harness(app);
+    h.run();
+    let width = |h: &egui_kittest::Harness<'static, App>, key: &str| {
+        h.state()
+            .manager
+            .settings
+            .columns
+            .iter()
+            .find(|c| c.0 == key)
+            .unwrap()
+            .2
+    };
+    let before = width(&h, "filename");
+    let grip = h.get_by_label("Width of File Name").rect();
+    let from = grip.center();
+    h.event(egui::Event::PointerMoved(from));
+    h.event(egui::Event::PointerButton {
+        pos: from,
+        button: egui::PointerButton::Primary,
+        pressed: true,
+        modifiers: Modifiers::NONE,
+    });
+    h.run();
+    for step in 1..=5 {
+        h.event(egui::Event::PointerMoved(
+            from + egui::vec2(10.0 * step as f32, 0.0),
+        ));
+        h.run();
+    }
+    h.event(egui::Event::PointerButton {
+        pos: from + egui::vec2(50.0, 0.0),
+        button: egui::PointerButton::Primary,
+        pressed: false,
+        modifiers: Modifiers::NONE,
+    });
+    h.run();
+    let after = width(&h, "filename");
+    assert!(
+        (after - before - 50).abs() <= 2,
+        "dragged 50 px: {before} -> {after}"
+    );
+    // Saved with the settings.
+    let saved = lider_core::settings::load(&h.state().dirs);
+    assert_eq!(
+        saved.columns.iter().find(|c| c.0 == "filename").unwrap().2,
+        after
+    );
+    // A column never gets narrower than its minimum.
+    h.state_mut().set_column_width("status", 10.0);
+    assert_eq!(width(&h, "status"), 170);
+}
+
+#[test]
+fn the_sort_arrow_follows_header_clicks_not_arrange() {
+    let (_tmp, app) = golden();
+    let mut h = harness(app);
+    h.run();
+    assert!(!h.state().sort_shown, "no arrow at start");
+    h.get_by_label("Column Size").click();
+    h.run();
+    assert!(h.state().sort_shown, "a header click shows the arrow");
+    h.state_mut().run("arrange:filename");
+    assert!(!h.state().sort_shown, "Arrange files does not");
+    // Right-click on the header opens Customize columns.
+    h.get_by_label("Column Size").click_secondary();
+    h.run();
+    assert!(h.state().dialog_open("columns"));
+}
+
+#[test]
+fn the_sidebar_is_dragged_and_its_width_kept() {
+    let (_tmp, app) = golden();
+    let mut h = harness(app);
+    h.run();
+    let start = h.state().manager.settings.sidebar_width as f32;
+    // The panel's resize edge is just right of its width.
+    let edge = egui::pos2(start + 2.0, 300.0);
+    h.event(egui::Event::PointerMoved(edge));
+    h.run();
+    h.event(egui::Event::PointerButton {
+        pos: edge,
+        button: egui::PointerButton::Primary,
+        pressed: true,
+        modifiers: Modifiers::NONE,
+    });
+    h.run();
+    for step in 1..=8 {
+        h.event(egui::Event::PointerMoved(
+            edge + egui::vec2(10.0 * step as f32, 0.0),
+        ));
+        h.run();
+    }
+    h.event(egui::Event::PointerButton {
+        pos: edge + egui::vec2(80.0, 0.0),
+        button: egui::PointerButton::Primary,
+        pressed: false,
+        modifiers: Modifiers::NONE,
+    });
+    h.run();
+    h.run();
+    let w = h.state().manager.settings.sidebar_width as f32;
+    assert!((w - start - 80.0).abs() <= 10.0, "{start} -> {w}");
+    assert_eq!(
+        lider_core::settings::load(&h.state().dirs).sidebar_width as f32,
+        w,
+        "saved when the drag ends"
+    );
+    // Never so wide that the list gets less than 560 px (the harness is 1200 wide).
+    let edge = egui::pos2(w + 2.0, 300.0);
+    h.event(egui::Event::PointerMoved(edge));
+    h.run();
+    h.event(egui::Event::PointerButton {
+        pos: edge,
+        button: egui::PointerButton::Primary,
+        pressed: true,
+        modifiers: Modifiers::NONE,
+    });
+    h.run();
+    h.event(egui::Event::PointerMoved(edge + egui::vec2(900.0, 0.0)));
+    h.run();
+    h.event(egui::Event::PointerButton {
+        pos: edge + egui::vec2(900.0, 0.0),
+        button: egui::PointerButton::Primary,
+        pressed: false,
+        modifiers: Modifiers::NONE,
+    });
+    h.run();
+    h.run();
+    assert!(h.state().manager.settings.sidebar_width <= 1200 - 560);
+}
+
+#[test]
+fn the_details_pane_is_dragged_and_its_height_kept() {
+    let (_tmp, mut app) = golden();
+    app.manager.settings.show_details = true;
+    let mut h = harness(app);
+    h.run();
+    h.get_by_label("Download big.tar.gz").click();
+    h.run();
+    h.run();
+    let start = h.state().manager.settings.details_height as f32;
+    let top = h.get_by_label("Download status").rect().top();
+    // Find the pane's top edge just above its tab strip, then drag it 60 px up.
+    let mut grabbed = None;
+    for dy in [2.0f32, 4.0, 6.0, 8.0, 10.0] {
+        let edge = egui::pos2(700.0, top - dy);
+        h.event(egui::Event::PointerMoved(edge));
+        h.run();
+        h.event(egui::Event::PointerButton {
+            pos: edge,
+            button: egui::PointerButton::Primary,
+            pressed: true,
+            modifiers: Modifiers::NONE,
+        });
+        h.run();
+        for step in 1..=6 {
+            h.event(egui::Event::PointerMoved(
+                edge - egui::vec2(0.0, 10.0 * step as f32),
+            ));
+            h.run();
+        }
+        h.event(egui::Event::PointerButton {
+            pos: edge - egui::vec2(0.0, 60.0),
+            button: egui::PointerButton::Primary,
+            pressed: false,
+            modifiers: Modifiers::NONE,
+        });
+        h.run();
+        h.run();
+        let now = h.state().manager.settings.details_height as f32;
+        if now != start {
+            grabbed = Some(now);
+            break;
+        }
+    }
+    let now = grabbed.expect("the pane's edge can be dragged");
+    assert!((now - start - 60.0).abs() <= 10.0, "{start} -> {now}");
+    assert_eq!(
+        lider_core::settings::load(&h.state().dirs).details_height as f32,
+        now,
+        "saved when the drag ends"
+    );
 }

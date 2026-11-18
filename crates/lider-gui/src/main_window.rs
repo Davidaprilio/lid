@@ -62,12 +62,28 @@ pub fn plain(label: &str) -> String {
         .replace('\u{1}', "&")
 }
 
-fn row_height(app: &App) -> f32 {
+/// Row height by density: 32 comfortable, 26 compact (1.x MW:82).
+pub fn row_height(app: &App) -> f32 {
     if app.manager.settings.density == "compact" {
-        27.0
+        26.0
     } else {
-        34.0
+        32.0
     }
+}
+
+/// The list's text: the family of View → Font (crate::fonts::LIST) at its size (points → pixels as the Tauri
+/// window does), 13 px without a choice; the mono cells one pixel smaller.
+pub fn list_fonts(app: &App) -> (FontId, FontId) {
+    let size = app
+        .manager
+        .settings
+        .list_font_family_and_size()
+        .map_or(13.0, |(_, pt)| (pt * 1.333) as f32)
+        .clamp(8.0, 40.0);
+    (
+        FontId::new(size, egui::FontFamily::Name(crate::fonts::LIST.into())),
+        FontId::monospace(size - 1.0),
+    )
 }
 
 pub fn show(app: &mut App, ui: &mut Ui) {
@@ -115,21 +131,43 @@ pub fn show(app: &mut App, ui: &mut Ui) {
                 statusbar(app, ui);
             });
     }
+    // The sidebar and the details pane are dragged to size; the right side keeps at least 560 px and the
+    // sizes are saved when the drag ends (1.x MW:430, 1517-1520).
+    let released = ui.input(|i| i.pointer.any_released());
+    // As the Tauri window: the window's width less 560, its height less 220.
+    let room = ui.ctx().content_rect();
     if app.manager.settings.show_categories {
-        egui::Panel::left("tree")
+        let max = (room.width() - 560.0).max(170.0);
+        let r = egui::Panel::left("tree")
+            .resizable(true)
             .default_size(app.manager.settings.sidebar_width as f32)
+            .size_range(170.0..=max)
             .frame(
                 egui::Frame::new()
                     .fill(p.win)
                     .inner_margin(egui::Margin::same(8)),
             )
             .show(ui, |ui| tree(app, ui));
+        let w = r.response.rect.width().round() as i64;
+        if released && w != app.manager.settings.sidebar_width {
+            app.manager.settings.sidebar_width = w;
+            app.save_settings();
+        }
     }
-    if app.manager.settings.show_details {
-        egui::Panel::bottom("details")
+    // The pane shows only while a download is selected (1.x MW:1241-1252).
+    if app.manager.settings.show_details && app.view.details.is_some() {
+        let max = (room.height() - 220.0).max(170.0);
+        let r = egui::Panel::bottom("details")
+            .resizable(true)
             .default_size(app.manager.settings.details_height as f32)
-            .frame(egui::Frame::new().fill(p.win))
+            .size_range(170.0..=max)
+            .frame(egui::Frame::new().fill(p.pane))
             .show(ui, |ui| details(app, ui));
+        let h = r.response.rect.height().round() as i64;
+        if released && h != app.manager.settings.details_height {
+            app.manager.settings.details_height = h;
+            app.save_settings();
+        }
     }
     egui::CentralPanel::default()
         .frame(egui::Frame::new().fill(p.pane))
@@ -180,7 +218,8 @@ fn keyboard(app: &mut App, ctx: &egui::Context) {
         app.run("details");
     } else if app.search_open && hit(Modifiers::NONE, Key::Escape) {
         app.close_search();
-    } else if !typing {
+    } else if !typing && !egui::Popup::is_any_open(ctx) {
+        // (An open menu has the arrows, Enter and its letters.)
         if hit(Modifiers::NONE, Key::Delete) {
             app.run("remove");
         } else if hit(Modifiers::CTRL, Key::A) {
@@ -216,6 +255,20 @@ pub fn menu_items(
     picked: &mut Option<String>,
     tip: &mut String,
 ) {
+    // While a menu is open its items' mnemonic letters pick them (no Alt needed, as in Qt menus).
+    let letter = ui.input(|i| {
+        i.events.iter().find_map(|e| match e {
+            egui::Event::Key {
+                key,
+                pressed: true,
+                modifiers,
+                ..
+            } if modifiers.is_none() && key.name().len() == 1 => {
+                key.name().to_ascii_lowercase().chars().next()
+            }
+            _ => None,
+        })
+    });
     for it in items {
         match it {
             Item::Separator => {
@@ -253,7 +306,8 @@ pub fn menu_items(
                 {
                     *tip = (*t).to_string();
                 }
-                if r.clicked() {
+                let by_letter = *enabled && letter.is_some() && letter == mnemonic(label);
+                if r.clicked() || by_letter {
                     *picked = Some(id.clone());
                     ui.close();
                 }
@@ -262,16 +316,98 @@ pub fn menu_items(
     }
 }
 
+/// The letter after `&` in a label (its Alt mnemonic), lower case.
+pub fn mnemonic(label: &str) -> Option<char> {
+    let mut chars = label.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '&' {
+            match chars.next() {
+                Some('&') => continue,
+                Some(m) => return Some(m.to_ascii_lowercase()),
+                None => return None,
+            }
+        }
+    }
+    None
+}
+
+/// A label with its mnemonic letter underlined (shown while Alt is held, as in 1.x and the Tauri window).
+fn underlined(label: &str, colour: Color32) -> egui::text::LayoutJob {
+    let text = plain(label);
+    let mut job = egui::text::LayoutJob::default();
+    let at = mnemonic(label).and_then(|m| text.to_lowercase().find(m));
+    let font = egui::TextFormat {
+        font_id: FontId::proportional(14.0),
+        color: colour,
+        ..Default::default()
+    };
+    match at {
+        Some(i) => {
+            let end = i + text[i..].chars().next().map_or(1, char::len_utf8);
+            job.append(&text[..i], 0.0, font.clone());
+            job.append(
+                &text[i..end],
+                0.0,
+                egui::TextFormat {
+                    underline: Stroke::new(1.0, colour),
+                    ..font.clone()
+                },
+            );
+            job.append(&text[end..], 0.0, font);
+        }
+        None => job.append(&text, 0.0, font),
+    }
+    job
+}
+
+/// The letter of an Alt+letter press this frame (consumed), if any.
+fn alt_letter(ctx: &egui::Context) -> Option<char> {
+    ctx.input_mut(|i| {
+        let hit = i.events.iter().find_map(|e| match e {
+            egui::Event::Key {
+                key,
+                pressed: true,
+                modifiers,
+                ..
+            } if modifiers.alt && !modifiers.ctrl && !modifiers.command => {
+                let name = key.name();
+                (name.len() == 1).then(|| (*key, name.to_ascii_lowercase().chars().next()))
+            }
+            _ => None,
+        });
+        let (key, letter) = hit?;
+        i.consume_key(Modifiers::ALT, key);
+        letter
+    })
+}
+
 fn menubar(app: &mut App, ui: &mut Ui) {
     let p = app.palette;
     let menus = app.view.menus.clone();
     let mut picked = None;
     let mut tip = String::new();
+    // Alt+letter opens the menu with that mnemonic (Alt+T: Tasks); the letters show underlined while Alt is
+    // held. No dialog or message box may have the keys.
+    let free = app.boxx.is_none() && !(ui.ctx().embed_viewports() && !app.dialogs.is_empty());
+    let alt = free && ui.input(|i| i.modifiers.alt);
+    let letter = if free { alt_letter(ui.ctx()) } else { None };
     egui::MenuBar::new().ui(ui, |ui| {
         for m in &menus {
-            ui.menu_button(plain(&m.label), |ui| {
-                menu_items(ui, &p, &m.items, &mut picked, &mut tip)
-            });
+            let text: egui::WidgetText = if alt {
+                underlined(&m.label, p.tx).into()
+            } else {
+                plain(&m.label).into()
+            };
+            let r = ui
+                .menu_button(text, |ui| {
+                    menu_items(ui, &p, &m.items, &mut picked, &mut tip)
+                })
+                .response;
+            if letter.is_some() && letter == mnemonic(&m.label) {
+                let id = egui::Popup::default_response_id(&r);
+                egui::Popup::open_id(ui.ctx(), id);
+                ui.ctx().request_repaint();
+            }
         }
     });
     if !tip.is_empty() {
@@ -397,30 +533,61 @@ fn toolbar(app: &mut App, ui: &mut Ui) {
         );
         triangle(ui.painter(), arrow.rect.center(), true, p.mu);
         let arrow = arrow.on_hover_text("More ways to delete");
+        // The split part of Delete (1.x MW:316-321).
         egui::Popup::menu(&arrow).show(|ui| {
-            if ui
-                .add_enabled(
+            for (id, label, icon_name, enabled) in [
+                (
+                    "remove",
+                    "Delete checked or selected",
+                    "delete",
+                    on(|a| a.remove),
+                ),
+                (
+                    "delete_completed",
+                    "Delete all completed",
+                    "delete-completed",
                     on(|a| a.delete_completed),
-                    egui::Button::new("Delete All Completed"),
-                )
-                .clicked()
-            {
-                picked = Some("delete_completed");
-                ui.close();
+                ),
+            ] {
+                let b = egui::Button::image_and_text(icon(icon_name, 16.0, &p, p.tx), label);
+                if ui.add_enabled(enabled, b).clicked() {
+                    picked = Some(id);
+                    ui.close();
+                }
             }
         });
         let checked = a.as_ref().map_or(0, |a| a.checked);
         if checked > 0 {
             ui.separator();
-            ui.label(
-                RichText::new(format!("{checked} checked"))
-                    .strong()
-                    .color(p.actx),
-            );
-            if close_button(ui, &p, "Clear the checks") {
-                app.checked.clear();
-                app.rebuild();
-            }
+            // The chip "N checked ✕" (1.x CheckChip).
+            egui::Frame::new()
+                .fill(p.acsel)
+                .corner_radius(CornerRadius::same(15))
+                .inner_margin(egui::Margin {
+                    left: 10,
+                    right: 6,
+                    top: 4,
+                    bottom: 4,
+                })
+                .show(ui, |ui| {
+                    ui.horizontal(|ui| {
+                        let (b, _) = ui.allocate_exact_size(vec2(14.0, 14.0), Sense::hover());
+                        check_box(ui.painter(), &p, b.center(), CheckState::Partial);
+                        ui.label(
+                            RichText::new(format!("{checked} checked"))
+                                .strong()
+                                .color(p.actx),
+                        );
+                        if ui
+                            .add(egui::Button::image(icon("close", 12.0, &p, p.actx)).frame(false))
+                            .on_hover_text("Clear the checks")
+                            .clicked()
+                        {
+                            app.checked.clear();
+                            app.rebuild();
+                        }
+                    });
+                });
         }
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
             tool(
@@ -473,18 +640,28 @@ fn toolbar(app: &mut App, ui: &mut Ui) {
 
 fn searchbar(app: &mut App, ui: &mut Ui) {
     let p = app.palette;
+    // "Find:" [field] [Find] [Settings...] … [✕] (1.x find.py:95-124).
     ui.horizontal(|ui| {
-        ui.add(icon("search", 16.0, &p, p.mu));
-        let field = ui.add(
-            egui::TextEdit::singleline(&mut app.search_text)
-                .desired_width(320.0)
-                .hint_text("Find in the download list"),
-        );
+        let label = ui.label("Find:");
+        let field = ui
+            .add(egui::TextEdit::singleline(&mut app.search_text).desired_width(260.0))
+            .labelled_by(label.id);
         if std::mem::take(&mut app.focus_search) {
             field.request_focus();
+            // Show the current query selected, as 1.x does.
+            let mut state = egui::TextEdit::load_state(ui.ctx(), field.id).unwrap_or_default();
+            let all = egui::text::CCursorRange::two(
+                egui::text::CCursor::new(0),
+                egui::text::CCursor::new(app.search_text.chars().count()),
+            );
+            state.cursor.set_char_range(Some(all));
+            state.store(ui.ctx(), field.id);
         }
         let enter = field.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter));
-        if ui.button("Find").clicked() || enter {
+        let find = ui.add(
+            egui::Button::new(RichText::new("Find").strong().color(Color32::WHITE)).fill(p.ac),
+        );
+        if find.clicked() || enter {
             app.run_search();
         }
         if ui
@@ -494,9 +671,8 @@ fn searchbar(app: &mut App, ui: &mut Ui) {
         {
             app.run("find_settings");
         }
-        ui.label(RichText::new("F3 finds next").color(p.fa));
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if close_button(ui, &p, "Close the search") {
+            if close_button(ui, &p, "Close SearchBar") {
                 app.close_search();
             }
         });
@@ -538,7 +714,7 @@ fn tree(app: &mut App, ui: &mut Ui) {
     ui.horizontal(|ui| {
         ui.label(RichText::new("CATEGORIES").size(11.0).strong().color(p.fa));
         ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-            if close_button(ui, &p, "Hide the categories") {
+            if close_button(ui, &p, "Hide categories") {
                 app.run("hide_categories");
             }
         });
@@ -698,7 +874,11 @@ fn list(app: &mut App, ui: &mut Ui) {
     let height = row_height(app);
     let sort_key = app.manager.settings.sort_key.clone();
     let sort_desc = app.manager.settings.sort_desc;
+    let sort_shown = app.sort_shown;
+    let (text_font, mono_font) = list_fonts(app);
     let total: f32 = cols.iter().map(|c| c.width).sum();
+    let mut resized: Option<(String, f32, bool)> = None;
+    let mut header_menu = false;
 
     egui::ScrollArea::horizontal()
         .auto_shrink(false)
@@ -734,7 +914,8 @@ fn list(app: &mut App, ui: &mut Ui) {
                     }
                 } else {
                     let title = lider_core::view::column_title(&c.key).to_uppercase();
-                    let ink = if c.key == sort_key { p.actx } else { p.mu };
+                    let sorted = sort_shown && c.key == sort_key;
+                    let ink = if sorted { p.actx } else { p.mu };
                     let clip = ui.painter().with_clip_rect(cell);
                     let r_text = clip.text(
                         egui::pos2(x + 8.0, cell.center().y),
@@ -743,7 +924,7 @@ fn list(app: &mut App, ui: &mut Ui) {
                         FontId::proportional(11.0),
                         ink,
                     );
-                    if c.key == sort_key {
+                    if sorted {
                         triangle(
                             &clip,
                             egui::pos2(r_text.right() + 9.0, cell.center().y),
@@ -754,12 +935,43 @@ fn list(app: &mut App, ui: &mut Ui) {
                     if r.clicked() {
                         app.header_click(&c.key);
                     }
-                    r.context_menu(|ui| {
-                        if ui.button("Customize columns...").clicked() {
-                            app.run("columns");
-                            ui.close();
-                        }
+                    // Right-click on the header opens Customize columns (1.x MW:411-412).
+                    if r.secondary_clicked() {
+                        header_menu = true;
+                    }
+                    // The grip at the right edge: drag to size the column.
+                    let grip = Rect::from_min_max(
+                        egui::pos2(cell.right() - 4.0, cell.top()),
+                        egui::pos2(cell.right() + 3.0, cell.bottom()),
+                    );
+                    let g = ui
+                        .interact(grip, ui.scope_id().with(("grip", &c.key)), Sense::drag())
+                        .on_hover_cursor(egui::CursorIcon::ResizeHorizontal);
+                    g.widget_info(|| {
+                        egui::WidgetInfo::labeled(
+                            egui::Role::Splitter,
+                            true,
+                            format!("Width of {}", lider_core::view::column_title(&c.key)),
+                        )
                     });
+                    if g.dragged() {
+                        resized = Some((c.key.clone(), c.width + g.drag_delta().x, false));
+                    }
+                    if g.drag_stopped() {
+                        resized = Some((c.key.clone(), c.width, true));
+                    }
+                    ui.painter().vline(
+                        cell.right() - 1.0,
+                        cell.y_range().shrink(6.0),
+                        Stroke::new(
+                            1.0,
+                            if g.hovered() || g.dragged() {
+                                p.ac
+                            } else {
+                                p.line
+                            },
+                        ),
+                    );
                 }
                 x += c.width;
             }
@@ -789,15 +1001,18 @@ fn list(app: &mut App, ui: &mut Ui) {
                             Sense::click(),
                         );
                         let selected = app.selected.contains(&row.id);
+                        // Selected: acsel with a 3 px accent bar; checked: acsel at 150/255 (1.x widgets.py:899-914).
                         let fill = if selected {
                             p.acsel
+                        } else if row.checked {
+                            alpha(p.acsel, 150.0 / 255.0)
                         } else if i % 2 == 1 {
                             p.alt
                         } else {
                             p.pane
                         };
                         ui.painter().rect_filled(rect, CornerRadius::ZERO, fill);
-                        if app.current == Some(row.id) {
+                        if selected {
                             ui.painter().rect_filled(
                                 Rect::from_min_size(rect.min, vec2(3.0, height)),
                                 CornerRadius::ZERO,
@@ -852,10 +1067,16 @@ fn list(app: &mut App, ui: &mut Ui) {
                                 }
                                 "queue" => {
                                     if !row.queue.is_empty() {
-                                        icon("queue", 15.0, &p, p.mu).paint_at(
-                                            ui,
-                                            Rect::from_center_size(cell.center(), vec2(15.0, 15.0)),
-                                        );
+                                        let r =
+                                            Rect::from_center_size(cell.center(), vec2(16.0, 16.0));
+                                        icon("queue", 16.0, &p, p.mu).paint_at(ui, r);
+                                        // The queue's name as the icon's tooltip.
+                                        ui.interact(
+                                            r,
+                                            ui.scope_id().with(("q", row.id)),
+                                            Sense::hover(),
+                                        )
+                                        .on_hover_text(&row.queue);
                                     }
                                 }
                                 "filename" => {
@@ -870,17 +1091,28 @@ fn list(app: &mut App, ui: &mut Ui) {
                                         egui::pos2(x + 32.0, cell.center().y),
                                         Align2::LEFT_CENTER,
                                         text,
-                                        FontId::proportional(13.0),
+                                        text_font.clone(),
                                         p.tx,
                                     );
                                 }
-                                "status" => pill(&clip, &p, &row.pill, cell),
+                                "status" => {
+                                    let r = pill(ui, &clip, &p, &row.pill, cell, &text_font);
+                                    // An error's message as the pill's tooltip.
+                                    if !row.error.is_empty() {
+                                        ui.interact(
+                                            r,
+                                            ui.scope_id().with(("e", row.id)),
+                                            Sense::hover(),
+                                        )
+                                        .on_hover_text(&row.error);
+                                    }
+                                }
                                 "size" | "rate" | "time_left" | "last_try" | "date_added" => {
                                     clip.text(
                                         at,
                                         Align2::LEFT_CENTER,
                                         text,
-                                        FontId::monospace(12.0),
+                                        mono_font.clone(),
                                         p.tx,
                                     );
                                 }
@@ -889,7 +1121,7 @@ fn list(app: &mut App, ui: &mut Ui) {
                                         at,
                                         Align2::LEFT_CENTER,
                                         text,
-                                        FontId::proportional(13.0),
+                                        text_font.clone(),
                                         p.tx,
                                     );
                                 }
@@ -943,6 +1175,15 @@ fn list(app: &mut App, ui: &mut Ui) {
                     ui.close();
                 }
             });
+            if let Some((key, w, done)) = resized {
+                app.set_column_width(&key, w);
+                if done {
+                    app.save_settings();
+                }
+            }
+            if header_menu {
+                action = Some("columns".into());
+            }
             if let Some((id, on)) = check {
                 app.check(id, on);
             }
@@ -1120,52 +1361,88 @@ fn row_menu(app: &App, ui: &mut Ui, id: i64, action: &mut Option<String>) {
     );
 }
 
-/// The Status cell: a progress pill while running or paused, a coloured pill otherwise.
-fn pill(painter: &egui::Painter, p: &Palette, pill: &Pill, cell: Rect) {
+/// The Status cell (1.x widgets.py:916-935): a progress pill while running or paused (150 px, the done part
+/// at alpha 70 with a 3 px edge), otherwise a coloured pill with its mark (✓, !, a shield). Returns its rect.
+fn pill(
+    ui: &Ui,
+    painter: &egui::Painter,
+    p: &Palette,
+    pill: &Pill,
+    cell: Rect,
+    font: &FontId,
+) -> Rect {
+    let size = (font.size * 0.88).max(10.0);
+    let h = 20.0_f32.min(cell.height() - 8.0);
     match pill.kind {
         "run" | "pause" => {
             let r = Rect::from_min_size(
-                egui::pos2(cell.left() + 8.0, cell.center().y - 9.0),
-                vec2(150.0_f32.min(cell.width() - 16.0), 18.0),
+                egui::pos2(cell.left() + 8.0, cell.center().y - h / 2.0),
+                vec2(150.0_f32.min(cell.width() - 16.0), h),
             );
-            painter.rect_filled(r, CornerRadius::same(9), p.track);
+            let radius = CornerRadius::same((h / 2.0) as u8);
+            painter.rect_filled(r, radius, p.track);
+            let colour = if pill.kind == "run" { p.ac } else { p.fa };
             let fill = Rect::from_min_size(
                 r.min,
                 vec2((r.width() * pill.progress as f32).max(0.0), r.height()),
             );
-            let colour = if pill.kind == "run" {
-                alpha(p.ac, 0.35)
-            } else {
-                alpha(p.fa, 0.3)
-            };
-            painter
-                .with_clip_rect(fill.intersect(painter.clip_rect()))
-                .rect_filled(r, CornerRadius::same(9), colour);
+            let clip = painter.with_clip_rect(fill.intersect(painter.clip_rect()));
+            clip.rect_filled(r, radius, alpha(colour, 70.0 / 255.0));
+            clip.rect_filled(
+                Rect::from_min_size(r.min, vec2(3.0, h)),
+                CornerRadius::ZERO,
+                colour,
+            );
             painter.text(
                 r.center(),
                 Align2::CENTER_CENTER,
                 &pill.text,
-                FontId::monospace(11.0),
+                FontId::monospace(size),
                 p.tx,
             );
+            r
         }
         kind => {
             let (fg, bg) = match kind {
-                "done" | "verified" => (p.ok, alpha(p.ok, 0.13)),
-                "mismatch" | "error" => (p.bad, alpha(p.bad, 0.12)),
+                "done" | "verified" => (p.ok, alpha(p.ok, 34.0 / 255.0)),
+                "mismatch" | "error" => (p.bad, alpha(p.bad, 30.0 / 255.0)),
                 _ => (p.mu, p.track),
             };
-            let galley = painter.layout_no_wrap(pill.text.clone(), FontId::proportional(11.5), fg);
+            let text = match kind {
+                "error" => format!("! {}", pill.text),
+                _ => pill.text.clone(),
+            };
+            // The marks are drawn, not taken from a font that may lack the glyph.
+            let mark = match kind {
+                "verified" => Some("shield-check"),
+                "mismatch" => Some("shield-alert"),
+                "done" => Some(""),
+                _ => None,
+            };
+            let galley =
+                painter.layout_no_wrap(text, FontId::new(size, egui::FontFamily::Proportional), fg);
+            let pad = if mark.is_some() { 26.0 } else { 10.0 };
+            let w = (galley.size().x + pad + 10.0).min(cell.width() - 8.0);
             let r = Rect::from_min_size(
-                egui::pos2(cell.left() + 8.0, cell.center().y - 9.0),
-                vec2(galley.size().x + 16.0, 18.0),
+                egui::pos2(cell.left() + 8.0, cell.center().y - h / 2.0),
+                vec2(w, h),
             );
-            painter.rect_filled(r, CornerRadius::same(9), bg);
+            painter.rect_filled(r, CornerRadius::same((h / 2.0) as u8), bg);
+            let at = Rect::from_min_size(
+                egui::pos2(r.left() + 9.0, r.center().y - 6.0),
+                vec2(12.0, 12.0),
+            );
+            match mark {
+                Some("") => check_mark(painter, at, fg),
+                Some(m) => icon(m, 12.0, p, fg).paint_at(ui, at),
+                None => {}
+            }
             painter.galley(
-                egui::pos2(r.left() + 8.0, r.center().y - galley.size().y / 2.0),
+                egui::pos2(r.left() + pad, r.center().y - galley.size().y / 2.0),
                 galley,
                 fg,
             );
+            r
         }
     }
 }
@@ -1174,6 +1451,8 @@ fn pill(painter: &egui::Painter, p: &Palette, pill: &Pill, cell: Rect) {
 
 fn details(app: &mut App, ui: &mut Ui) {
     let p = app.palette;
+    // Fill the pane: a resizable panel otherwise shrinks to its contents.
+    ui.set_min_size(ui.available_size());
     ui.painter().hline(
         ui.max_rect().x_range(),
         ui.max_rect().top(),
@@ -1181,7 +1460,11 @@ fn details(app: &mut App, ui: &mut Ui) {
     );
     let mut button: Option<(i64, String)> = None;
     let mut folder = None;
+    // The tab strip on the header colour (1.x detailsTabs, 30 px).
+    let strip = Rect::from_min_size(ui.max_rect().min, vec2(ui.max_rect().width(), 30.0));
+    ui.painter().rect_filled(strip, CornerRadius::ZERO, p.hdr);
     ui.horizontal(|ui| {
+        ui.set_min_height(28.0);
         ui.add_space(8.0);
         for (i, name) in ["Download status", "Connections", "Speed Limiter"]
             .iter()
@@ -1211,9 +1494,16 @@ fn details(app: &mut App, ui: &mut Ui) {
             {
                 crate::dialogs::progress::open(app, id, true);
             }
+            ui.label(
+                RichText::new("View → Details pane (F9)")
+                    .color(p.fa)
+                    .size(12.5),
+            );
         });
     });
-    ui.separator();
+    ui.painter()
+        .hline(strip.x_range(), strip.bottom(), Stroke::new(1.0, p.line));
+    ui.add_space(4.0);
     let Some(d) = app.view.details.clone() else {
         ui.centered_and_justified(|ui| {
             ui.label(
@@ -1229,11 +1519,17 @@ fn details(app: &mut App, ui: &mut Ui) {
         .inner_margin(egui::Margin::symmetric(14, 6))
         .show(ui, |ui| match app.details_tab {
             0 => {
+                // The stats column hides when the pane is narrower than 960 px (details.py:58, 125-127).
+                let wide = ui.available_width() >= 960.0 - 28.0;
                 ui.horizontal_top(|ui| {
                     ui.vertical(|ui| {
                         ui.set_width(300.0);
                         ui.horizontal(|ui| {
-                            ui.add(icon(&d.icon, 30.0, &p, p.tx));
+                            // The category icon on a 52 px tile.
+                            let (t, _) = ui.allocate_exact_size(vec2(52.0, 52.0), Sense::hover());
+                            ui.painter().rect_filled(t, CornerRadius::same(12), p.win);
+                            icon(&d.icon, 30.0, &p, p.tx)
+                                .paint_at(ui, Rect::from_center_size(t.center(), vec2(30.0, 30.0)));
                             ui.vertical(|ui| {
                                 ui.add(
                                     egui::Label::new(
@@ -1252,50 +1548,83 @@ fn details(app: &mut App, ui: &mut Ui) {
                         });
                         ui.add(egui::Label::new(RichText::new(&d.state).color(p.mu)).truncate());
                         ui.horizontal(|ui| {
-                            if ui.button(d.action_label).clicked() {
+                            ui.spacing_mut().item_spacing.x = 6.0;
+                            let first = if d.action_icon.is_empty() {
+                                egui::Button::new(RichText::new(d.action_label).strong())
+                            } else {
+                                egui::Button::image_and_text(
+                                    icon(d.action_icon, 13.0, &p, p.tx),
+                                    RichText::new(d.action_label).strong(),
+                                )
+                            };
+                            let compact = |b: egui::Button<'static>| {
+                                b.min_size(vec2(0.0, 30.0))
+                                    .corner_radius(CornerRadius::same(7))
+                            };
+                            if ui.add(compact(first)).clicked() {
                                 button = Some((d.id, d.action.to_string()));
                             }
-                            if ui.button("Open folder").clicked() {
+                            if ui
+                                .add(compact(egui::Button::new(
+                                    RichText::new("Open folder").strong(),
+                                )))
+                                .clicked()
+                            {
                                 folder = Some(d.id);
                             }
                         });
                     });
                     ui.add_space(12.0);
                     ui.vertical(|ui| {
-                        ui.set_width((ui.available_width() - 250.0).max(160.0));
-                        ui.label(RichText::new(&d.percent).monospace().size(24.0).strong());
+                        let stats = if wide { 330.0 + 24.0 } else { 0.0 };
+                        ui.set_width((ui.available_width() - stats).max(160.0));
+                        ui.label(RichText::new(&d.percent).monospace().size(26.0).strong());
                         ui.label(RichText::new(&d.of).color(p.mu));
                         bar(ui, &p, d.bar as f32, 8.0);
                         ui.add_space(4.0);
                         ui.label(RichText::new(d.caption).color(p.fa).size(12.0));
                         segments(ui, &p, d.size, &d.segments);
                     });
-                    ui.add_space(12.0);
+                    if !wide {
+                        return;
+                    }
+                    ui.add_space(24.0);
+                    // Two columns of caption over value (1.x details.py stats grid, 330 px).
+                    let tone = match d.checksum_tone {
+                        "okText" => p.ok,
+                        "badText" => p.bad,
+                        _ => p.tx,
+                    };
+                    let cells = [
+                        ("Transfer rate", d.rate.as_str(), p.tx),
+                        ("Time left", d.time_left.as_str(), p.tx),
+                        ("Downloaded", d.done.as_str(), p.tx),
+                        ("Connections", d.connections.as_str(), p.tx),
+                        ("Resume", d.resume, p.ok),
+                        ("Checksum", d.checksum.as_str(), tone),
+                    ];
                     egui::Grid::new("stats")
                         .num_columns(2)
-                        .spacing(vec2(14.0, 4.0))
+                        .min_col_width(156.0)
+                        .spacing(vec2(18.0, 10.0))
                         .show(ui, |ui| {
-                            for (cap, val) in [
-                                ("Transfer rate", &d.rate),
-                                ("Time left", &d.time_left),
-                                ("Downloaded", &d.done),
-                                ("Connections", &d.connections),
-                            ] {
-                                ui.label(RichText::new(cap).color(p.fa).size(12.0));
-                                ui.label(RichText::new(val.as_str()).monospace().strong());
+                            for pair in cells.chunks(2) {
+                                for (cap, val, ink) in pair {
+                                    ui.vertical(|ui| {
+                                        ui.spacing_mut().item_spacing.y = 2.0;
+                                        ui.label(
+                                            RichText::new(cap.to_uppercase())
+                                                .color(p.fa)
+                                                .size(12.0)
+                                                .strong(),
+                                        );
+                                        ui.label(
+                                            RichText::new(*val).monospace().strong().color(*ink),
+                                        );
+                                    });
+                                }
                                 ui.end_row();
                             }
-                            ui.label(RichText::new("Resume").color(p.fa).size(12.0));
-                            ui.label(RichText::new(d.resume).monospace().strong().color(p.ok));
-                            ui.end_row();
-                            ui.label(RichText::new("Checksum").color(p.fa).size(12.0));
-                            let tone = match d.checksum_tone {
-                                "okText" => p.ok,
-                                "badText" => p.bad,
-                                _ => p.tx,
-                            };
-                            ui.label(RichText::new(&d.checksum).monospace().strong().color(tone));
-                            ui.end_row();
                         });
                 });
             }

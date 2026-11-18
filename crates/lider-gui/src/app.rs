@@ -125,6 +125,8 @@ pub struct App {
     pub details_tab: usize,
     /// Bring this row into view on the next frame.
     pub scroll_to: Option<i64>,
+    /// The header shows the sort arrow after a header click (Arrange does not set it, as in 1.x).
+    pub sort_shown: bool,
     pub quit: bool,
     last_tick: Option<Instant>,
     /// What the window should do on the desktop (drained each frame).
@@ -163,12 +165,17 @@ pub struct App {
     pub browser_ok: Option<bool>,
 }
 
+/// The width a column is drawn at: the check column is fixed at 40 (1.x), the others keep their saved width
+/// but never less than their minimum (`view::MIN_WIDTH`, else 30).
 fn column_width(key: &str, saved: i64) -> f32 {
-    match key {
-        "_check" => 34.0,
-        "queue" => 30.0,
-        _ => (saved.max(40)) as f32,
+    if key == "_check" {
+        return 40.0;
     }
+    let min = view::MIN_WIDTH
+        .iter()
+        .find(|(k, _)| *k == key)
+        .map_or(30, |(_, w)| *w);
+    saved.max(min) as f32
 }
 
 impl App {
@@ -201,6 +208,7 @@ impl App {
             status_tip: String::new(),
             details_tab: 0,
             scroll_to: None,
+            sort_shown: false,
             quit: false,
             last_tick: None,
             effects: vec![],
@@ -848,6 +856,7 @@ impl App {
                 self.manager.settings.show_statusbar = !self.manager.settings.show_statusbar
             }
             "arrange" => {
+                self.sort_shown = false;
                 self.manager.settings.sort_key = arg.into();
                 self.manager.settings.sort_desc = false;
             }
@@ -1074,6 +1083,7 @@ impl App {
         if !view::SORT_KEYS.contains(&key) {
             return;
         }
+        self.sort_shown = true;
         let s = &mut self.manager.settings;
         if s.sort_key == key {
             s.sort_desc = !s.sort_desc;
@@ -1082,6 +1092,27 @@ impl App {
             s.sort_desc = false;
         }
         self.rebuild();
+    }
+
+    /// A column dragged to `width` (at least its minimum); written into the settings, saved with them.
+    pub fn set_column_width(&mut self, key: &str, width: f32) {
+        let min = view::MIN_WIDTH
+            .iter()
+            .find(|(k, _)| *k == key)
+            .map_or(30, |(_, w)| *w);
+        let w = (width.round() as i64).max(min);
+        if let Some(c) = self
+            .manager
+            .settings
+            .columns
+            .iter_mut()
+            .find(|c| c.0 == key)
+        {
+            c.2 = w;
+        }
+        if let Some(c) = self.view.columns.iter_mut().find(|c| c.key == key) {
+            c.width = w as f32;
+        }
     }
 
     pub fn toggle_all(&mut self) {

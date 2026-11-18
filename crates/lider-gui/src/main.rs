@@ -56,6 +56,8 @@ struct Window {
     /// Started hidden in the tray: shown on the first frame when no tray icon came up.
     start_hidden: bool,
     first_frame: bool,
+    /// The list's font family that the fonts were last built with.
+    list_family: String,
 }
 
 fn wake(ctx: &egui::Context) -> tray::Wake {
@@ -183,6 +185,21 @@ impl eframe::App for Window {
             self.sync_tray();
         }
         self.track_geometry(ctx);
+        // View → Font: the list's family changed (fonts are rebuilt only then).
+        let family = self
+            .app
+            .manager
+            .settings
+            .list_font
+            .split(',')
+            .next()
+            .unwrap_or("")
+            .trim()
+            .to_string();
+        if family != self.list_family {
+            fonts::install_with_list(ctx, &family);
+            self.list_family = family;
+        }
         if std::mem::take(&mut self.app.restyle) {
             theme::apply(ctx, self.app.theme);
         }
@@ -208,6 +225,20 @@ impl eframe::App for Window {
         self.app.close_all_dialogs();
         self.tray = None;
     }
+}
+
+/// The window's icon: the app icon (1.x `app`).
+fn window_icon() -> egui::IconData {
+    image::load_from_memory(include_bytes!("../../../src-tauri/icons/64x64.png"))
+        .map(|i| {
+            let rgba = i.to_rgba8();
+            egui::IconData {
+                width: rgba.width(),
+                height: rgba.height(),
+                rgba: rgba.into_raw(),
+            }
+        })
+        .unwrap_or_default()
 }
 
 fn code(n: i32) -> ExitCode {
@@ -326,6 +357,7 @@ fn gui(cli: cli::Cli, socket: String) -> ExitCode {
         .with_app_id("lider")
         .with_inner_size([1000.0, 560.0])
         .with_min_inner_size([640.0, 360.0])
+        .with_icon(window_icon())
         .with_visible(!start_hidden);
     if let Some(ws) = window_state {
         viewport = viewport
@@ -364,6 +396,7 @@ fn gui(cli: cli::Cli, socket: String) -> ExitCode {
                 ticks: 0,
                 start_hidden,
                 first_frame: true,
+                list_family: String::new(),
             }))
         }),
     );
