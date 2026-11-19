@@ -1,6 +1,6 @@
-name: Rust port
+name: Rust
 
-# Checks for the Rust + Tauri port (docs/tauri/PLAN.md). Runs next to the Python tests until the cut-over.
+# Checks for LID 2 (crates/: lider-core, lider-sys, lider-gui). Runs next to the Python tests of 1.x.
 on:
   push:
     branches: [tauri, ports, egui]
@@ -12,30 +12,17 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
-      - name: System libraries for Tauri (WebKitGTK, tray, SVG)
+      - name: Tools for the tests (ffmpeg for media, CJK fonts for the window's file names)
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev ffmpeg xvfb fonts-noto-cjk
+          sudo apt-get install -y --no-install-recommends ffmpeg fonts-noto-cjk
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-          cache: pnpm
-          cache-dependency-path: ui/pnpm-lock.yaml
-      - name: Frontend
-        run: |
-          pnpm --dir ui install --frozen-lockfile
-          pnpm --dir ui check
-          pnpm --dir ui build
       - run: cargo fmt --all --check
       - run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      # The window's tests (egui_kittest) need no display.
       - run: cargo test --workspace --locked
       - name: Golden 1.2 profile is what the Python code writes
         run: |
@@ -45,39 +32,30 @@ jobs:
         run: |
           LIDER_GOLDEN_OUT="$RUNNER_TEMP/rust-profile" cargo test -p lider-core --test golden --locked
           python3 tests/golden/check_rust_profile.py "$RUNNER_TEMP/rust-profile"
-      - name: UI scenarios in the real window
-        run: |
-          cargo install tauri-cli --version "^2" --locked
-          xvfb-run -a tests/e2e/run.sh
       - name: Parity progress
-        run: ./docs/tauri/parity-progress.sh >> "$GITHUB_STEP_SUMMARY"
+        run: ./docs/tauri/parity-progress.sh docs/egui/parity >> "$GITHUB_STEP_SUMMARY"
 
-  # Windows (docs/platforms.md): the adapter's tests, and the app with its per-user installer, which is
+  # Windows (docs/platforms.md): the adapter's tests, and the program with its per-user installer, which is
   # kept as an artifact to try on a Windows machine.
   windows:
     runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - name: Frontend
-        run: |
-          pnpm --dir ui install --frozen-lockfile
-          pnpm --dir ui build
       - run: cargo test -p lider-core -p lider-sys --locked
-      - run: cargo clippy -p lider-sys -p lider -p lider-gui --all-targets --locked -- -D warnings
-      - name: Installer (NSIS)
+      - run: cargo clippy -p lider-sys -p lider-gui --all-targets --locked -- -D warnings
+      - name: NSIS
+        run: command -v makensis || choco install nsis -y --no-progress
+      - name: Installer
         run: |
-          cargo install tauri-cli --version "~2.12" --locked
-          cargo tauri build --bundles nsis --config '{"build":{"beforeBuildCommand":""}}'
+          PATH="$PATH:/c/Program Files (x86)/NSIS"
+          ./packaging/build.sh windows
       - uses: actions/upload-artifact@v4
         with:
           name: windows-installer
-          path: target/release/bundle/nsis/*.exe
+          path: dist/*.exe
           if-no-files-found: error

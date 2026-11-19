@@ -8,8 +8,11 @@ authors.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+base64 = "0.22"
 include_dir = "0.7"
 lider-core.workspace = true
+# lider-pack sign: the updater signature of a release file.
+minisign = "0.7"
 regex = "1"
 serde.workspace = true
 serde_json.workspace = true

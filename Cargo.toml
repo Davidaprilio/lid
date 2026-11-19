@@ -1,9 +1,9 @@
 [workspace]
 resolver = "3"
-members = ["crates/lider-core", "crates/lider-sys", "crates/lider-gui", "src-tauri"]
+members = ["crates/lider-core", "crates/lider-sys", "crates/lider-gui"]
 
 [workspace.package]
-# The only place the version of LID 2 is set. src-tauri/tauri.conf.json, build.sh and CI read it from here.
+# The only place the version of LID 2 is set. build.sh, the Windows installer and CI read it from here.
 version = "2.0.0-beta.1"
 edition = "2024"
 license = "MIT"

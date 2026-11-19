@@ -12,7 +12,7 @@ lider-sys
   platform/linux/      the Linux adapter (what 1.x and 2.x do)
   platform/windows/    the Windows adapter (named pipe, registry, Explorer)
   platform/unsupported.rs   every other OS for now (macOS): compiles, services say "not supported yet"
-src-tauri                                              ── uses `lider_sys::platform::prelude::*` only
+crates/lider-gui (the window)                          ── uses `lider_sys::platform::prelude::*` only
 ```
 
 Adding an OS means adding `platform/<os>/` with a struct that implements `Platform` (all four ports),
@@ -34,7 +34,7 @@ Already portable, outside the ports:
 - yt-dlp lookup: `fsio::is_executable` (`.exe` on Windows).
 
 Packaging per OS is separate from the ports: AppImage, deb and Arch for Linux (`packaging/build.sh`);
-Windows has the Tauri NSIS bundle (per-user, `src-tauri/icons/icon.ico`), macOS would need a signed and
+Windows has a per-user NSIS installer (`packaging/windows/lider.nsi`), macOS would need a signed and
 notarised `.app`/DMG.
 
 ## Checks
@@ -42,5 +42,5 @@ notarised `.app`/DMG.
 - `cargo test --workspace` on Linux runs the adapter's tests (`platform/linux/*`).
 - The `windows` job in `.github/workflows/rust.yml` runs the core and adapter tests on Windows (named
   pipe, registry hosts, autostart), clippy, and builds the per-user NSIS installer as an artifact
-  (`LID_<version>_x64-setup.exe`, about 5 MB). Not yet: yt-dlp.exe in the installer, signing, and the
-  installer in the release workflow.
+  (`LID-<version>-x64-setup.exe`). The release workflow builds and signs it for the updater. Not yet:
+  code signing (Windows SmartScreen warns about an unsigned installer).

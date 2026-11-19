@@ -8,15 +8,15 @@ One script builds every format into `dist/`:
 ./packaging/build.sh arch       # dist/lider-<ver>-1-x86_64.pkg.tar.zst
 ./packaging/build.sh aur        # dist/aur/PKGBUILD + .SRCINFO
 ./packaging/build.sh extension  # dist/lid-extension-*.zip (+ signed .xpi with AMO keys)
+./packaging/build.sh windows    # dist/LID-<ver>-x64-setup.exe (on Windows: Git Bash and NSIS)
 ./packaging/build.sh sdist      # dist/lider-<ver>.tar.gz
 ./packaging/build.sh all        # appimage + deb + arch + extension
 ```
 
-It needs Rust (stable, 1.90 or newer), pnpm and Node.js, and the development files of WebKitGTK 4.1,
-GTK 3 and libayatana-appindicator (`libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev` on
-Debian/Ubuntu, `webkit2gtk-4.1 libayatana-appindicator` on Arch). The AppImage also needs the Tauri CLI
-(`cargo install tauri-cli --version "~2.12" --locked`), and `arch`/`aur` need `makepkg`. If another
-`pkg-config` shadows the system one (Linuxbrew), run the script with `PKG_CONFIG=/usr/bin/pkg-config`.
+It needs Rust (stable, 1.90 or newer) and nothing else to build the program: the window is drawn by LID
+itself (egui), so there is no toolkit or WebView to build against. `arch`/`aur` need `makepkg`, `windows`
+needs NSIS's `makensis`. If another `pkg-config` shadows the system one (Linuxbrew), run the script with
+`PKG_CONFIG=/usr/bin/pkg-config`.
 
 You can set these in the environment:
 
@@ -27,6 +27,7 @@ You can set these in the environment:
 | `PROJECT_URL` | `https://github.com/Davidaprilio/lid` | deb `Homepage`, PKGBUILD `url` |
 | `AUR_SOURCE_URL` | — | public address of `dist/lider-<ver>.tar.gz` (aur target only) |
 | `AMO_JWT_ISSUER`, `AMO_JWT_SECRET` | — | addons.mozilla.org API key; signs the Firefox `.xpi` (extension target only) |
+| `LIDER_SIGNING_KEY`, `LIDER_SIGNING_KEY_PASSWORD` | — | the updater's key (its text or a path to it) and password; signs the AppImage and the Windows installer. The older names `TAURI_SIGNING_PRIVATE_KEY`, `…_PASSWORD` work too |
 
 The version is set only in the workspace `Cargo.toml` (`[workspace.package] version`). Package formats
 spell a pre-release their own way: `2.0.0-alpha.1` is `2.0.0~alpha.1-1` in the deb and `2.0.0alpha.1-1` in
@@ -37,11 +38,11 @@ the Arch package, so both sort it before `2.0.0`. File names keep the plain vers
 | | AppImage | .deb | Arch / AUR |
 |---|---|---|---|
 | Runs on | any x86_64 distro with glibc ≥ the build host's (Ubuntu 22.04 in CI) | Debian 12+, Ubuntu 22.04+ (amd64) | Arch, CachyOS, Manjaro, EndeavourOS |
-| WebKitGTK, GTK | bundled | from the system (`Depends`) | from the system (`depends`) |
+| OpenGL, X11/Wayland, xkbcommon | from the system | from the system (`Depends`) | from the system (`depends`) |
 | yt-dlp | offered on first use | offered on first use | `optdepends`, or offered on first use |
 | ffmpeg, node/deno/bun | from the system | `Recommends: ffmpeg, nodejs \| deno` | `optdepends` |
 | Application menu | offered on first start, written to `~/.local/share/applications` | installed | installed |
-| Size | ~90 MB | ~6 MB | ~8 MB |
+| Size | ~12 MB | ~8 MB | ~10 MB |
 
 ffmpeg and a JavaScript runtime are only needed for YouTube. Without ffmpeg, LID offers just the formats
 that need no merging. Without a JavaScript runtime, YouTube may withhold some streams.
@@ -104,23 +105,24 @@ To build the packages without publishing anything, use "Run workflow" on the Act
 ## Updates inside LID
 
 LID looks for a newer release when it starts (Options → General → Updates: on/off, Stable or
-Pre-releases too, Check now). An AppImage and the Windows install update themselves through
-`tauri-plugin-updater`: they read the release's `latest.json`, download the file it names and refuse it
-unless its minisign signature matches the public key in `src-tauri/tauri.conf.json`. A deb or Arch
-install is told to update with its package manager.
+Pre-releases too, Check now). An AppImage and the Windows install update themselves
+(`crates/lider-core/src/update.rs`): they read the release's `latest.json`, download the file it names and
+refuse it unless its minisign signature matches the public key built into LID (`update::PUBLIC_KEY`). A deb
+or Arch install is told to update with its package manager. The format is the one of the Tauri-built
+betas, so they update to the egui build too.
 
 The release workflow signs the AppImage and the Windows installer and writes `latest.json` when these
 repository secrets are set (the key is in `../secrets/`, outside the repository; back it up — without it
 installed copies can no longer update themselves):
 
 ```sh
-gh secret set TAURI_SIGNING_PRIVATE_KEY < ../secrets/lid-updater.key
-gh secret set TAURI_SIGNING_PRIVATE_KEY_PASSWORD < ../secrets/lid-updater.password
+gh secret set LIDER_SIGNING_KEY < ../secrets/lid-updater.key
+gh secret set LIDER_SIGNING_KEY_PASSWORD < ../secrets/lid-updater.password
 ```
 
 Without them the release still builds, just without signatures and `latest.json` (LID then only points
-at the release page). Locally, `./packaging/build.sh appimage` signs too when `TAURI_SIGNING_PRIVATE_KEY`
-(or `TAURI_SIGNING_PRIVATE_KEY_PATH`) and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` are set.
+at the release page). Locally, `./packaging/build.sh appimage` (and `windows`) sign too when
+`LIDER_SIGNING_KEY` and `LIDER_SIGNING_KEY_PASSWORD` are set; `lider-pack sign FILE` signs one file.
 
 ## Publishing to the AUR
 
@@ -143,8 +145,7 @@ at the release page). Locally, `./packaging/build.sh appimage` signs too when `T
    ```
    Users then install with `yay -S lider` or `paru -S lider`.
 
-The PKGBUILD builds with cargo only: the tarball carries the built frontend (`ui/dist`) and the licence
-list (`third-party/`), so neither Node.js nor the npm packages are needed. `prepare()` fetches the crates
+The PKGBUILD builds with cargo only: the tarball carries the licence list (`third-party/`). `prepare()` fetches the crates
 with `cargo fetch --locked`; `build()` runs offline (`--frozen`).
 
 ## Browser extension
@@ -210,23 +211,27 @@ before the extension is submitted.
 
 ## How each build works
 
-* **The program:** `cargo build --release --locked -p lider --features tauri/custom-protocol` after
-  `pnpm build` in `ui/`. The frontend, the extension and the icons are compiled into the one `lider`
-  binary, which is also the browser helper (`lider --native-host`).
+* **The program:** `cargo build --release --locked -p lider-gui` (crates/lider-gui, binary `lider`). The
+  window, the extension and the icons are compiled into the one `lider` binary, which is also the browser
+  helper (`lider --native-host`).
 * **`lider-pack`** (`crates/lider-sys/src/bin/lider-pack.rs`, a build tool that is never installed) writes
   the extension zips, the system host files (`/usr/lib/lider/lider-native-host`, the manifests under
   `/etc` and `/usr/lib/mozilla`, the exported extension in `/usr/share/lider/browser-extension`) and the
   licence list.
-* **AppImage:**
-  * `cargo tauri build --bundles appimage` lays out the AppDir: WebKitGTK with its helper processes, GTK
-    and its modules, through linuxdeploy and its GTK plugin (its `AppRun` sets up GTK and starts `lider`).
-  * The script then adds LID's own desktop entry and scalable icon, and the licences, and packs the
-    AppDir with `appimagetool` 1.9.0 (cached in `~/.cache/lider-build`).
+* **AppImage:** the AppDir holds `usr/bin/lider` (its `AppRun`), the desktop entry, the scalable icon and
+  the licences; `appimagetool` 1.9.0 (cached in `~/.cache/lider-build`) packs it. No libraries are carried:
+  the program needs only what every desktop has (libc, OpenGL through EGL or GLX, X11 or Wayland,
+  xkbcommon), and draws its window itself.
+* **Windows:** `packaging/windows/lider.nsi` (NSIS), a per-user installer to `%LOCALAPPDATA%\LID` without
+  administrator rights: Start-menu entry, Apps & features entry, uninstaller (which removes the autostart
+  value and the browser helper's registration, and keeps the downloads list). It installs over the
+  Tauri-built betas and takes the updater's arguments (`/P` or `/S` quiet, `/R` start LID afterwards).
 * **deb:**
   * The package is assembled with `tar` + `ar` (the standard `.deb` layout), so it builds on any distro
     without `dpkg-deb`, and with reproducible tar flags.
-  * `Depends` names WebKitGTK 4.1, GTK 3 and an appindicator library; the `libc6` version is the newest
-    glibc symbol the binary uses, so build it on the oldest release it should run on.
+  * `Depends` names the libraries the window opens at run time (EGL/GL, X11, Wayland, xkbcommon); the
+    `libc6` version is the newest glibc symbol the binary uses, so build it on the oldest release it should
+    run on.
   * The browser host manifests under `/etc` are conffiles. No maintainer scripts are needed.
 * **arch:** `packaging/arch/PKGBUILD.in` is filled in, and `makepkg` builds from the source tarball, as
   the AUR does.
@@ -235,9 +240,7 @@ before the extension is submitted.
 
 * **All packages:** `LICENSE` (MIT) goes to `/usr/share/licenses/lider/` (Arch, AppImage) or
   `/usr/share/doc/lider/copyright` (deb, DEP-5).
-* **Third-party code in `lider`:** the Rust crates and npm packages it is built from, with their licence
+* **Third-party code in `lider`:** the Rust crates it is built from, with their licence
   texts and a `THIRD-PARTY.md` table, go to `third-party/` next to the LICENSE (`/usr/share/doc/lider/`
   in the deb).
-* **AppImage:** it also carries WebKitGTK, GTK and their libraries as separate shared libraries, which is
-  how the LGPL lets users swap them. `usr/share/licenses/lider/system-libraries/` lists each library with
-  the licence files of the distribution package it came from.
+* **AppImage and Windows:** no system libraries are carried, so there are none to list.

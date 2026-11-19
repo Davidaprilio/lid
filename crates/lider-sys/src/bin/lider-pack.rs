@@ -2,8 +2,11 @@
 //!
 //!     lider-pack extensions DIST WORK            the extension zips and firefox-updates.json
 //!     lider-pack system-files ROOT HOST LIDER    host script, system host manifests, exported extensions
-//!     lider-pack licenses OUT                    licences of the Rust crates and npm packages built into `lider`
+//!     lider-pack licenses OUT                    licences of the Rust crates built into `lider`
 //!     lider-pack version                         the version of LID (the workspace Cargo.toml)
+//!     lider-pack sign FILE                       FILE.sig for the updater (lider_core::update), with the key in
+//!                                                LIDER_SIGNING_KEY (or TAURI_SIGNING_PRIVATE_KEY): the key's text
+//!                                                or a path to it; its password in …_PASSWORD
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 use std::fs;
 use std::io;
@@ -13,7 +16,7 @@ use std::process::{Command, ExitCode};
 use lider_sys::browser;
 use serde_json::Value;
 
-const USAGE: &str = "usage: lider-pack extensions DIST WORK | system-files ROOT HOST_PATH LIDER | licenses OUT | version";
+const USAGE: &str = "usage: lider-pack extensions DIST WORK | system-files ROOT HOST_PATH LIDER | licenses OUT | version | sign FILE";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
@@ -27,6 +30,7 @@ fn main() -> ExitCode {
             lider_sys::platform::linux::browsers::write_system_files(Path::new(root), host, lider)
         }
         ["licenses", out] => licenses(Path::new(out)),
+        ["sign", file] => sign(Path::new(file)),
         ["version"] => {
             println!("{}", lider_core::VERSION);
             Ok(())
@@ -118,9 +122,9 @@ fn rust_crates() -> io::Result<Vec<Entry>> {
         .collect();
     let root = packages
         .values()
-        .find(|p| p["name"] == "lider" && p["source"].is_null())
+        .find(|p| p["name"] == "lider-gui" && p["source"].is_null())
         .and_then(|p| p["id"].as_str())
-        .ok_or_else(|| other("package lider not found"))?;
+        .ok_or_else(|| other("package lider-gui not found"))?;
     let mut seen = BTreeSet::new();
     let mut todo = vec![root];
     while let Some(id) = todo.pop() {
@@ -187,49 +191,17 @@ fn rust_crates() -> io::Result<Vec<Entry>> {
     Ok(out)
 }
 
-/// The npm packages whose code is in the built frontend: the dependencies of ui/package.json and the
-/// Svelte runtime.
-fn npm_packages(ui: &Path) -> io::Result<Vec<Entry>> {
-    let pkg: Value =
-        serde_json::from_str(&fs::read_to_string(ui.join("package.json"))?).map_err(other)?;
-    let mut names: BTreeSet<String> = pkg["dependencies"]
-        .as_object()
-        .map(|o| o.keys().cloned().collect())
-        .unwrap_or_default();
-    names.insert("svelte".into());
-    let mut out = vec![];
-    for name in names {
-        let dir = ui.join("node_modules").join(&name);
-        let meta: Value =
-            serde_json::from_str(&fs::read_to_string(dir.join("package.json"))?).map_err(other)?;
-        out.push(Entry {
-            version: meta["version"].as_str().unwrap_or("").into(),
-            license: meta["license"]
-                .as_str()
-                .unwrap_or("see the licence files")
-                .into(),
-            source: "npm".into(),
-            files: licence_files(&dir),
-            name,
-        });
-    }
-    Ok(out)
-}
-
 /// OUT/THIRD-PARTY.md lists every package with its licence; OUT/<name>-<version>/ holds its licence texts.
 fn licenses(out: &Path) -> io::Result<()> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let rust = rust_crates()?;
-    let npm = npm_packages(&root.join("ui"))?;
     fs::create_dir_all(out)?;
     let mut by_licence: BTreeMap<String, usize> = BTreeMap::new();
     let mut md = String::from(
-        "# Third-party software in LID\n\nThe `lider` program is built from these Rust crates and npm packages. Each folder next to \
-         this file holds the licence texts that came with that package.\n\nSystem libraries (WebKitGTK, GTK, GLib, \
-         libayatana-appindicator) are not part of the program; the packages depend on them, and the AppImage carries \
-         copies of them under their own licences (see `system-libraries.md`).\n",
+        "# Third-party software in LID\n\nThe `lider` program is built from these Rust crates. Each folder next to \
+         this file holds the licence texts that came with that crate.\n\nSystem libraries (libc, OpenGL, X11 or \
+         Wayland, D-Bus) are not part of the program; it uses the ones of the system it runs on.\n",
     );
-    for (title, list) in [("Rust crates", &rust), ("npm packages", &npm)] {
+    for (title, list) in [("Rust crates", &rust)] {
         md.push_str(&format!(
             "\n## {title}\n\n| Package | Version | Licence |\n|---|---|---|\n"
         ));
@@ -257,11 +229,62 @@ fn licenses(out: &Path) -> io::Result<()> {
         md.push_str(&format!("- {l}: {n}\n"));
     }
     fs::write(out.join("THIRD-PARTY.md"), md)?;
-    println!(
-        "{} Rust crates and {} npm packages in {}",
-        rust.len(),
-        npm.len(),
-        out.display()
-    );
+    println!("{} Rust crates in {}", rust.len(), out.display());
+    Ok(())
+}
+
+/// The first of these variables that is set.
+fn env_any(names: &[&str]) -> Option<String> {
+    names
+        .iter()
+        .find_map(|n| std::env::var(n).ok().filter(|v| !v.is_empty()))
+}
+
+/// FILE.sig: base64 of a minisign signature, as `latest.json` carries it (the format of the Tauri
+/// updater's `signer sign`, so the same key and secrets keep working).
+fn sign(file: &Path) -> io::Result<()> {
+    use base64::Engine;
+    let b64 = base64::engine::general_purpose::STANDARD;
+    let key = env_any(&["LIDER_SIGNING_KEY", "TAURI_SIGNING_PRIVATE_KEY"])
+        .ok_or_else(|| other("set LIDER_SIGNING_KEY (or TAURI_SIGNING_PRIVATE_KEY)"))?;
+    let password = env_any(&[
+        "LIDER_SIGNING_KEY_PASSWORD",
+        "TAURI_SIGNING_PRIVATE_KEY_PASSWORD",
+    ]);
+    // The key's text, or a file holding it; either is base64 of minisign's secret key file.
+    let key = if Path::new(key.trim()).is_file() {
+        fs::read_to_string(key.trim())?
+    } else {
+        key
+    };
+    let text = b64
+        .decode(key.trim())
+        .ok()
+        .and_then(|b| String::from_utf8(b).ok())
+        .ok_or_else(|| other("the signing key is not base64 text"))?;
+    let sk = minisign::SecretKeyBox::from_string(&text)
+        .and_then(|b| b.into_secret_key(password))
+        .map_err(|e| other(format!("the signing key: {e}")))?;
+    let name = file
+        .file_name()
+        .map(|n| n.to_string_lossy().into_owned())
+        .unwrap_or_default();
+    let timestamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let trusted = format!("timestamp:{timestamp}\tfile:{name}");
+    let sig = minisign::sign(
+        None,
+        &sk,
+        fs::File::open(file)?,
+        Some(&trusted),
+        Some("signature from LID's update key"),
+    )
+    .map_err(|e| other(format!("signing: {e}")))?;
+    let mut out = file.as_os_str().to_owned();
+    out.push(".sig");
+    fs::write(&out, b64.encode(sig.to_string()))?;
+    println!("{}", Path::new(&out).display());
     Ok(())
 }

@@ -6,7 +6,7 @@ Architecture: amd64
 Maintainer: @MAINTAINER@
 Installed-Size: @SIZE@
 Depends: @DEPENDS@
-Recommends: ffmpeg, nodejs | deno
+Recommends: xdg-desktop-portal, fonts-noto-cjk, ffmpeg, nodejs | deno
 Homepage: @URL@
 Description: @SUMMARY@
  LID downloads files over several connections at once with dynamic

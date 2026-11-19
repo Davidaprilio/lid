@@ -1,15 +1,14 @@
 [package]
 name = "lider-gui"
-description = "LID's window, drawn with egui (docs/egui/PLAN.md)."
+description = "LID, Linux Internet Downloader: multi-connection download manager"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
 authors.workspace = true
 rust-version.workspace = true
 
-# `lider-egui` until the cut-over from the Tauri window, then `lider`.
 [[bin]]
-name = "lider-egui"
+name = "lider"
 path = "src/main.rs"
 
 [dependencies]
@@ -36,6 +35,10 @@ ksni = { version = "0.3", features = ["blocking"] }
 
 [target.'cfg(windows)'.dependencies]
 tray-icon = "0.25"
+
+# The program's icon and version in the Windows .exe.
+[target.'cfg(windows)'.build-dependencies]
+winresource = "0.1"
 
 [dev-dependencies]
 egui_kittest = "0.37"

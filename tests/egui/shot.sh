@@ -13,7 +13,7 @@ cd "$(dirname "$0")/../.."
 out="$(realpath -m "${1:?usage: tests/egui/shot.sh OUT.png [settings-json] [WxH]}")"
 patch="${2:-{\}}"
 size="${3:-1100x700}"
-work="$(mktemp -d "${TMPDIR:-/tmp}/lider-egui-shot.XXXXXX")"
+work="$(mktemp -d "${TMPDIR:-/tmp}/lider-shot.XXXXXX")"
 trap 'rm -rf "$work"' EXIT
 cp -r tests/golden/v1.2/config tests/golden/v1.2/data "$work/"
 python3 -I -c 'import json,sys; p=sys.argv[1]; s=json.load(open(p)); s.update(json.loads(sys.argv[2])); json.dump(s,open(p,"w"),indent=2)' \
@@ -21,7 +21,7 @@ python3 -I -c 'import json,sys; p=sys.argv[1]; s=json.load(open(p)); s.update(js
 cargo build -q -p lider-gui
 cat > "$work/run.sh" <<SH
 env -u WAYLAND_DISPLAY XDG_CONFIG_HOME=$work/config XDG_DATA_HOME=$work/data XDG_CACHE_HOME=$work/cache \
-    LIDER_SOCKET_NAME=lider-egui-shot-\$\$ $PWD/target/debug/lider-egui > $work/app.log 2>&1 &
+    LIDER_SOCKET_NAME=lider-shot-\$\$ $PWD/target/debug/lider > $work/app.log 2>&1 &
 pid=\$!
 sleep 5
 # No window manager under Xvfb: move the dialog windows beside the main window and raise them.

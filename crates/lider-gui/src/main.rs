@@ -234,7 +234,7 @@ impl eframe::App for Window {
 
 /// The window's icon: the app icon (1.x `app`).
 fn window_icon() -> egui::IconData {
-    image::load_from_memory(include_bytes!("../../../src-tauri/icons/64x64.png"))
+    image::load_from_memory(include_bytes!("../icons/64x64.png"))
         .map(|i| {
             let rgba = i.to_rgba8();
             egui::IconData {

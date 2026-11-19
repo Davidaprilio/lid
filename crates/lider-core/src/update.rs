@@ -377,7 +377,7 @@ mod tests {
         assert!(err.contains("signature"), "{err}");
     }
 
-    /// By hand, with a file signed by the release key (`cargo tauri signer sign FILE`):
+    /// By hand, with a file signed by the release key (`lider-pack sign FILE`):
     /// LIDER_UPDATE_TEST_FILE=FILE cargo test -p lider-core a_file_signed -- --ignored
     #[test]
     #[ignore]

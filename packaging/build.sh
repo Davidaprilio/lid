@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Build LID packages into dist/.
 #
-#   ./packaging/build.sh appimage   self-contained AppImage (WebKitGTK bundled)
-#   ./packaging/build.sh deb        Debian 12+/Ubuntu 22.04+ package (system WebKitGTK)
+#   ./packaging/build.sh appimage   AppImage (one program; the system's own OpenGL, X11/Wayland and fonts)
+#   ./packaging/build.sh deb        Debian 12+/Ubuntu 22.04+ package
 #   ./packaging/build.sh arch       Arch package (.pkg.tar.zst) built with makepkg from the source tarball
 #   ./packaging/build.sh aur        PKGBUILD + .SRCINFO for the AUR (needs AUR_SOURCE_URL)
 #   ./packaging/build.sh extension  browser extension zips; signed Firefox .xpi when AMO keys are set
-#   ./packaging/build.sh sdist      source tarball (built frontend and licence list included)
+#   ./packaging/build.sh windows    per-user Windows installer (on Windows, with Git Bash and NSIS's makensis)
+#   ./packaging/build.sh sdist      source tarball (licence list included)
 #   ./packaging/build.sh all        appimage, deb, arch and extension
 #
 # Settings (environment):
@@ -16,6 +17,9 @@
 #   AUR_SOURCE_URL   where dist/lider-<version>.tar.gz will be downloadable from (aur target)
 #   AMO_JWT_ISSUER   addons.mozilla.org API key: sign the Firefox add-on (extension target)
 #   AMO_JWT_SECRET   addons.mozilla.org API secret
+#   LIDER_SIGNING_KEY, LIDER_SIGNING_KEY_PASSWORD
+#                    the updater's key (or the older names TAURI_SIGNING_PRIVATE_KEY, …_PASSWORD): sign the
+#                    AppImage for LID's updater (lider_core::update)
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
@@ -42,21 +46,11 @@ TAR_FLAGS=(--sort=name --mtime="@0" --owner=0 --group=0 --numeric-owner)
 mkdir -p "$DIST" "$WORK"
 
 # ---------------------------------------------------------------- building blocks
-# The frontend (ui/dist), built once per run.
-frontend() {
-    [ -n "${FRONTEND_DONE:-}" ] && return
-    log "Building the frontend (pnpm)"
-    pnpm --dir "$ROOT/ui" install --frozen-lockfile >/dev/null
-    pnpm --dir "$ROOT/ui" build >/dev/null
-    FRONTEND_DONE=1
-}
-
-# target/release/lider: the production program (the frontend is embedded).
+# target/release/lider: the program.
 binary() {
     [ -n "${BINARY_DONE:-}" ] && return
-    frontend
     log "Building lider $VERSION (cargo, release)"
-    (cd "$ROOT" && cargo build --release --locked -p lider --features tauri/custom-protocol)
+    (cd "$ROOT" && cargo build --release --locked -p lider-gui)
     BINARY_DONE=1
 }
 
@@ -69,11 +63,10 @@ pack() {
     "$TARGET/release/lider-pack" "$@"
 }
 
-# build/packaging/third-party: THIRD-PARTY.md and the licence texts of every crate and npm package in lider.
+# build/packaging/third-party: THIRD-PARTY.md and the licence texts of every crate in lider.
 third_party() {
     [ -n "${THIRD_PARTY_DONE:-}" ] && return
     log "Collecting third-party licences"
-    pnpm --dir "$ROOT/ui" install --frozen-lockfile >/dev/null
     rm -rf "$WORK/third-party"
     pack licenses "$WORK/third-party" >/dev/null
     THIRD_PARTY_DONE=1
@@ -97,18 +90,15 @@ install_tree() {
 }
 
 # ---------------------------------------------------------------- source tarball
-# What cargo needs to build lider offline once its crates are fetched, plus the built frontend and the
-# licence list (so the Arch build needs neither Node.js nor the npm packages).
+# What cargo needs to build lider offline once its crates are fetched, plus the licence list.
 sdist() {
     local name="lider-$VERSION" out="$DIST/lider-$VERSION.tar.gz" dir
-    frontend >&2
     third_party >&2
     dir="$WORK/sdist/$name"
     rm -rf "$WORK/sdist"
     mkdir -p "$dir"
-    (cd "$ROOT" && git ls-files -z --cached --others --exclude-standard -- Cargo.toml Cargo.lock crates src-tauri ui lider/browser_extension \
+    (cd "$ROOT" && git ls-files -z --cached --others --exclude-standard -- Cargo.toml Cargo.lock crates lider/browser_extension \
         lider/ui/assets/icons README.md LICENSE lider.desktop | tar -c --null -T - -f -) | tar -x -C "$dir"
-    cp -r "$ROOT/ui/dist" "$dir/ui/dist"
     cp -r "$WORK/third-party" "$dir/third-party"
     fix_modes "$dir"
     tar "${TAR_FLAGS[@]}" -czf "$out" -C "$WORK/sdist" "$name"
@@ -117,7 +107,8 @@ sdist() {
 
 # ---------------------------------------------------------------- .deb
 # Built on the oldest supported release (Ubuntu 22.04 in CI), so it runs on Debian 12+ and Ubuntu 22.04+.
-DEB_DEPENDS="libwebkit2gtk-4.1-0, libgtk-3-0, libayatana-appindicator3-1 | libappindicator3-1"
+# The window opens these at run time (OpenGL through EGL or GLX, X11 or Wayland, the keyboard maps).
+DEB_DEPENDS="libegl1, libgl1, libx11-6, libxcursor1, libxi6, libxkbcommon0, libxkbcommon-x11-0, libwayland-client0, libwayland-cursor0, libwayland-egl1"
 
 build_deb() {
     local root="$WORK/deb/root" out="$DIST/lider_${VERSION}-1_amd64.deb" glibc
@@ -135,7 +126,7 @@ build_deb() {
       printf 'Source: %s\n\n' "$PROJECT_URL"
       printf 'Files: *\nCopyright: 2026 %s\nLicense: %s\n' "$MAINTAINER" "$PKG_LICENSE"
       sed 's/^$/./; s/^/ /' "$ROOT/LICENSE"
-      printf '\nFiles: usr/bin/lider\nComment: built from the Rust crates and npm packages listed in\n'
+      printf '\nFiles: usr/bin/lider\nComment: built from the Rust crates listed in\n'
       printf ' /usr/share/doc/lider/third-party/THIRD-PARTY.md, with their licence texts next to it.\n'
     } > "$root/usr/share/doc/lider/copyright"
     install -d "$root/DEBIAN"
@@ -224,40 +215,27 @@ build_extension() {
 }
 
 # ---------------------------------------------------------------- AppImage
-# The Tauri bundler lays out the AppDir with WebKitGTK and its helper processes (linuxdeploy and its GTK
-# plugin); LID then adds its own desktop entry, the scalable icon and the licences, and packs it with
-# appimagetool. yt-dlp is not bundled: LID offers to download it when YouTube first needs it.
+# One program: egui draws the window itself, so the AppDir carries no toolkit. OpenGL, X11/Wayland, the
+# keyboard maps and the fonts are the system's own (every desktop has them). yt-dlp is not bundled: LID
+# offers to download it when YouTube first needs it.
 build_appimage() {
-    local out="$DIST/Lider-$VERSION-x86_64.AppImage" appdir
-    frontend
+    local out="$DIST/Lider-$VERSION-x86_64.AppImage" appdir="$WORK/appimage/Lider.AppDir"
+    binary
     third_party
-    log "Building the AppDir (cargo tauri build --bundles appimage)"
-    # The Tauri CLI runs "pkg-config" from PATH; honour PKG_CONFIG when it is set.
-    local path="$PATH"
-    if [ -n "${PKG_CONFIG:-}" ]; then
-        mkdir -p "$WORK/bin"
-        ln -sf "$(command -v "$PKG_CONFIG")" "$WORK/bin/pkg-config"
-        path="$WORK/bin:$PATH"
-    fi
-    (cd "$ROOT" && PATH="$path" cargo tauri build --bundles appimage --config '{"build":{"beforeBuildCommand":""}}' >/dev/null)
-    appdir="$(ls -d "$TARGET"/release/bundle/appimage/*.AppDir | head -1)"
-    [ -d "$appdir" ] || { echo "no AppDir from the Tauri bundler" >&2; exit 1; }
+    log "Laying out the AppDir"
     rm -rf "$WORK/appimage"
-    mkdir -p "$WORK/appimage"
-    cp -a "$appdir" "$WORK/appimage/Lider.AppDir"
-    appdir="$WORK/appimage/Lider.AppDir"
-
-    rm -f "$appdir"/*.desktop "$appdir"/usr/share/applications/*.desktop
+    install -Dm755 "$TARGET/release/lider" "$appdir/usr/bin/lider"
+    ln -s usr/bin/lider "$appdir/AppRun"
     install -Dm644 "$ROOT/lider.desktop" "$appdir/usr/share/applications/lider.desktop"
     cp "$ROOT/lider.desktop" "$appdir/lider.desktop"
     install -Dm644 "$ROOT/lider/ui/assets/icons/app.svg" "$appdir/usr/share/icons/hicolor/scalable/apps/lider.svg"
-    rm -f "$appdir/.DirIcon" "$appdir"/*.png "$appdir"/*.svg
     cp "$ROOT/lider/ui/assets/icons/app.svg" "$appdir/lider.svg"
-    ln -sf lider.svg "$appdir/.DirIcon"
+    ln -s lider.svg "$appdir/.DirIcon"
     local licenses="$appdir/usr/share/licenses/lider"
     install -Dm644 "$ROOT/LICENSE" "$licenses/LICENSE"
     cp -r "$WORK/third-party" "$licenses/third-party"
-    system_licences "$appdir" "$licenses/system-libraries"
+    install -Dm644 "$ROOT/README.md" "$appdir/usr/share/doc/lider/README.md"
+    fix_modes "$appdir"
 
     local tool="$CACHE/appimagetool-1.9.0-x86_64.AppImage"
     if [ ! -x "$tool" ]; then
@@ -267,55 +245,47 @@ build_appimage() {
         chmod +x "$tool.tmp"
         mv "$tool.tmp" "$tool"
     fi
-    rm -f "$out"
+    rm -f "$out" "$out.sig"
     ARCH=x86_64 "$tool" --appimage-extract-and-run --no-appstream "$appdir" "$out" >/dev/null
-    # The updater's signature (src-tauri/src/update.rs), when the release key is in the environment.
-    if [ -n "${TAURI_SIGNING_PRIVATE_KEY:-}${TAURI_SIGNING_PRIVATE_KEY_PATH:-}" ]; then
-        log "Signing the AppImage for the updater"
-        (cd "$ROOT" && cargo tauri signer sign "$out" >/dev/null)
-    fi
+    sign "$out"
     log "Done: $out ($(du -h "$out" | cut -f1))"
 }
 
-# The licence files of the distribution packages whose libraries the AppDir carries (dpkg on the
-# Ubuntu builder, pacman on Arch), and a list of the libraries.
-system_licences() {
-    local appdir="$1" dest="$2" lib pkg
-    mkdir -p "$dest"
-    declare -A seen=()
-    {
-        printf '# System libraries in this AppImage\n\nEach library keeps its own licence; the texts are in the folders next to this file.\n\n'
-        printf '| Library | Package |\n|---|---|\n'
-        while IFS= read -r lib; do
-            pkg=""
-            if command -v dpkg >/dev/null; then
-                pkg="$(dpkg -S "$(basename "$lib")" 2>/dev/null | head -1 | cut -d: -f1)"
-                [ -n "$pkg" ] && [ -z "${seen[$pkg]:-}" ] && [ -f "/usr/share/doc/$pkg/copyright" ] &&
-                    install -Dm644 "/usr/share/doc/$pkg/copyright" "$dest/$pkg/copyright"
-            elif command -v pacman >/dev/null; then
-                # Plugin modules keep their folder (usr/lib/gdk-pixbuf-2.0/…); libraries sit in /usr/lib, or
-                # in a subfolder that linuxdeploy flattened.
-                local cand
-                for cand in "/${lib#"$appdir"/}" "/usr/lib/$(basename "$lib")" \
-                            "$(find /usr/lib -name "$(basename "$lib")" -print -quit 2>/dev/null)"; do
-                    [ -e "$cand" ] && pkg="$(pacman -Qqo "$cand" 2>/dev/null | head -1)" && [ -n "$pkg" ] && break
-                done
-                [ -n "$pkg" ] && [ -z "${seen[$pkg]:-}" ] && [ -d "/usr/share/licenses/$pkg" ] &&
-                    cp -rL "/usr/share/licenses/$pkg" "$dest/$pkg"
-            fi
-            [ -n "$pkg" ] && seen[$pkg]=1
-            printf '| %s | %s |\n' "$(basename "$lib")" "${pkg:-?}"
-        done < <(find "$appdir/usr/lib" -name '*.so*' -type f | sort)
-    } > "$dest/README.md"
+# FILE.sig for LID's updater, when the release key is in the environment.
+sign() {
+    if [ -n "${LIDER_SIGNING_KEY:-}${TAURI_SIGNING_PRIVATE_KEY:-}" ]; then
+        log "Signing $(basename "$1") for the updater"
+        pack sign "$1" >/dev/null
+    fi
+}
+
+# ---------------------------------------------------------------- Windows
+# packaging/windows/lider.nsi: the per-user installer, also an update over the Tauri-built 2.0 betas.
+winpath() { if command -v cygpath >/dev/null; then cygpath -w "$1"; else echo "$1"; fi; }
+
+build_windows() {
+    local out="$DIST/LID-$VERSION-x64-setup.exe"
+    command -v makensis >/dev/null || { echo "makensis (NSIS) is needed" >&2; exit 1; }
+    binary
+    third_party
+    log "Building $out (makensis)"
+    rm -f "$out" "$out.sig"
+    makensis -V2 "-DVERSION=$VERSION" "-DVERSION_NUM=${VERSION%%-*}.0" \
+        "-DEXE=$(winpath "$TARGET/release/lider.exe")" "-DROOT=$(winpath "$ROOT")" \
+        "-DTHIRD_PARTY=$(winpath "$WORK/third-party")" "-DOUTFILE=$(winpath "$out")" \
+        "$(winpath "$PKG/windows/lider.nsi")"
+    sign "$out"
+    log "Done: $out ($(du -h "$out" | cut -f1))"
 }
 
 case "${1:-}" in
     appimage) build_appimage ;;
     deb) build_deb ;;
+    windows) build_windows ;;
     arch) build_arch ;;
     aur) build_aur ;;
     extension) build_extension ;;
     sdist) sdist ;;
     all) build_appimage; build_deb; build_arch; build_extension ;;
-    *) sed -n '2,18p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
+    *) sed -n '2,22p' "$0" | sed 's/^# \{0,1\}//'; exit 1 ;;
 esac

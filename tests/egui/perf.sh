@@ -1,12 +1,12 @@
 #!/bin/sh
-# Start-up time, memory and idle CPU of the egui window next to the Tauri window, on copies of the 1.2 golden
-# profile under Xvfb (software OpenGL, so the CPU figures are higher than on a real desktop).
+# Start-up time, memory and idle CPU of LID, on copies of the 1.2 golden profile under Xvfb (software
+# OpenGL, so the CPU figures are higher than on a real desktop).
 #
 #     tests/egui/perf.sh [RUNS]
+#     COMPARE_BIN=path/to/other/lider tests/egui/perf.sh   # next to another build (e.g. the Tauri beta)
 #
-# Needs release builds of both (`cargo build --release -p lider-gui`, `cargo build --release -p lider
-# --features tauri/custom-protocol`), xvfb-run and xdotool. Memory is the PSS of the program and every
-# process it started (the WebView's helpers for Tauri), 8 s after its window showed.
+# Needs `cargo build --release -p lider-gui`, xvfb-run and xdotool. Memory is the PSS of the program and
+# every process it started (a WebView's helpers), 8 s after its window showed.
 set -eu
 cd "$(dirname "$0")/../.."
 runs="${1:-3}"
@@ -40,9 +40,9 @@ echo "$(( (shown - start) / 1000000 )) $pss $cpu"
 SH
 chmod +x "$work/one.sh"
 
-for name in lider-egui lider; do
-    bin="$PWD/target/release/$name"
+for bin in "$PWD/target/release/lider" ${COMPARE_BIN:+"$(realpath "$COMPARE_BIN")"}; do
     [ -x "$bin" ] || { echo "missing $bin"; exit 1; }
+    name="$([ "$bin" = "$PWD/target/release/lider" ] && echo lider || echo compared)"
     for i in $(seq "$runs"); do
         rm -rf "$work/p"; mkdir -p "$work/p"
         cp -r tests/golden/v1.2/config tests/golden/v1.2/data "$work/p/"
@@ -55,7 +55,7 @@ done | awk '
         printf "%-11s %10s %12s %10s\n", "window", "shown (ms)", "memory (MiB)", "idle CPU %"
         for (k in n) printf "%-11s %10.0f %12.1f %10.1f\n", k, ms[k]/n[k], pss[k]/n[k]/1024, cpu[k]/n[k]
     }'
-ls -l target/release/lider-egui target/release/lider | awk '{printf "%-28s %6.1f MiB\n", $NF, $5/1048576}'
-for b in lider-egui lider; do
-    printf '%-28s %4d shared libraries\n' "target/release/$b" "$(ldd "target/release/$b" | grep -c '=>')"
+for b in target/release/lider ${COMPARE_BIN:+"$COMPARE_BIN"}; do
+    printf '%-40s %6.1f MiB %4d shared libraries\n' "$b" "$(stat -c %s "$b" | awk '{print $1/1048576}')" \
+        "$(ldd "$b" 2>/dev/null | grep -c '=>')"
 done

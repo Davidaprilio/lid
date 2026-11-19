@@ -18,7 +18,7 @@ window has and egui cannot have becomes a decision below, never a silent loss.
 ```
 crates/lider-core      engine, manager, view model            unchanged
 crates/lider-sys       OS ports (Linux, Windows adapters)     unchanged
-crates/lider-gui       NEW: the egui program (bin `lider-egui` until the cut-over, then `lider`)
+crates/lider-gui       NEW: the egui program (bin `lider`; `lider-egui` until the cut-over)
   main.rs              process modes (native host, browser CLI, GUI), as src-tauri/main.rs
   app.rs               state (manager, UI state), the 500 ms tick, reactions to manager events
   theme.rs             the three palettes (tokens.ts), egui Visuals and metrics from them
@@ -153,6 +153,26 @@ references) moves into `lider-gui` without the JSON bridge: the window calls the
   A dialog is drawn in the same frame it is asked for (the Tauri build keeps a spare WebView for that).
 - 62 tests in lider-gui. To check by hand (no Xvfb can): the tray on KDE and GNOME, a dialog opened from the
   tray, typing CJK with fcitx5/IBus (G4: egui and winit pass IME events), the end of the power-off countdown.
+
+**E6 (2026-11-19): packaging and cut-over, done; the Windows installer needs a try on a real machine.**
+- Cut-over: `src-tauri/`, `ui/` and the Tauri UI scenarios (`tests/e2e`) are gone; the egui program is
+  `lider` (crates/lider-gui), its icons are in `crates/lider-gui/icons` (the .exe gets its icon and version
+  from `build.rs`), the native-host test moved with it. The workspace has no Tauri, WebKit, GTK, Node.js
+  or npm left; `lider-pack licenses` lists the Rust crates only.
+- `lider-pack sign FILE` writes the updater's signature with the release key (`LIDER_SIGNING_KEY`, or the
+  older `TAURI_SIGNING_PRIVATE_KEY`); a file it signed with the real key passes LID's check.
+- Linux (`packaging/build.sh`): the AppImage is the program, its desktop entry, icon and licences
+  (12 MB, was about 156 MB with WebKitGTK) and runs; the deb (8 MB) depends on EGL/GL, X11, Wayland and
+  xkbcommon; the Arch package (10 MB) builds from the source tarball with cargo only.
+- Windows: `packaging/windows/lider.nsi` (NSIS), per-user to `%LOCALAPPDATA%\LID` like the Tauri betas
+  (same folder, program and uninstall key, so it installs over them), takes the updater's `/P /UPDATE /R`;
+  `./packaging/build.sh windows` builds and signs it. Built in CI on windows-latest.
+- CI (`rust.yml`): fmt, clippy, tests, golden checks, parity counts of `docs/egui/parity`; Windows: tests,
+  clippy, the installer as an artifact. `release.yml` builds AppImage, deb, Arch/AUR, the extension and
+  the Windows installer, signs AppImage and installer, and writes `latest.json`.
+- `tests/egui/perf.sh` and `side_by_side.sh` compare with another build through `COMPARE_BIN`.
+- Left for the user: the secrets `LIDER_SIGNING_KEY` / `LIDER_SIGNING_KEY_PASSWORD` (`packaging/README.md`),
+  a try of the installer and of an update from the Tauri beta on Windows, the hand checks of E2 and E5.
 
 ## Decisions
 

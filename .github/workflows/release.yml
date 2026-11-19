@@ -2,7 +2,9 @@ name: Build packages
 
 # Push a tag like v2.0.0 (matching the version in Cargo.toml) to build every package and publish a release.
 # "Run workflow" on the Actions tab builds the packages without publishing anything.
-# Optional repository secrets AMO_JWT_ISSUER / AMO_JWT_SECRET sign the Firefox add-on on tag pushes.
+# Optional repository secrets AMO_JWT_ISSUER / AMO_JWT_SECRET sign the Firefox add-on on tag pushes;
+# LIDER_SIGNING_KEY / LIDER_SIGNING_KEY_PASSWORD (or the older TAURI_SIGNING_PRIVATE_KEY / …_PASSWORD) sign
+# the AppImage and the Windows installer for LID's updater, which then finds them in latest.json.
 on:
   push:
     tags: ["v*"]
@@ -12,8 +14,9 @@ permissions:
   contents: write
 
 env:
-  # System libraries Tauri builds against (WebKitGTK, GTK, tray, SVG).
-  TAURI_DEPS: libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libxdo-dev libssl-dev
+  # The updater's key, on tag pushes only (manual runs build unsigned packages).
+  LIDER_SIGNING_KEY: ${{ startsWith(github.ref, 'refs/tags/v') && (secrets.LIDER_SIGNING_KEY || secrets.TAURI_SIGNING_PRIVATE_KEY) || '' }}
+  LIDER_SIGNING_KEY_PASSWORD: ${{ startsWith(github.ref, 'refs/tags/v') && (secrets.LIDER_SIGNING_KEY_PASSWORD || secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD) || '' }}
 
 jobs:
   test:
@@ -28,10 +31,10 @@ jobs:
             echo "::error::Tag $GITHUB_REF_NAME does not match version $version in Cargo.toml"
             exit 1
           fi
-      - name: System libraries
+      - name: Tools for the tests
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends $TAURI_DEPS ffmpeg
+          sudo apt-get install -y --no-install-recommends ffmpeg fonts-noto-cjk
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Tests
@@ -45,23 +48,9 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - name: Build tools and libraries
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends $TAURI_DEPS file desktop-file-utils
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - run: cargo install tauri-cli --version "~2.12" --locked
       - name: Build (signed for the updater on tag pushes)
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
         run: ./packaging/build.sh appimage
       - uses: actions/upload-artifact@v4
         with:
@@ -71,39 +60,29 @@ jobs:
             dist/*.AppImage.sig
           if-no-files-found: error
 
-  # The per-user Windows installer (docs/platforms.md), signed for the updater on tag pushes.
+  # The per-user Windows installer (packaging/windows/lider.nsi), signed for the updater on tag pushes.
   windows:
     needs: test
     runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
-      - run: pnpm --dir ui install --frozen-lockfile
-      - run: cargo install tauri-cli --version "~2.12" --locked
-      - name: Installer (NSIS)
-        shell: bash
-        env:
-          TAURI_SIGNING_PRIVATE_KEY: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.TAURI_SIGNING_PRIVATE_KEY || '' }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ startsWith(github.ref, 'refs/tags/v') && secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD || '' }}
+      - name: NSIS
+        run: command -v makensis || choco install nsis -y --no-progress
+      - name: Installer
         run: |
-          version="$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)"
-          signed=false
-          [ -n "$TAURI_SIGNING_PRIVATE_KEY" ] && signed=true
-          cargo tauri build --bundles nsis --config "{\"bundle\":{\"createUpdaterArtifacts\":$signed}}"
-          mkdir -p dist
-          cp target/release/bundle/nsis/*-setup.exe "dist/LID-$version-x64-setup.exe"
-          if [ "$signed" = true ]; then cp target/release/bundle/nsis/*-setup.exe.sig "dist/LID-$version-x64-setup.exe.sig"; fi
+          PATH="$PATH:/c/Program Files (x86)/NSIS"
+          ./packaging/build.sh windows
       - uses: actions/upload-artifact@v4
         with:
           name: windows
-          path: dist/*
+          path: |
+            dist/*.exe
+            dist/*.exe.sig
           if-no-files-found: error
 
   deb:
@@ -111,18 +90,8 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
-      - name: Libraries
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends $TAURI_DEPS
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - uses: pnpm/action-setup@v4
-        with:
-          version: 11
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 24
       - run: ./packaging/build.sh deb
       - uses: actions/upload-artifact@v4
         with:
@@ -137,8 +106,7 @@ jobs:
     steps:
       - name: Build tools
         run: |
-          pacman -Syu --noconfirm --needed base-devel git sudo rust nodejs pnpm \
-            webkit2gtk-4.1 gtk3 libayatana-appindicator
+          pacman -Syu --noconfirm --needed base-devel git sudo rust
       - uses: actions/checkout@v4
       - name: Arch package and AUR files
         run: |
@@ -193,7 +161,7 @@ jobs:
           path: dist
           merge-multiple: true
       - name: Updater manifest (latest.json)
-        # Read by LID's updater (src-tauri/src/update.rs): each signed file with its signature.
+        # Read by LID's updater (lider_core::update): each signed file with its signature.
         run: |
           version="${GITHUB_REF_NAME#v}"
           base="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME"
@@ -211,7 +179,7 @@ jobs:
               pathlib.Path("dist/latest.json").write_text(json.dumps(doc, indent=2) + "\n")
               print(json.dumps(doc, indent=2))
           else:
-              print("no signatures (TAURI_SIGNING_PRIVATE_KEY not set): no latest.json")
+              print("no signatures (LIDER_SIGNING_KEY not set): no latest.json")
           PY
       - name: Checksums
         run: cd dist && sha256sum * > SHA256SUMS && cat SHA256SUMS

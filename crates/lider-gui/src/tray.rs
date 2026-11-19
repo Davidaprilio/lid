@@ -18,7 +18,7 @@ pub type Wake = std::sync::Arc<dyn Fn() + Send + Sync>;
 
 /// The icon as RGBA pixels, from the app icon.
 fn pixels() -> Option<(u32, u32, Vec<u8>)> {
-    let img = image::load_from_memory(include_bytes!("../../../src-tauri/icons/64x64.png")).ok()?;
+    let img = image::load_from_memory(include_bytes!("../icons/64x64.png")).ok()?;
     let rgba = img.to_rgba8();
     Some((rgba.width(), rgba.height(), rgba.into_raw()))
 }

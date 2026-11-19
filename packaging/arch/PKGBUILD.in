@@ -6,9 +6,11 @@ pkgdesc="@SUMMARY@"
 arch=('x86_64')
 url="@URL@"
 license=('@LICENSE@')
-depends=('webkit2gtk-4.1' 'gtk3' 'libayatana-appindicator')
+depends=('libglvnd' 'libx11' 'libxcursor' 'libxi' 'libxkbcommon' 'libxkbcommon-x11' 'wayland')
 makedepends=('cargo')
-optdepends=('yt-dlp: download YouTube videos'
+optdepends=('xdg-desktop-portal: file and folder choosers'
+            'noto-fonts-cjk: Chinese, Japanese and Korean file names'
+            'yt-dlp: download YouTube videos'
             'ffmpeg: join YouTube video and audio, convert to MP3'
             'nodejs: unlock YouTube streams (or deno or bun)'
             'deno: unlock YouTube streams')
@@ -26,8 +28,7 @@ prepare() {
 build() {
     cd "$_src"
     export RUSTUP_TOOLCHAIN=stable CARGO_TARGET_DIR=target
-    # The frontend is already built (ui/dist in the tarball), so no Node.js is needed.
-    cargo build --frozen --release -p lider --features tauri/custom-protocol
+    cargo build --frozen --release -p lider-gui
     cargo build --frozen --release -p lider-sys --bin lider-pack
 }
 
