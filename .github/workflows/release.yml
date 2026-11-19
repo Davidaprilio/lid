@@ -50,6 +50,10 @@ jobs:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
+      - name: appimagetool checks the desktop entry with desktop-file-validate
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends desktop-file-utils
       - name: Build (signed for the updater on tag pushes)
         run: ./packaging/build.sh appimage
       - uses: actions/upload-artifact@v4
